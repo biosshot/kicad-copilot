@@ -1,0 +1,47 @@
+{
+  "name": "kicad-copilot-mcp",
+  "version": "0.1.0",
+  "mcpName": "io.github.biosshot/kicad-copilot",
+  "description": "File-oriented MCP server for KiCad projects and schematics",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "url": "https://github.com/biosshot/kicad-copilot",
+    "type": "git"
+  },
+  "bin": {
+    "kicad-copilot-mcp": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "docs",
+    "README.md",
+    "LICENSE",
+    "server.json"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "clean": "rimraf dist",
+    "typecheck": "tsc --noEmit",
+    "inspect": "npm run build && npx @modelcontextprotocol/inspector node dist/index.js",
+    "check": "npm run typecheck && npm run build",
+    "prepack": "npm run build",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "fast-xml-parser": "^5.10.1",
+    "find-up": "^5.0.0",
+    "p-queue": "^9.1.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.0",
+    "rimraf": "^6.1.2",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
