@@ -4,6 +4,7 @@ import { basename, dirname, extname, parse, relative, resolve } from 'node:path'
 import { getSupportedKicadCli } from './cli';
 import { findLists } from './sexpr/scan';
 import { projectTemplate, schematicTemplate, sheetSymbol } from './schematic-template';
+import { pcbTemplate } from './pcb-template';
 import { temporarySiblingPath, validateSchematicSource } from './schematic-validation';
 
 export type CreateDocumentInput = {
@@ -16,6 +17,9 @@ export type CreateDocumentInput = {
     doc_type: 'schematic_page';
     path: string;
     parent_path: string;
+} | {
+    doc_type: 'pcb';
+    path: string;
 };
 
 function requireExtension(path: string, extension: string) {
@@ -146,6 +150,14 @@ async function createSchematic(path: string) {
     await writeNew(schematicPath, source);
 }
 
+async function createPcb(path: string) {
+    requireExtension(path, '.kicad_pcb');
+    const cli = await getSupportedKicadCli();
+    const target = resolve(path);
+    if (await exists(target)) throw new Error(`file already exists: ${target}`);
+    await writeNew(target, pcbTemplate(cli.major as 9 | 10));
+}
+
 async function createSchematicPage(path: string, parentPathInput: string) {
     requireExtension(path, '.kicad_sch');
     requireExtension(parentPathInput, '.kicad_sch');
@@ -206,6 +218,7 @@ async function createSchematicPage(path: string, parentPathInput: string) {
 export async function createDocument(doc: CreateDocumentInput) {
     if (doc.doc_type === 'project') await createProject(doc.path);
     else if (doc.doc_type === 'schematic') await createSchematic(doc.path);
-    else await createSchematicPage(doc.path, doc.parent_path);
+    else if (doc.doc_type === 'schematic_page') await createSchematicPage(doc.path, doc.parent_path);
+    else await createPcb(doc.path);
     return 'ok';
 }

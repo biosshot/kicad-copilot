@@ -1,24 +1,28 @@
 # KiCad Copilot
 
-File-oriented MCP server for creating and modifying KiCad projects and
-schematics with AI agents.
+File-oriented MCP server for creating and modifying KiCad projects,
+schematics, and PCB placement with AI agents.
 
 KiCad Copilot works with saved KiCad files directly. It does not require a
 KiCad IPC connection and does not modify the EasyEDA Copilot repository.
 
 ## Status
 
-Early working version focused on schematics. It can:
+The current version supports schematic editing and placement-only PCB workflow:
 
 - search EasyEDA components and reusable circuit blocks;
 - inspect KiCad project trees and read schematics as compact JSON;
 - create projects, standalone schematics, and hierarchical sheets;
 - assemble real EasyEDA components into KiCad schematics;
-- save, list, and restore local checkpoints.
+- save, list, and restore local checkpoints;
+- create empty PCB documents and import schematic changes into them;
+- resolve project and KiCad footprint libraries;
+- request PCB auto-placement and review its preview;
+- assemble board outline, component placement, board pads, and mechanical holes.
 
-PCB tools and live synchronization with an open KiCad editor are not included.
-Save or close the target schematic in KiCad before an MCP mutation, then reopen
-or revert it in the editor afterward.
+PCB routing and live synchronization with an open KiCad editor are not included.
+Save or close the target file before an MCP mutation, then reopen or revert it
+in KiCad afterward.
 
 ## Run from source
 
@@ -69,6 +73,15 @@ npm run test:assembly-scenarios
 Each scenario uses an independent temporary schematic and validates the final
 KiCad netlist. Failed scenario artifacts are retained in the printed temporary
 directory; successful runs clean up automatically.
+
+Run the file-oriented PCB import and assembly round-trip:
+
+```bash
+npm run test:pcb-scenarios
+```
+
+It imports real project footprints, applies top and bottom placement, rebuilds
+`Edge.Cuts` and NPTH holes, and validates both phases through `kicad-cli`.
 
 ## npm usage
 

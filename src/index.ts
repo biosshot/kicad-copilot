@@ -6,6 +6,7 @@ import { registerCircuitTools } from './tools/circuit';
 import { registerCheckpointTools } from './tools/checkpoints';
 import { registerAgentDocs } from './tools/docs';
 import { registerDocumentTools } from './tools/documents';
+import { registerPcbTools } from './tools/pcb/index';
 
 function createServer() {
     const server = new McpServer({
@@ -17,6 +18,7 @@ function createServer() {
     registerCircuitTools(server);
     registerDocumentTools(server);
     registerCheckpointTools(server);
+    registerPcbTools(server);
 
     return server;
 }

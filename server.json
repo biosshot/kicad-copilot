@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.biosshot/kicad-copilot",
   "title": "KiCad Copilot",
-  "description": "File-oriented MCP server for KiCad projects and schematics.",
+  "description": "File-oriented MCP server for KiCad projects, schematics, and PCB placement.",
   "repository": {
     "url": "https://github.com/biosshot/kicad-copilot",
     "source": "github"

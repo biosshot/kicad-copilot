@@ -1,11 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rm, stat } from 'node:fs/promises';
-import { basename, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { XMLParser } from 'fast-xml-parser';
 import { ExplainCircuit } from '../types/circuit';
 import { TEMP_DIR } from '../utils/dirs';
 import { runProcessChecked } from '../utils/process';
 import { getSupportedKicadCli } from './cli';
+import { atom as sexprAtom, findChild as findSexprChild, isSExpressionList, listHead, parseSExpression } from './sexpr/ast';
+import { findLists, findQuotedProperty } from './sexpr/scan';
 
 type XmlValue = string | number | boolean | Record<string, unknown> | undefined | null;
 type XmlNode = Record<string, unknown>;
@@ -103,7 +105,11 @@ export function parseKicadXmlNetlist(xml: string): ExplainCircuit {
             const reference = baseDesignator(attribute(netNode, 'ref'));
             const pin = attribute(netNode, 'pin');
             const key = signalKey(reference, pin);
-            signals.set(key, signal);
+            const previous = signals.get(key);
+            if (previous && signal && previous !== signal) {
+                throw new Error(`${reference}: conflicting nets on pin ${pin}`);
+            }
+            if (signal || !signals.has(key)) signals.set(key, signal);
             const pinFunction = attribute(netNode, 'pinfunction');
             if (pinFunction) pinFunctions.set(key, normalizePinName(pinFunction, pin));
         }
@@ -126,6 +132,9 @@ export function parseKicadXmlNetlist(xml: string): ExplainCircuit {
             || namedValue(properties, 'Footprint')
             || namedValue(fields, 'Footprint')
             || null;
+        const footprintUuid = namedValue(properties, 'EasyEDA footprint_uuid')
+            || namedValue(fields, 'EasyEDA footprint_uuid')
+            || null;
         const blockName = namedValue(properties, 'Block Name')
             || namedValue(fields, 'Block Name')
             || null;
@@ -138,10 +147,13 @@ export function parseKicadXmlNetlist(xml: string): ExplainCircuit {
                 pins: [],
                 part_uuid: partUuid,
                 footprint_name: footprint,
+                footprint_uuid: footprintUuid,
                 block_name: blockName,
             };
             componentsByDesignator.set(designator, component);
             componentOrder.push(component);
+        } else if (component.footprint_name && footprint && component.footprint_name !== footprint) {
+            throw new Error(`${designator}: conflicting footprint assignments`);
         }
 
         const libsource = child(comp, 'libsource');
@@ -169,7 +181,46 @@ export function parseKicadXmlNetlist(xml: string): ExplainCircuit {
     return { components: componentOrder };
 }
 
-export async function getSchematic(path: string) {
+export type PcbSchematicComponent = ExplainComponent & {
+    identity: string;
+    footprint_uuid: string | null;
+    on_board: boolean;
+    in_bom: boolean;
+    dnp: boolean;
+};
+
+export function parsePcbSchematicComponents(xml: string) {
+    const circuit = parseKicadXmlNetlist(xml);
+    const parsed = node(xmlParser.parse(xml));
+    const exported = node(parsed?.export);
+    const byDesignator = new Map(circuit.components.map((component) => [component.designator, component]));
+    const components: PcbSchematicComponent[] = [];
+
+    for (const comp of array(child(child(exported, 'components'), 'comp'))) {
+        const designator = baseDesignator(attribute(comp, 'ref'));
+        const base = byDesignator.get(designator);
+        if (!base || components.some((item) => item.designator === designator)) continue;
+        const properties = child(comp, 'property');
+        const fields = child(child(comp, 'fields'), 'field');
+        const sheetPath = attribute(child(comp, 'sheetpath'), 'tstamps') || '/';
+        const symbolPath = text(child(comp, 'tstamps') as XmlValue);
+        const identity = `${sheetPath.replace(/\/$/, '')}/${symbolPath}`.replace(/\/+/g, '/');
+        components.push({
+            ...base,
+            identity,
+            footprint_uuid: namedValue(properties, 'EasyEDA footprint_uuid')
+                || namedValue(fields, 'EasyEDA footprint_uuid')
+                || null,
+            on_board: true,
+            in_bom: true,
+            dnp: false,
+        });
+    }
+
+    return { circuit, components };
+}
+
+async function exportKicadXmlNetlist(path: string) {
     const schematicPath = resolve(path);
     const schematicStat = await stat(schematicPath).catch(() => undefined);
     if (!schematicStat?.isFile()) throw new Error(`path not found: ${schematicPath}`);
@@ -177,23 +228,150 @@ export async function getSchematic(path: string) {
     const cli = await getSupportedKicadCli();
     await mkdir(TEMP_DIR, { recursive: true });
     const netlistPath = join(TEMP_DIR, `${basename(schematicPath, '.kicad_sch')}-${randomUUID()}.net.xml`);
-
     try {
         await runProcessChecked(cli.path, [
-            'sch',
-            'export',
-            'netlist',
-            '--format',
-            'kicadxml',
-            '--output',
-            netlistPath,
-            schematicPath,
+            'sch', 'export', 'netlist', '--format', 'kicadxml', '--output', netlistPath, schematicPath,
         ], { timeoutMs: 60_000 });
-        return parseKicadXmlNetlist(await readFile(netlistPath, 'utf8'));
+        return await readFile(netlistPath, 'utf8');
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         throw new Error(`failed to read KiCad schematic: ${message}`);
     } finally {
         await rm(netlistPath, { force: true });
     }
+}
+
+export async function getSchematic(path: string) {
+    return parseKicadXmlNetlist(await exportKicadXmlNetlist(path));
+}
+
+export async function getPcbSchematic(path: string) {
+    const parsed = parsePcbSchematicComponents(await exportKicadXmlNetlist(path));
+    const flags = await readSchematicInstanceFlags(path);
+    for (const component of parsed.components) {
+        const uuid = component.identity.split('/').filter(Boolean).at(-1) || '';
+        const value = flags.byUuid.get(uuid) || flags.byReference.get(component.designator.toUpperCase());
+        if (!value) continue;
+        component.on_board = value.on_board;
+        component.in_bom = value.in_bom;
+        component.dnp = value.dnp;
+    }
+    for (const value of flags.excluded) {
+        if (parsed.components.some((item) => item.designator.toUpperCase() === value.designator.toUpperCase())) continue;
+        parsed.components.push({
+            designator: value.designator,
+            value: value.value,
+            pins: [],
+            part_uuid: value.part_uuid,
+            footprint_name: value.footprint_name,
+            footprint_uuid: value.footprint_uuid,
+            block_name: value.block_name,
+            identity: `/${value.uuid}`,
+            on_board: false,
+            in_bom: value.in_bom,
+            dnp: value.dnp,
+        });
+    }
+    return parsed;
+}
+
+type InstanceFlags = {
+    uuid: string;
+    designator: string;
+    value: string;
+    footprint_name: string | null;
+    footprint_uuid: string | null;
+    part_uuid: string | null;
+    block_name: string | null;
+    on_board: boolean;
+    in_bom: boolean;
+    dnp: boolean;
+};
+
+function sexprProperty(node: ReturnType<typeof parseSExpression>, name: string) {
+    for (const item of node) {
+        if (!isSExpressionList(item) || listHead(item) !== 'property') continue;
+        if (sexprAtom(item[1]) === name) return sexprAtom(item[2]);
+    }
+    return undefined;
+}
+
+function yes(node: ReturnType<typeof parseSExpression>, head: string, fallback: boolean) {
+    const value = sexprAtom(findSexprChild(node, head)?.[1]);
+    return value === undefined ? fallback : value === 'yes';
+}
+
+async function reachableSchematicFiles(rootPath: string) {
+    const root = resolve(rootPath);
+    const projectDirectory = dirname(root);
+    const queue = [root];
+    const visited = new Set<string>();
+    const files: string[] = [];
+
+    while (queue.length) {
+        const file = queue.shift()!;
+        const key = file.toLowerCase();
+        if (visited.has(key)) continue;
+        visited.add(key);
+
+        const source = await readFile(file, 'utf8');
+        files.push(file);
+        for (const range of findLists(source, 'sheet')) {
+            const sheetFile = findQuotedProperty(range.text, 'Sheetfile');
+            if (!sheetFile) continue;
+            const expanded = sheetFile.replace(/\$\{KIPRJMOD\}/g, projectDirectory);
+            const childPath = resolve(dirname(file), expanded);
+            const childStat = await stat(childPath).catch(() => undefined);
+            if (!childStat?.isFile()) throw new Error(`hierarchical sheet not found: ${childPath}`);
+            queue.push(childPath);
+        }
+    }
+
+    return files;
+}
+
+async function readSchematicInstanceFlags(rootPath: string) {
+    const files = await reachableSchematicFiles(rootPath);
+    const values: InstanceFlags[] = [];
+    for (const file of files) {
+        const source = await readFile(file, 'utf8');
+        for (const range of findLists(source, 'symbol')) {
+            const node = parseSExpression(range.text);
+            if (!findSexprChild(node, 'lib_id')) continue;
+            const designator = sexprProperty(node, 'Reference') || '';
+            const uuid = sexprAtom(findSexprChild(node, 'uuid')?.[1]) || '';
+            if (!designator || !uuid || designator.startsWith('#')) continue;
+            values.push({
+                uuid,
+                designator: baseDesignator(designator),
+                value: sexprProperty(node, 'Value') || '',
+                footprint_name: sexprProperty(node, 'Footprint') || null,
+                footprint_uuid: sexprProperty(node, 'EasyEDA footprint_uuid') || null,
+                part_uuid: sexprProperty(node, 'EasyEDA part_uuid') || null,
+                block_name: sexprProperty(node, 'Block Name') || null,
+                on_board: yes(node, 'on_board', true),
+                in_bom: yes(node, 'in_bom', true),
+                dnp: yes(node, 'dnp', false),
+            });
+        }
+    }
+    const byPhysicalReference = new Map<string, InstanceFlags>();
+    for (const value of values) {
+        const key = value.designator.toUpperCase();
+        const previous = byPhysicalReference.get(key);
+        if (previous && (
+            previous.footprint_name !== value.footprint_name
+            || previous.on_board !== value.on_board
+            || previous.in_bom !== value.in_bom
+            || previous.dnp !== value.dnp
+        )) {
+            throw new Error(`${value.designator}: conflicting multi-unit PCB properties`);
+        }
+        byPhysicalReference.set(key, value);
+    }
+    return {
+        byUuid: new Map(values.map((value) => [value.uuid, value])),
+        byReference: byPhysicalReference,
+        excluded: values.filter((value) => !value.on_board),
+    };
 }

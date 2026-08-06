@@ -38,7 +38,7 @@ export function registerDocumentTools(server: McpServer) {
         'create_doc',
         {
             title: 'Create KiCad Document',
-            description: `Create a KiCad project, standalone schematic, or hierarchical schematic page without overwriting files. Agent instructions: ${SKILL_DOC_PATH}`,
+            description: `Create a KiCad project, schematic, hierarchical page, or empty PCB without overwriting files. Agent instructions: ${SKILL_DOC_PATH}`,
             inputSchema: z.object({
                 doc: z.discriminatedUnion('doc_type', [
                     z.object({
@@ -53,6 +53,10 @@ export function registerDocumentTools(server: McpServer) {
                         doc_type: z.literal('schematic_page'),
                         path: z.string().min(1).describe('Destination child .kicad_sch path.'),
                         parent_path: z.string().min(1).describe('Existing parent .kicad_sch path.'),
+                    }),
+                    z.object({
+                        doc_type: z.literal('pcb'),
+                        path: z.string().min(1).describe('Destination .kicad_pcb path.'),
                     }),
                 ]),
             }),
