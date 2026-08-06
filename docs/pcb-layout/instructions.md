@@ -1,6 +1,6 @@
 # PCB Placement Instructions
 
-`make_pcb_layout` is placement-only. KiCad performs routing, copper pours, DRC, and tuning after assembly.
+`make_pcb_layout` is placement-only. Routing and simple full-board copper pours are separate local MCP operations.
 
 ## Source Of Truth
 
@@ -17,7 +17,8 @@
 4. After confirmation, remove preview filters and write the complete block/module/component layout.
 5. Run full placement, inspect `preview_path`, and fix fatal errors only.
 6. Show the final placement to the user for approval. Assemble only after that approval.
-7. Route and run DRC in KiCad.
+7. Use `auto_route_pcb` only after the final placement is approved and assembled.
+8. Inspect the routed PCB in KiCad and run the final project DRC there.
 
 If `make_pcb_layout` returns `status: "running"`, call `wait_pcb_layout({ operation_id })`. Otherwise use its completed result directly.
 
@@ -71,4 +72,14 @@ Use `compactness: "high"` only when board area is genuinely constrained.
 - One giant power/MCU block containing all support parts.
 - Normal components without block ownership or mixed layers in one block.
 - Manual coordinates to compensate for a bad electrical block structure.
-- Routing, copper, polygon, via, width, differential-pair, or length-matching rules in this DSL.
+- Routing, copper, polygon, via, width, differential-pair, or length-matching rules in the placement DSL.
+
+## Local Routing
+
+- `auto_route_pcb` runs the bundled local WASM router and immediately applies completed tracks/vias.
+- It preserves existing tracks and vias. Call `clear_pcb_routing` first for a full reroute.
+- GND is ignored by default and handled by managed full-board pours and stitching vias.
+- If the result is running, call `wait_auto_route({ operation_id })`; use `cancel_auto_route` for obsolete work.
+- Never move components while routing is running. A changed PCB is rejected before application.
+- `pour_pcb_layers` rebuilds only MCP-managed zones and stitching vias. Manual zones are preserved.
+- Routing success is not final sign-off: inspect the board and run KiCad DRC after routing.

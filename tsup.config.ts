@@ -1,4 +1,5 @@
 import { createRequire } from 'node:module';
+import { copyFile, mkdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { defineConfig } from 'tsup';
 
@@ -13,12 +14,24 @@ export default defineConfig({
         'test-assembly-scenarios': 'scripts/test-assembly-scenarios.ts',
         'test-pcb-scenarios': 'scripts/test-pcb-scenarios.ts',
         'test-pcb-live': 'scripts/test-pcb-live.ts',
+        'test-routing-live': 'scripts/test-routing-live.ts',
     },
     format: ['esm'],
     clean: true,
     dts: false,
     sourcemap: false,
     noExternal: ['@modelcontextprotocol/sdk'],
+    async onSuccess() {
+        const target = join('dist', 'autorouter');
+        await mkdir(target, { recursive: true });
+        await Promise.all([
+            copyFile(join('autorouter', 'pcbRouterWorker.js'), join(target, 'pcbRouterWorker.js')),
+            copyFile(
+                join('autorouter', 'PCBRouter-YFDILLBW-YFDILLBW.wasm'),
+                join(target, 'PCBRouter-YFDILLBW-YFDILLBW.wasm'),
+            ),
+        ]);
+    },
     esbuildPlugins: [
         {
             name: 'mcp-sdk-extensionless-imports',

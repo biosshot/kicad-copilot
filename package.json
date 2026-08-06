@@ -2,7 +2,7 @@
   "name": "kicad-copilot-mcp",
   "version": "0.1.0",
   "mcpName": "io.github.biosshot/kicad-copilot",
-  "description": "File-oriented MCP server for KiCad projects, schematics, and PCB placement",
+  "description": "File-oriented MCP server for KiCad schematics, PCB placement, routing, and pours",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -28,6 +28,7 @@
     "test:assembly-scenarios": "npm run build && node dist/test-assembly-scenarios.js",
     "test:pcb-scenarios": "npm run build && node dist/test-pcb-scenarios.js",
     "test:pcb-live": "npm run build && node dist/test-pcb-live.js",
+    "test:routing-live": "npm run build && node dist/test-routing-live.js",
     "check": "npm run typecheck && npm run build",
     "prepack": "npm run build",
     "start": "node dist/index.js"

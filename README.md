@@ -1,14 +1,14 @@
 # KiCad Copilot
 
 File-oriented MCP server for creating and modifying KiCad projects,
-schematics, and PCB placement with AI agents.
+schematics, PCB placement, local routing, and simple copper pours with AI agents.
 
 KiCad Copilot works with saved KiCad files directly. It does not require a
 KiCad IPC connection and does not modify the EasyEDA Copilot repository.
 
 ## Status
 
-The current version supports schematic editing and placement-only PCB workflow:
+The current version supports schematic editing and a file-oriented PCB workflow:
 
 - search EasyEDA components and reusable circuit blocks;
 - inspect KiCad project trees and read schematics as compact JSON;
@@ -18,9 +18,11 @@ The current version supports schematic editing and placement-only PCB workflow:
 - create empty PCB documents and import schematic changes into them;
 - resolve project and KiCad footprint libraries;
 - request PCB auto-placement and review its preview;
-- assemble board outline, component placement, board pads, and mechanical holes.
+- assemble board outline, component placement, board pads, and mechanical holes;
+- route remaining PCB connections with a bundled local WASM router;
+- clear selected routing and create managed full-board pours with stitching vias.
 
-PCB routing and live synchronization with an open KiCad editor are not included.
+Live synchronization with an open KiCad editor is not included.
 Save or close the target file before an MCP mutation, then reopen or revert it
 in KiCad afterward.
 
@@ -82,6 +84,14 @@ npm run test:pcb-scenarios
 
 It imports real project footprints, applies top and bottom placement, rebuilds
 `Edge.Cuts` and NPTH holes, and validates both phases through `kicad-cli`.
+
+Run a local routing, pour, or clear smoke test on a disposable PCB copy:
+
+```bash
+npm run test:routing-live -- route path/to/board.kicad_pcb
+npm run test:routing-live -- pour path/to/board.kicad_pcb
+npm run test:routing-live -- clear path/to/board.kicad_pcb
+```
 
 ## npm usage
 

@@ -1,6 +1,6 @@
 # PCB Layout MCP Workflow
 
-Read `dsl.ts` for syntax and `instructions.md` for placement rules. `make_pcb_layout` is placement-only.
+Read `dsl.ts` for placement syntax and `instructions.md` for placement and local routing rules.
 
 ## Tools
 
@@ -9,6 +9,11 @@ Read `dsl.ts` for syntax and `instructions.md` for placement rules. `make_pcb_la
 - `wait_pcb_layout({ operation_id })` is needed only when `make_pcb_layout` returns `status: "running"` after its synchronous wait.
 - `cancel_pcb_layout({ operation_id })` stops an obsolete pending placement.
 - `assemble_pcb_layout({ path, layout_id })` applies a previously completed final placement to the target PCB file.
+- `auto_route_pcb({ path })` locally routes remaining connections and directly applies the completed result.
+- `wait_auto_route({ operation_id })` waits for a long local routing operation.
+- `cancel_auto_route({ operation_id })` stops a running local routing operation before application.
+- `clear_pcb_routing({ path })` removes tracks, track arcs, and vias but preserves footprints, zones, and outline.
+- `pour_pcb_layers({ path, net, layers })` rebuilds managed full-board zones and optional stitching vias.
 
 `preview_path` is the primary review image. `debug_path` is an optional local SVG for a visibly bad block, family, or module.
 
@@ -23,7 +28,8 @@ Read `dsl.ts` for syntax and `instructions.md` for placement rules. `make_pcb_la
 7. Fix hard errors only. Warnings are not a requirement to reach an ideal score; change one only if it visibly harms an explicit requirement.
 8. Open the final `preview_path` and request final placement approval.
 9. Assemble the intended PCB file using `layout_id`.
-10. Route, configure DRC, and run checks in KiCad.
+10. Call `auto_route_pcb`. For a complete reroute, call `clear_pcb_routing` first.
+11. Wait when needed, then inspect the routed board and run final DRC in KiCad.
 
 ## Result Handling
 

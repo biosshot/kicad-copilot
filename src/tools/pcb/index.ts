@@ -4,6 +4,8 @@ import { assemblePcbLayout } from '../../pcb/assemble';
 import { getPcbComponentSizes } from '../../pcb/component-sizes';
 import { importPcbChanges } from '../../pcb/import';
 import { cancelPcbLayout, makePcbLayout, waitPcbLayout } from '../../pcb/layout-operation';
+import { pourPcbLayers } from '../../pcb/pour';
+import { autoRoutePcb, cancelAutoRoute, clearPcbRouting, waitAutoRoute } from '../../pcb/routing-operation';
 import { DOCS_DIR } from '../../utils/dirs';
 import { enqueueMutation } from '../../utils/mutation-queue';
 import { runTool } from '../../utils/tool-result';
@@ -93,6 +95,105 @@ export function registerPcbTools(server: McpServer) {
         },
         async ({ path, layout_id }) => runTool(
             () => enqueueMutation(() => assemblePcbLayout(path, layout_id)),
+        ),
+    );
+
+    server.registerTool(
+        'auto_route_pcb',
+        {
+            title: 'Auto Route PCB',
+            description: `Route a KiCad PCB with the bundled local WASM router and apply it atomically. PCB instructions: ${PCB_DOC_PATH}`,
+            inputSchema: z.object({
+                path: z.string().min(1).describe('Target .kicad_pcb path.'),
+                ignore_nets: z.array(z.string().min(1)).default(['GND']),
+                route_layers: z.array(z.string().min(1)).min(1).default(['F.Cu', 'B.Cu']),
+                routing_effect_priority: z.enum(['SPEED_FIRST', 'COMPLETION_FIRST']).default('COMPLETION_FIRST'),
+                timeout_sec: z.number().int().min(10).max(1800).default(600),
+                pour_gnd: z.boolean().default(true),
+                stitch_gnd: z.boolean().default(true),
+                wait_ms: z.number().int().min(1_000).max(180_000).default(60_000),
+            }),
+        },
+        async (input) => runTool(() => autoRoutePcb(input.path, {
+            ignoreNets: input.ignore_nets,
+            routeLayers: input.route_layers,
+            routingEffectPriority: input.routing_effect_priority,
+            timeoutSec: input.timeout_sec,
+            pourGnd: input.pour_gnd,
+            stitchGnd: input.stitch_gnd,
+        }, input.wait_ms)),
+    );
+
+    server.registerTool(
+        'wait_auto_route',
+        {
+            title: 'Wait Auto Route',
+            description: 'Wait for a running local PCB auto-route operation.',
+            inputSchema: z.object({
+                operation_id: z.string().uuid(),
+                wait_ms: z.number().int().min(1_000).max(180_000).default(60_000),
+            }),
+        },
+        async ({ operation_id, wait_ms }) => runTool(() => waitAutoRoute(operation_id, wait_ms)),
+    );
+
+    server.registerTool(
+        'cancel_auto_route',
+        {
+            title: 'Cancel Auto Route',
+            description: 'Cancel a running local PCB auto-route operation.',
+            inputSchema: z.object({ operation_id: z.string().uuid() }),
+        },
+        async ({ operation_id }) => runTool(async () => cancelAutoRoute(operation_id)),
+    );
+
+    server.registerTool(
+        'clear_pcb_routing',
+        {
+            title: 'Clear PCB Routing',
+            description: `Delete PCB tracks, track arcs, and vias while preserving placement, zones, and outline. PCB instructions: ${PCB_DOC_PATH}`,
+            inputSchema: z.object({
+                path: z.string().min(1).describe('Target .kicad_pcb path.'),
+                only_nets: z.array(z.string().min(1)).nullable().optional(),
+                ignore_nets: z.array(z.string().min(1)).nullable().optional(),
+            }),
+        },
+        async ({ path, only_nets, ignore_nets }) => runTool(
+            () => enqueueMutation(() => clearPcbRouting(path, {
+                onlyNets: only_nets ?? undefined,
+                ignoreNets: ignore_nets ?? undefined,
+            })),
+        ),
+    );
+
+    server.registerTool(
+        'pour_pcb_layers',
+        {
+            title: 'Pour PCB Layers',
+            description: `Create managed full-board copper zones and optional stitching vias. PCB instructions: ${PCB_DOC_PATH}`,
+            inputSchema: z.object({
+                path: z.string().min(1).describe('Target .kicad_pcb path.'),
+                net: z.string().min(1),
+                layers: z.array(z.string().min(1)).min(1),
+                stitch_vias: z.boolean().default(true),
+                stitch_grid_mm: z.number().min(0.5).max(50).default(4),
+                via_diameter_mm: z.number().min(0.05).max(5).default(0.61),
+                via_drill_mm: z.number().min(0.05).max(5).default(0.305),
+                edge_margin_mm: z.number().min(0).max(20).default(1),
+                max_vias: z.number().int().min(0).max(2000).default(500),
+            }),
+        },
+        async (input) => runTool(
+            () => enqueueMutation(() => pourPcbLayers(input.path, {
+                net: input.net,
+                layers: input.layers,
+                stitchVias: input.stitch_vias,
+                stitchGridMm: input.stitch_grid_mm,
+                viaDiameterMm: input.via_diameter_mm,
+                viaDrillMm: input.via_drill_mm,
+                edgeMarginMm: input.edge_margin_mm,
+                maxVias: input.max_vias,
+            })),
         ),
     );
 }
