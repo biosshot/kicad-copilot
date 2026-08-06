@@ -4,9 +4,9 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import * as z from 'zod/v4';
 import { extractCircuit } from '../src/circuit/extract';
-import { circuitModSchema } from '../src/types/circuit';
+import { CircuitModStruct } from '../src/types/circuit';
 
-const requestSchema = circuitModSchema.extend({
+const requestSchema = CircuitModStruct().extend({
     path: z.string().min(1),
 });
 

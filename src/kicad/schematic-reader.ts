@@ -2,13 +2,14 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rm, stat } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
 import { XMLParser } from 'fast-xml-parser';
-import { ExplainCircuit, ExplainComponent } from '../types/circuit';
+import { ExplainCircuit } from '../types/circuit';
 import { TEMP_DIR } from '../utils/dirs';
 import { runProcessChecked } from '../utils/process';
 import { getSupportedKicadCli } from './cli';
 
 type XmlValue = string | number | boolean | Record<string, unknown> | undefined | null;
 type XmlNode = Record<string, unknown>;
+type ExplainComponent = ExplainCircuit['components'][number];
 
 const xmlParser = new XMLParser({
     ignoreAttributes: false,

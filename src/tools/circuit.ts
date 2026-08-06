@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp';
 import * as z from 'zod/v4';
 import { extractCircuit } from '../circuit/extract';
-import { circuitModSchema } from '../types/circuit';
+import { CircuitModStruct } from '../types/circuit';
 import { SKILL_DOC_PATH } from '../utils/dirs';
 import { enqueueMutation } from '../utils/mutation-queue';
 import { postJson } from '../utils/server';
@@ -48,7 +48,7 @@ export function registerCircuitTools(server: McpServer) {
         {
             title: 'Extract Circuit',
             description: `Apply circuit changes to a KiCad .kicad_sch file. Every added component must include part_uuid. For circuit modification docs, read: ${SKILL_DOC_PATH}`,
-            inputSchema: circuitModSchema.extend({
+            inputSchema: CircuitModStruct().extend({
                 path: z.string().min(1).describe('Existing target .kicad_sch path.'),
             }),
         },

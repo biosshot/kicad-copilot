@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { basename } from 'node:path';
 import { ConvertedComponent, convertComponent } from '../components/converter';
 import { getPowerSymbol } from '../components/kicad-library';
-import { CircuitAssembly, CircuitAssemblyComponent, ExplainCircuit } from '../types/circuit';
+import { CircuitAssembly, ExplainCircuit } from '../types/circuit';
 import {
     atom,
     findChild,
@@ -20,6 +20,7 @@ const SERVER_UNIT_MM = 0.254;
 const GRID_MM = 1.27;
 
 type Point = { x: number; y: number };
+type CircuitAssemblyComponent = CircuitAssembly['components'][number];
 type Rect = { left: number; top: number; right: number; bottom: number };
 type RoutedSegment = { start: Point; end: Point; signal?: string };
 type EmbeddedSymbol = ReturnType<typeof embeddedLibrarySymbol>;
@@ -867,7 +868,8 @@ export async function applyCircuitAssembly(
                     }
                 }
             }
-            for (const point of edge.junctionPoints || []) {
+            const junctionPoints = (edge as typeof edge & { junctionPoints?: Point[] }).junctionPoints;
+            for (const point of junctionPoints || []) {
                 requestedJunctions.push(serverPoint(point, offset));
             }
         }
@@ -906,7 +908,7 @@ export async function applyCircuitAssembly(
                     block_name: '',
                     search_query: '',
                     part_uuid: 'GND',
-                    pos: { x: 0, y: 0, width: 0, height: 0 },
+                    pos: { x: 0, y: 0, center: { x: 0, y: 0 }, width: 0, height: 0 },
                 };
                 objects.push(symbolInstance({
                     embedded: groundEmbedded,
@@ -926,7 +928,7 @@ export async function applyCircuitAssembly(
                     block_name: '',
                     search_query: '',
                     part_uuid: 'VCC',
-                    pos: { x: 0, y: 0, width: 0, height: 0 },
+                    pos: { x: 0, y: 0, center: { x: 0, y: 0 }, width: 0, height: 0 },
                 };
                 objects.push(symbolInstance({
                     embedded: portEmbedded(signal),
