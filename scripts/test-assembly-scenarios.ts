@@ -1,14 +1,21 @@
 #!/usr/bin/env node
 
-import { copyFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { beautifySchematic } from '../src/circuit/beautify';
+import { listCheckpoints, saveCheckpoint } from '../src/checkpoints/store';
 import { extractCircuit } from '../src/circuit/extract';
+import { getSupportedKicadCli } from '../src/kicad/cli';
 import { createDocument } from '../src/kicad/create-document';
+import { getProjectInfo } from '../src/kicad/project-tree';
 import { getSchematic } from '../src/kicad/schematic-reader';
-import { wireRangesToDisconnect } from '../src/kicad/wire-removal';
+import { parseSExpression, printSExpression } from '../src/kicad/sexpr/ast';
+import { findLists } from '../src/kicad/sexpr/scan';
+import { normalizedComponentSymbol } from '../src/kicad/symbol';
+import { planWireRemoval, wireRangesToDisconnect } from '../src/kicad/wire-removal';
 import { CircuitMod, ExplainCircuit } from '../src/types/circuit';
+import { runProcessChecked } from '../src/utils/process';
 
 const RESISTOR_A = 'fa459f1466df4014badd43e0b80fd058';
 const RESISTOR_B = '37d3a2df709e430798d37c76a1425062';
@@ -68,6 +75,18 @@ function expectComponent(
     return actual;
 }
 
+function placedObjectUuids(source: string) {
+    const output = new Set<string>();
+    for (const head of ['symbol', 'wire', 'junction', 'label', 'global_label', 'hierarchical_label', 'no_connect']) {
+        for (const range of findLists(source, head)) {
+            if (head === 'symbol' && !range.text.includes('(lib_id ')) continue;
+            const uuid = range.text.match(/\(uuid\s+"([^"]+)"\)/)?.[1];
+            if (uuid) output.add(uuid);
+        }
+    }
+    return output;
+}
+
 function expectSignal(circuit: ExplainCircuit, designator: string, pin: string, signal: string) {
     const actual = expectComponent(circuit, designator);
     const actualPin = actual.pins.find((item) => String(item.pin_number) === pin);
@@ -79,7 +98,7 @@ function expectSignal(circuit: ExplainCircuit, designator: string, pin: string, 
 async function createSchematic(directory: string) {
     const path = join(directory, 'test.kicad_sch');
     await mkdir(directory, { recursive: true });
-    await createDocument({ doc_type: 'schematic', path });
+    await createDocument({ doc_type: 'project', path: join(directory, 'test.kicad_pro') });
     return path;
 }
 
@@ -87,6 +106,8 @@ async function copySchematic(source: string, directory: string) {
     const path = join(directory, 'test.kicad_sch');
     await mkdir(directory, { recursive: true });
     await copyFile(source, path);
+    const sourceProject = join(dirname(source), 'test.kicad_pro');
+    await copyFile(sourceProject, join(directory, 'test.kicad_pro')).catch(() => undefined);
     return path;
 }
 
@@ -104,6 +125,13 @@ async function extractScenario(path: string, circuit: CircuitMod) {
             'utf8',
         ),
     });
+}
+
+async function ercReport(path: string) {
+    const cli = await getSupportedKicadCli();
+    const report = join(dirname(path), 'erc.rpt');
+    await runProcessChecked(cli.path, ['sch', 'erc', '--output', report, path], { timeoutMs: 60_000 });
+    return readFile(report, 'utf8');
 }
 
 async function main() {
@@ -127,6 +155,56 @@ async function main() {
                 'wire removal: traversal continued beyond the junction');
         });
 
+        await runScenario('complete deleted wire island cleanup', async () => {
+            const source = `(kicad_sch
+                (wire (pts (xy 0 0) (xy 10 0)))
+                (wire (pts (xy 10 0) (xy 20 0)))
+                (junction (at 10 0))
+                (wire (pts (xy 10 0) (xy 10 10))))`;
+            const plan = planWireRemoval(source, [{ x: 0, y: 0 }], []);
+            expect(plan.removed.length === 3,
+                `wire island cleanup: expected all 3 segments, got ${plan.removed.length}`);
+            expect(plan.retained.length === 0,
+                'wire island cleanup: dangling segments were retained');
+        });
+
+        await runScenario('shared wire branch cleanup', async () => {
+            const source = `(kicad_sch
+                (wire (pts (xy 0 0) (xy 20 0)))
+                (junction (at 10 0))
+                (wire (pts (xy 10 0) (xy 10 10))))`;
+            const plan = planWireRemoval(
+                source,
+                [{ x: 10, y: 10 }],
+                [{ x: 20, y: 0 }],
+            );
+            expect(plan.removed.length === 1,
+                `shared branch cleanup: expected one branch, got ${plan.removed.length}`);
+            expect(plan.removed[0].range.text.includes('(xy 10 0) (xy 10 10)'),
+                'shared branch cleanup: wrong branch removed');
+            expect(plan.retained.length === 1,
+                'shared branch cleanup: retained net was damaged');
+        });
+
+        await runScenario('electrical pin type normalization', async () => {
+            const source = parseSExpression(`(symbol "TEST"
+                (property "Footprint" "component:TEST")
+                (symbol "TEST_0_1"
+                    (pin unspecified line (at 0 0 0) (length 2.54)
+                        (name "VCC") (number "1"))
+                    (pin unspecified line (at 0 0 0) (length 2.54)
+                        (name "OUT") (number "2"))
+                    (pin unspecified line (at 0 0 0) (length 2.54)
+                        (name "TRIG") (number "3"))))`);
+            const ic = printSExpression(normalizedComponentSymbol(source, 'U1'));
+            expect(ic.includes('(pin power_in line'), 'pin types: VCC is not Power input');
+            expect(ic.includes('(pin output line'), 'pin types: OUT is not Output');
+            expect(ic.includes('(pin input line'), 'pin types: TRIG is not Input');
+            const passive = printSExpression(normalizedComponentSymbol(source, 'R1'));
+            expect((passive.match(/\(pin passive line/g) || []).length === 3,
+                'pin types: passive component pins are not Passive');
+        });
+
         const blank = await createSchematic(join(root, 'blank'));
         const fixture = await copySchematic(blank, join(root, 'fixture'));
         await extractCircuit(fixture, modification({
@@ -137,6 +215,41 @@ async function main() {
             blockName: 'assembly_test',
         });
         expectComponent(await getSchematic(fixture), 'R2', { partUuid: RESISTOR_A });
+        const fixtureSource = await readFile(fixture, 'utf8');
+        expect(fixtureSource.includes('(pin passive line'),
+            'pin types: resistor pins are not passive');
+        expect(fixtureSource.includes('kicad-copilot:C98220_R0603'),
+            'project library: footprint link was not normalized');
+        expect((await readFile(join(dirname(fixture), 'sym-lib-table'), 'utf8')).includes('kicad-copilot'),
+            'project library: symbol table entry missing');
+        expect((await readFile(join(dirname(fixture), 'fp-lib-table'), 'utf8')).includes('kicad-copilot'),
+            'project library: footprint table entry missing');
+        await readFile(join(dirname(fixture), 'kicad-copilot.pretty', 'C98220_R0603.kicad_mod'));
+
+        await runScenario('checkpoint pagination', async () => {
+            await saveCheckpoint(fixture, 'Pagination test 1');
+            await saveCheckpoint(fixture, 'Pagination test 2');
+            const firstPage = await listCheckpoints(fixture, 1, 1);
+            const secondPage = await listCheckpoints(fixture, 1, 2);
+            expect(firstPage.checkpoints.length === 1 && secondPage.checkpoints.length === 1,
+                'checkpoint pagination: invalid page size');
+            expect(firstPage.checkpoints[0].id !== secondPage.checkpoints[0].id,
+                'checkpoint pagination: pages contain the same checkpoint');
+            expect(firstPage.total >= 3 && firstPage.total_pages === firstPage.total,
+                'checkpoint pagination: invalid totals');
+        });
+
+        await runScenario('project history exclusion', async () => {
+            const directory = join(root, 'project-info');
+            const projectPath = join(directory, 'main.kicad_pro');
+            await createDocument({ doc_type: 'project', path: projectPath });
+            const historyDirectory = join(directory, '.history');
+            await mkdir(historyDirectory, { recursive: true });
+            await copyFile(join(directory, 'main.kicad_sch'), join(historyDirectory, 'main.kicad_sch'));
+            const info = await getProjectInfo(projectPath);
+            expect(!JSON.stringify(info).includes('.history'),
+                'project info: .history schematic was included');
+        });
 
         await runScenario('beautify schematic', async () => {
             const path = await copySchematic(fixture, join(root, 'beautify'));
@@ -149,6 +262,31 @@ async function main() {
                 'beautify: server assembly does not contain R2');
             expectComponent(result, 'R1', { partUuid: RESISTOR_A, blockName: 'Feedback' });
             expectComponent(result, 'R2', { partUuid: RESISTOR_A, blockName: 'Feedback' });
+        });
+
+        await runScenario('beautify removes old physical topology', async () => {
+            const path = await copySchematic(blank, join(root, 'beautify-connected'));
+            const first = resistor('R10');
+            first.pins[0].signal_name = 'VCC_5V';
+            first.pins[1].signal_name = 'MID';
+            const second = resistor('R11');
+            second.pins[0].signal_name = 'MID';
+            second.pins[1].signal_name = 'GND';
+            await extractCircuit(path, modification({ add_components: [first, second] }));
+            const initialSource = await readFile(path, 'utf8');
+            expect(initialSource.includes('(lib_id "kicad-copilot:VCC_5V")'),
+                'project library: generated power port uses an unregistered library');
+            const initialErc = await ercReport(path);
+            expect(!/\[(lib_symbol_issues|footprint_link_issues)\]/.test(initialErc),
+                'project library: ERC still reports missing symbol or footprint libraries');
+            const oldObjects = placedObjectUuids(await readFile(path, 'utf8'));
+            expect(oldObjects.size > 2, 'beautify topology: connected fixture has no physical topology');
+
+            await beautifySchematic(path, { Divider: ['R10', 'R11'] });
+            const currentObjects = placedObjectUuids(await readFile(path, 'utf8'));
+            const leftovers = [...oldObjects].filter((uuid) => currentObjects.has(uuid));
+            expect(leftovers.length === 0,
+                `beautify topology: ${leftovers.length} old physical objects remain`);
         });
 
         await runScenario('addition', async () => {

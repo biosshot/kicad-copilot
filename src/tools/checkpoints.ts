@@ -13,9 +13,12 @@ export function registerCheckpointTools(server: McpServer) {
             description: `List file checkpoints saved by KiCad Copilot. Agent instructions: ${SKILL_DOC_PATH}`,
             inputSchema: z.object({
                 path: z.string().min(1).describe('Target KiCad file path.'),
+                limit: z.number().int().min(1).max(100).default(20)
+                    .describe('Maximum checkpoints per page.'),
+                page: z.number().int().min(1).default(1).describe('Page number, starting from 1.'),
             }),
         },
-        async ({ path }) => runTool(() => listCheckpoints(path)),
+        async ({ path, limit, page }) => runTool(() => listCheckpoints(path, limit, page)),
     );
 
     server.registerTool(

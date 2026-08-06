@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { basename } from 'node:path';
 import { ConvertedComponent, convertComponent } from '../components/converter';
 import { getPowerSymbol } from '../components/kicad-library';
+import { projectFootprintId, writeProjectLibraries } from '../components/project-library';
 import { CircuitAssembly, ExplainCircuit } from '../types/circuit';
 import {
     atom,
@@ -13,9 +14,14 @@ import {
     SExpression,
 } from './sexpr/ast';
 import { findLists, findQuotedProperty, quoteSExpression, SExpressionRange } from './sexpr/scan';
-import { embeddedLibrarySymbol, LibraryPin, librarySymbolPins } from './symbol';
+import {
+    embeddedLibrarySymbol,
+    LibraryPin,
+    librarySymbolPins,
+    normalizedComponentSymbol,
+} from './symbol';
 import { applySourceEdits, mutateSchematic, SourceEdit } from './schematic-writer';
-import { wireRangesToDisconnect } from './wire-removal';
+import { planWireRemoval, pointTouchesWire, wireDirectionsAtPoint } from './wire-removal';
 
 const SERVER_UNIT_MM = 0.254;
 const GRID_MM = 1.27;
@@ -30,6 +36,7 @@ type ExistingSymbol = {
     reference: string;
     anchor: Point;
     pins: Map<string, Point>;
+    service: boolean;
 };
 type PlacedComponent = {
     source: CircuitAssemblyComponent;
@@ -145,7 +152,13 @@ function instanceData(range: SExpressionRange, symbols: Map<string, SExpression[
     for (const pin of uniquePins(librarySymbolPins(symbol)).values()) {
         pins.set(pin.number, transformedPin(pin, anchor, rotation, mirror));
     }
-    return { range, reference: baseDesignator(reference), anchor, pins } satisfies ExistingSymbol;
+    return {
+        range,
+        reference: baseDesignator(reference),
+        anchor,
+        pins,
+        service: reference.startsWith('#PWR'),
+    } satisfies ExistingSymbol;
 }
 
 function existingSymbols(source: string, symbols: Map<string, SExpression[]>) {
@@ -563,14 +576,17 @@ function nextPowerReference(source: string) {
     return () => `#PWR${String(value++).padStart(4, '0')}`;
 }
 
-function preparedRealAssets(assembly: CircuitAssembly) {
-    const uuids = [...new Set(assembly.components
-        .filter((component) => component.part_uuid
-            && component.part_uuid !== 'GND'
-            && component.part_uuid !== 'VCC'
-            && component.value !== 'unknown_shortsym'
-            && !component.designator.includes('|'))
-        .map((component) => component.part_uuid!))];
+function preparedRealAssets(assembly: CircuitAssembly, input: ExplainCircuit) {
+    const uuids = [...new Set([
+        ...assembly.components
+            .filter((component) => component.part_uuid
+                && component.part_uuid !== 'GND'
+                && component.part_uuid !== 'VCC'
+                && component.value !== 'unknown_shortsym'
+                && !component.designator.includes('|'))
+            .map((component) => component.part_uuid!),
+        ...input.components.flatMap((component) => component.part_uuid ? [component.part_uuid] : []),
+    ])];
     return Promise.all(uuids.map(async (partUuid) => [partUuid, await convertComponent(partUuid)] as const))
         .then((entries) => new Map(entries));
 }
@@ -591,7 +607,7 @@ export async function applyCircuitAssembly(
         throw new Error('invalid CircuitAssembly response');
     }
 
-    const realAssets = await preparedRealAssets(assembly);
+    const realAssets = await preparedRealAssets(assembly, input);
     const needsGround = assembly.components.some((component) => component.part_uuid === 'GND')
         || assembly.added_net?.some((net) => net.net === 'GND');
     const [groundSource, portSource] = await Promise.all([
@@ -614,6 +630,7 @@ export async function applyCircuitAssembly(
         }
         const removed = allExisting.filter((item) => removalDesignators.has(item.reference));
         const retained = allExisting.filter((item) => !removalDesignators.has(item.reference));
+        const retainedReal = retained.filter((item) => !item.service);
         const offset = placementOffset(source, assembly, retained, removed);
         const serverShapePoints = new Map<string, Point>();
         for (const edge of assembly.edges) {
@@ -631,6 +648,21 @@ export async function applyCircuitAssembly(
             end: range.end,
             text: '',
         }));
+        const inputByDesignator = new Map(input.components.map((component) => [component.designator, component]));
+        for (const item of retainedReal) {
+            const partUuid = inputByDesignator.get(item.reference)?.part_uuid;
+            const asset = partUuid ? realAssets.get(partUuid) : undefined;
+            if (!asset) continue;
+            const footprint = projectFootprintId(asset);
+            if (!footprint) continue;
+            const normalized = item.range.text.replace(
+                /(\(property\s+"Footprint"\s+)"[^"]*"/,
+                `$1${quoteSExpression(footprint)}`,
+            );
+            if (normalized !== item.range.text) {
+                edits.push({ start: item.range.start, end: item.range.end, text: normalized });
+            }
+        }
 
         const existingPinPoints = new Map<string, Point>();
         const ownerAnchors = new Map<string, Point>();
@@ -650,24 +682,63 @@ export async function applyCircuitAssembly(
             const point = existingPinPoints.get(`${baseDesignator(net.designator)}_pin_${net.pin_number}`);
             if (point) disconnectPoints.add(pointKey(point));
         }
-        const retainedPinPoints = retained.flatMap((item) => [...item.pins.values()]);
+        const retainedPinPoints = retainedReal.flatMap((item) => [...item.pins.values()]);
         const parsedDisconnectPoints = [...disconnectPoints].map((key) => {
             const [x, y] = key.split(',').map(Number);
             return { x, y };
         });
-        for (const range of wireRangesToDisconnect(source, parsedDisconnectPoints, retainedPinPoints)) {
-            edits.push({ start: range.start, end: range.end, text: '' });
+        const wirePlan = planWireRemoval(source, parsedDisconnectPoints, retainedPinPoints);
+        for (const wire of wirePlan.removed) {
+            edits.push({ start: wire.range.start, end: wire.range.end, text: '' });
         }
-        for (const head of ['no_connect', 'global_label', 'label']) {
+        const retainedPinKeys = new Set(retainedPinPoints.map(pointKey));
+        const touchedByRemoval = (point: Point) => disconnectPoints.has(pointKey(point))
+            || wirePlan.removed.some((wire) => pointTouchesWire(point, wire));
+        const remainsConnected = (point: Point) => retainedPinKeys.has(pointKey(point))
+            || wirePlan.retained.some((wire) => pointTouchesWire(point, wire));
+
+        for (const item of retained.filter((symbol) => symbol.service)) {
+            const connectionPoints = item.pins.size ? [...item.pins.values()] : [item.anchor];
+            if (connectionPoints.some(touchedByRemoval) && !connectionPoints.some(remainsConnected)) {
+                edits.push({ start: item.range.start, end: item.range.end, text: '' });
+            }
+        }
+        for (const head of ['no_connect', 'global_label', 'hierarchical_label', 'label']) {
             for (const range of findLists(source, head)) {
                 const point = rangeAtPoint(range);
-                if (point && disconnectPoints.has(pointKey(point))) {
+                if (point && touchedByRemoval(point) && !remainsConnected(point)) {
                     edits.push({ start: range.start, end: range.end, text: '' });
                 }
             }
         }
+        for (const range of findLists(source, 'junction')) {
+            const point = rangeAtPoint(range);
+            if (point && touchedByRemoval(point)
+                && wireDirectionsAtPoint(point, wirePlan.retained) < 3) {
+                edits.push({ start: range.start, end: range.end, text: '' });
+            }
+        }
 
         const definitions = new Map<string, EmbeddedSymbol>();
+        const embeddedAssets = new Map<string, EmbeddedSymbol>();
+        const representativeDesignators = new Map<string, string>();
+        for (const component of input.components) {
+            if (component.part_uuid) representativeDesignators.set(component.part_uuid, component.designator);
+        }
+        for (const component of assembly.components) {
+            if (component.part_uuid) representativeDesignators.set(component.part_uuid, component.designator);
+        }
+        for (const [partUuid, asset] of realAssets) {
+            const normalized = normalizedComponentSymbol(
+                asset.symbol,
+                representativeDesignators.get(partUuid) || 'U',
+                'kicad-copilot',
+                `${asset.product_code}_`,
+            );
+            const embedded = embeddedLibrarySymbol(normalized, 'kicad-copilot', version);
+            embeddedAssets.set(partUuid, embedded);
+            definitions.set(embedded.id, embedded);
+        }
         const objects: string[] = [];
         const placed: PlacedComponent[] = [];
         const edgePins = new Map(existingPinPoints);
@@ -693,7 +764,7 @@ export async function applyCircuitAssembly(
             if (existing) return existing;
             const embedded = embeddedLibrarySymbol(
                 renamedPowerSymbol(portSource, signal),
-                'power',
+                'kicad-copilot',
                 version,
             );
             portDefinitions.set(signal, embedded);
@@ -759,9 +830,8 @@ export async function applyCircuitAssembly(
                 kind = 'real';
                 if (!component.part_uuid) throw new Error(`part_uuid missing: ${component.designator}`);
                 const converted = realAssets.get(component.part_uuid) as ConvertedComponent | undefined;
-                if (!converted) throw new Error(`component conversion missing: ${component.designator}`);
-                const embedded = embeddedLibrarySymbol(converted.symbol, 'kicad-copilot', version);
-                definitions.set(embedded.id, embedded);
+                const embedded = embeddedAssets.get(component.part_uuid);
+                if (!converted || !embedded) throw new Error(`component conversion missing: ${component.designator}`);
                 objects.push(symbolInstance({
                     embedded,
                     component,
@@ -989,14 +1059,19 @@ export async function applyCircuitAssembly(
             }
         }
 
-        const newDefinitions = [...definitions.values()].filter(
-            (definition) => !library.symbols.has(definition.id),
-        );
-        if (newDefinitions.length) {
+        if (definitions.size) {
+            const root = parseSExpression(library.range.text);
+            for (const definition of definitions.values()) {
+                const index = root.findIndex((item) => isSExpressionList(item)
+                    && listHead(item) === 'symbol'
+                    && atom(item[1]) === definition.id);
+                if (index < 0) root.push(definition.symbol);
+                else root[index] = definition.symbol;
+            }
             edits.push({
-                start: library.range.end - 1,
-                end: library.range.end - 1,
-                text: `\n\t\t${newDefinitions.map((item) => printSExpression(item.symbol)).join('\n\t\t')}\n\t`,
+                start: library.range.start,
+                end: library.range.end,
+                text: printSExpression(root),
             });
         }
         if (objects.length) {
@@ -1008,6 +1083,13 @@ export async function applyCircuitAssembly(
             });
         }
 
+        await writeProjectLibraries(
+            path,
+            [...definitions.values()]
+                .filter((definition) => definition.id.startsWith('kicad-copilot:'))
+                .map((definition) => definition.symbol),
+            realAssets.values(),
+        );
         return applySourceEdits(source, edits);
     });
 }

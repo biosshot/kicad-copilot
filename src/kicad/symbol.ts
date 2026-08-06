@@ -52,6 +52,54 @@ export function librarySymbolPins(symbol: SExpression[]) {
     return pins;
 }
 
+const PASSIVE_PREFIXES = new Set([
+    'R', 'C', 'L', 'FB', 'D', 'LED', 'F', 'J', 'P', 'SW', 'S', 'X', 'Y', 'Q', 'T', 'K', 'RV',
+]);
+
+function designatorPrefix(designator: string) {
+    return designator.trim().match(/^[A-Za-z]+/)?.[0].toUpperCase() || '';
+}
+
+function inferredPinType(designator: string, name: string, current: string) {
+    if (PASSIVE_PREFIXES.has(designatorPrefix(designator))) return 'passive';
+    if (current && current !== 'unspecified') return current;
+
+    const normalized = name.toUpperCase().replace(/[~\s]/g, '');
+    if (/^(GND|AGND|DGND|PGND|VSS|VEE|VCC|VDD|AVCC|AVDD|DVCC|DVDD|VBAT|VREF[+-]?)$/.test(normalized)) {
+        return 'power_in';
+    }
+    if (/^(OUT|OUT[A-Z0-9]*|DOUT|SOUT|TX|TXD|MISO|Q[0-9A-Z]*|DISCH|PWM[0-9A-Z]*)$/.test(normalized)) {
+        return 'output';
+    }
+    if (/^([+-]?IN|[+-]?IN[A-Z0-9]*|AIN[0-9A-Z]*|TRIG|THRES|THR|CONT|CTRL|RST|RESET|EN|ENABLE|CLK|CS|SCK|MOSI|RX|RXD)$/.test(normalized)) {
+        return 'input';
+    }
+    if (/^(IO|I\/O|GPIO|SDA|SCL)[0-9A-Z_]*$/.test(normalized)) return 'bidirectional';
+    return 'passive';
+}
+
+export function normalizedComponentSymbol(
+    sourceInput: SExpression[],
+    designator: string,
+    footprintLibrary = 'kicad-copilot',
+    footprintPrefix = '',
+) {
+    const source = structuredClone(sourceInput) as SExpression[];
+    visitSExpression(source, (item) => {
+        if (listHead(item) !== 'pin') return;
+        const name = atom(findChild(item, 'name')?.[1]) || '';
+        item[1] = token(inferredPinType(designator, name, atom(item[1]) || ''));
+    });
+    for (const item of source) {
+        if (!isSExpressionList(item) || listHead(item) !== 'property') continue;
+        if (atom(item[1]) !== 'Footprint') continue;
+        const footprint = atom(item[2]) || '';
+        const name = footprint.includes(':') ? footprint.slice(footprint.indexOf(':') + 1) : footprint;
+        if (name) item[2] = token(`${footprintLibrary}:${footprintPrefix}${name}`, true);
+    }
+    return source;
+}
+
 function normalizedProperty(property: SExpression[]) {
     const output = property.filter(
         (item) => !isSExpressionList(item) || listHead(item) !== 'id',

@@ -5,7 +5,8 @@ the whole KiCad project or sibling sheets.
 
 ## Tools
 
-- `list_checkpoints({ path })`: list compact checkpoint metadata for one file.
+- `list_checkpoints({ path, limit?, page? })`: list compact checkpoint metadata,
+  20 items per page by default.
 - `save_checkpoint({ path, description? })`: save a snapshot and return its id.
 - `restore_checkpoint({ path, id })`: restore one snapshot.
 

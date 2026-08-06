@@ -87,13 +87,21 @@ async function saveCheckpointBytes(path: string, bytes: Buffer, description: str
     return id;
 }
 
-export async function listCheckpoints(path: string) {
+export async function listCheckpoints(path: string, limit = 20, page = 1) {
     const metadata = await readMetadata(resolve(path));
-    return metadata.checkpoints.map(({ id, created_at, description }) => ({
+    const start = (page - 1) * limit;
+    const checkpoints = metadata.checkpoints.slice(start, start + limit).map(({ id, created_at, description }) => ({
         id,
         created_at,
         description,
     }));
+    return {
+        checkpoints,
+        page,
+        limit,
+        total: metadata.checkpoints.length,
+        total_pages: Math.ceil(metadata.checkpoints.length / limit),
+    };
 }
 
 export async function saveCheckpoint(path: string, description = 'Manual checkpoint') {
