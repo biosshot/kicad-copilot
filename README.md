@@ -34,6 +34,42 @@ Inspect the MCP server locally:
 npm run inspect
 ```
 
+Run the assembly pipeline directly, without MCP Inspector:
+
+```bash
+npm run test:assemble -- path/to/request.json
+```
+
+The current local smoke payload is available at `scripts/request.json`:
+
+```bash
+npm run test:assemble -- scripts/request.json
+```
+
+Pass an optional second path to retain the raw server assembly response:
+
+```bash
+npm run test:assemble -- request.json server-response.json
+```
+
+The JSON uses the same `extract_circuit` input, including `path`. The script
+reads the existing schematic, saves a checkpoint, calls the Circuit Copilot
+server, applies the response, validates the result through KiCad, and prints
+the resulting component/net JSON.
+It exits with an error when a requested non-empty pin signal differs after
+KiCad reads the assembled file back.
+
+Run the real-server assembly scenarios for component addition, removal, net
+connection, and replacement:
+
+```bash
+npm run test:assembly-scenarios
+```
+
+Each scenario uses an independent temporary schematic and validates the final
+KiCad netlist. Failed scenario artifacts are retained in the printed temporary
+directory; successful runs clean up automatically.
+
 ## npm usage
 
 ```bash

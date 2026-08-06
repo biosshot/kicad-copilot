@@ -1,0 +1,148 @@
+{
+  "path": "D:\\MyProject\\kicad\\test\\test.kicad_sch",
+  "add_components": [
+    {
+      "block_name": "main",
+      "designator": "U1",
+      "part_uuid": "3a6c559f43b44aff962dd7571d5f44ee",
+      "search_query": "TI LM358DR dual operational amplifier SOIC-8",
+      "value": "LM358DR",
+      "pins": [
+        {
+          "name": "OUT1",
+          "pin_number": "1",
+          "signal_name": "VOUT"
+        },
+        {
+          "name": "-IN1",
+          "pin_number": "2",
+          "signal_name": "FB"
+        },
+        {
+          "name": "+IN1",
+          "pin_number": "3",
+          "signal_name": "VIN"
+        },
+        {
+          "name": "GND",
+          "pin_number": "4",
+          "signal_name": "GND"
+        },
+        {
+          "name": "OUT2",
+          "pin_number": "7",
+          "signal_name": "UNUSED_OUT"
+        },
+        {
+          "name": "+V",
+          "pin_number": "8",
+          "signal_name": "+5V"
+        }
+      ]
+    },
+    {
+      "block_name": "main",
+      "designator": "R1",
+      "part_uuid": "fa459f1466df4014badd43e0b80fd058",
+      "search_query": "Yageo 10k 1% 0603 resistor",
+      "value": "10k",
+      "pins": [
+        {
+          "name": "1",
+          "pin_number": "1",
+          "signal_name": "FB"
+        },
+        {
+          "name": "2",
+          "pin_number": "2",
+          "signal_name": "GND"
+        }
+      ]
+    },
+    {
+      "block_name": "main",
+      "designator": "R2",
+      "part_uuid": "fa459f1466df4014badd43e0b80fd058",
+      "search_query": "Yageo 10k 1% 0603 resistor",
+      "value": "10k",
+      "pins": [
+        {
+          "name": "1",
+          "pin_number": "1",
+          "signal_name": "VOUT"
+        },
+        {
+          "name": "2",
+          "pin_number": "2",
+          "signal_name": "FB"
+        }
+      ]
+    },
+    {
+      "block_name": "main",
+      "designator": "C1",
+      "part_uuid": "a299e4f29fd2469688f76621c3d59c4d",
+      "search_query": "Yageo 100nF 50V X7R 0603 capacitor",
+      "value": "100nF",
+      "pins": [
+        {
+          "name": "1",
+          "pin_number": "1",
+          "signal_name": "+5V"
+        },
+        {
+          "name": "2",
+          "pin_number": "2",
+          "signal_name": "GND"
+        }
+      ]
+    },
+    {
+      "block_name": "Input and power connector",
+      "designator": "J1",
+      "part_uuid": "e3145416944046c8ae9e43248edd775d",
+      "search_query": "JST XH 3 pin 2.5mm through-hole connector",
+      "value": "INPUT_PWR",
+      "pins": [
+        {
+          "name": "1",
+          "pin_number": "1",
+          "signal_name": "+5V"
+        },
+        {
+          "name": "2",
+          "pin_number": "2",
+          "signal_name": "GND"
+        },
+        {
+          "name": "3",
+          "pin_number": "3",
+          "signal_name": "VIN"
+        }
+      ]
+    },
+    {
+      "block_name": "Output connector",
+      "designator": "J2",
+      "part_uuid": "4d018698282b47d4893c87aca1c32f67",
+      "search_query": "JST XH 2 pin 2.5mm through-hole connector",
+      "value": "OUTPUT",
+      "pins": [
+        {
+          "name": "1",
+          "pin_number": "1",
+          "signal_name": "VOUT"
+        },
+        {
+          "name": "2",
+          "pin_number": "2",
+          "signal_name": "GND"
+        }
+      ]
+    }
+  ],
+  "add_reused_blocks": [],
+  "rm_components": null,
+  "external_connect": null,
+  "external_rm_connect": null
+}

@@ -37,13 +37,16 @@ that should receive an explicit KiCad no-connect marker.
 GND becomes a KiCad GND power symbol. VCC and other named short symbols become
 KiCad global-label ports.
 
-The first version connects real pins with short wires and KiCad net labels.
-This preserves connectivity when converted symbol geometry differs from the
-layout geometry returned by the server.
+Server edge sections become real KiCad wires. GND and named short-symbol ports
+use KiCad power-style symbols at the wire endpoints. Internal named nets may
+receive one local label so their names survive a KiCad netlist round trip.
 
 ## Removal and replacement
 
 Remove components by base designator. Removing `U1` affects all its units.
+Request an explicit replacement by putting the old designator in
+`rm_components` and the new component with the same designator in
+`add_components`.
 When the server requests replacement, KiCad Copilot first attempts a safe
 in-place replacement. If pin mapping is unsafe, it falls back to ordinary
 remove-and-assemble behavior in free sheet space.

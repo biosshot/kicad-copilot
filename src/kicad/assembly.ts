@@ -21,6 +21,7 @@ const GRID_MM = 1.27;
 
 type Point = { x: number; y: number };
 type Rect = { left: number; top: number; right: number; bottom: number };
+type RoutedSegment = { start: Point; end: Point; signal?: string };
 type EmbeddedSymbol = ReturnType<typeof embeddedLibrarySymbol>;
 type ExistingSymbol = {
     range: SExpressionRange;
@@ -49,6 +50,12 @@ function pointKey(point: Point) {
 
 function normalizeRotation(value = 0) {
     return ((value % 360) + 360) % 360;
+}
+
+function kicadRotation(value = 0) {
+    // Server page coordinates and KiCad schematic instances use the same
+    // clockwise-on-a-Y-down-page orientation.
+    return normalizeRotation(value);
 }
 
 function baseDesignator(value: string) {
@@ -88,6 +95,23 @@ function uniquePins(pins: LibraryPin[]) {
     const output = new Map<string, LibraryPin>();
     for (const pin of pins) if (!output.has(pin.number)) output.set(pin.number, pin);
     return output;
+}
+
+function renamedPowerSymbol(source: SExpression[], signal: string) {
+    const cloned = structuredClone(source) as SExpression[];
+    const replace = (node: SExpression) => {
+        if (!isSExpressionList(node)) {
+            if (node.value === 'VCC') node.value = signal;
+            else if (node.value.startsWith('VCC_')) node.value = `${signal}${node.value.slice(3)}`;
+            else if (node.quoted && node.value.includes('VCC')) {
+                node.value = node.value.replaceAll('VCC', signal);
+            }
+            return;
+        }
+        for (const item of node) replace(item);
+    };
+    replace(cloned);
+    return cloned;
 }
 
 function embeddedSymbols(source: string) {
@@ -162,15 +186,15 @@ function serverRect(assembly: CircuitAssembly) {
     const rects = assembly.components.map((component) => ({
         left: component.pos.x * SERVER_UNIT_MM,
         right: (component.pos.x + component.pos.width) * SERVER_UNIT_MM,
-        top: -(component.pos.y + component.pos.height) * SERVER_UNIT_MM,
-        bottom: -component.pos.y * SERVER_UNIT_MM,
+        top: component.pos.y * SERVER_UNIT_MM,
+        bottom: (component.pos.y + component.pos.height) * SERVER_UNIT_MM,
     }));
     for (const block of assembly.blocks_rect || []) {
         rects.push({
             left: block.x * SERVER_UNIT_MM,
             right: (block.x + block.width) * SERVER_UNIT_MM,
-            top: -(block.y + block.height) * SERVER_UNIT_MM,
-            bottom: -block.y * SERVER_UNIT_MM,
+            top: block.y * SERVER_UNIT_MM,
+            bottom: (block.y + block.height) * SERVER_UNIT_MM,
         });
     }
     if (!rects.length) return { left: 0, top: 0, right: 10, bottom: 10 };
@@ -263,9 +287,11 @@ function placementOffset(
 }
 
 function serverPoint(point: Point, offset: Point) {
+    // KiCad sheet coordinates are Y-down, just like the assembly server.
+    // Only library-local pin coordinates need the Y conversion in transformedPin().
     return {
         x: snapped(offset.x + point.x * SERVER_UNIT_MM),
-        y: snapped(offset.y - point.y * SERVER_UNIT_MM),
+        y: snapped(offset.y + point.y * SERVER_UNIT_MM),
     };
 }
 
@@ -284,8 +310,8 @@ function effects(hidden = false) {
     return `${hidden ? '(hide yes) ' : ''}(effects (font (size 1.27 1.27)))`;
 }
 
-function property(name: string, value: string, x: number, y: number, hidden = true) {
-    return `(property ${quoteSExpression(name)} ${quoteSExpression(value)} (at ${x} ${y} 0) (show_name no) (do_not_autoplace no) ${effects(hidden)})`;
+function property(name: string, value: string, x: number, y: number, hidden = true, angle = 0) {
+    return `(property ${quoteSExpression(name)} ${quoteSExpression(value)} (at ${x} ${y} ${normalizeRotation(angle)}) (show_name no) (do_not_autoplace no) ${effects(hidden)})`;
 }
 
 function unitNumber(component: CircuitAssemblyComponent) {
@@ -301,12 +327,27 @@ function symbolInstance(options: {
     documentUuid: string;
     reference?: string;
     value?: string;
+    power?: 'ground' | 'port';
 }) {
     const reference = options.reference || baseDesignator(options.component.designator);
     const value = options.value || options.component.value;
-    const rotation = normalizeRotation(options.component.pos.rotate);
+    const rotation = kicadRotation(options.component.pos.rotate);
     const mirror = options.component.pos.mirror ? '(mirror x)' : '';
     const properties = options.embedded.properties;
+    const power = options.power;
+    const sideways = !power && (rotation === 90 || rotation === 270);
+    const referenceY = power === 'ground'
+        ? options.anchor.y + 6.35
+        : options.anchor.y - 6.35;
+    const valueY = power === 'ground'
+        ? options.anchor.y + 3.556
+        : options.anchor.y - 3.556;
+    const realReference = sideways
+        ? { x: options.anchor.x + 8.89, y: options.anchor.y - 1.27, angle: rotation }
+        : { x: options.anchor.x, y: options.anchor.y - 10.16, angle: 0 };
+    const realValue = sideways
+        ? { x: options.anchor.x + 8.89, y: options.anchor.y + 1.27, angle: rotation }
+        : { x: options.anchor.x, y: options.anchor.y + 10.16, angle: 0 };
     const pins = [...uniquePins(options.embedded.pins).keys()]
         .map((number) => `(pin ${quoteSExpression(number)} (uuid ${quoteSExpression(randomUUID())}))`)
         .join(' ');
@@ -315,8 +356,8 @@ function symbolInstance(options: {
         (unit ${unitNumber(options.component)}) ${mirror}
         (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no)
         (uuid ${quoteSExpression(randomUUID())})
-        ${property('Reference', reference, options.anchor.x, options.anchor.y - 10.16, false)}
-        ${property('Value', value, options.anchor.x, options.anchor.y + 10.16, false)}
+        ${property('Reference', reference, power ? options.anchor.x : realReference.x, power ? referenceY : realReference.y, Boolean(power), power ? 0 : realReference.angle)}
+        ${property('Value', value, power ? options.anchor.x : realValue.x, power ? valueY : realValue.y, false, power ? 0 : realValue.angle)}
         ${property('Footprint', properties.Footprint || '', options.anchor.x, options.anchor.y)}
         ${property('Datasheet', properties.Datasheet || '', options.anchor.x, options.anchor.y)}
         ${property('Description', properties.Description || '', options.anchor.x, options.anchor.y)}
@@ -329,15 +370,6 @@ function symbolInstance(options: {
                 (reference ${quoteSExpression(reference)}) (unit ${unitNumber(options.component)})))))`;
 }
 
-function globalLabel(name: string, point: Point, angle = 0) {
-    return `(global_label ${quoteSExpression(name)}
-        (shape bidirectional) (at ${point.x} ${point.y} ${normalizeRotation(angle)})
-        (fields_autoplaced yes) ${effects()} (uuid ${quoteSExpression(randomUUID())})
-        (property "Intersheetrefs" "${'${INTERSHEET_REFS}'}"
-            (at ${point.x} ${point.y} ${normalizeRotation(angle)})
-            (effects (font (size 1.27 1.27)) (hide yes))))`;
-}
-
 function localLabel(name: string, point: Point) {
     return `(label ${quoteSExpression(name)}
         (at ${point.x} ${point.y} 0) ${effects()}
@@ -347,6 +379,147 @@ function localLabel(name: string, point: Point) {
 function wireSegment(start: Point, end: Point) {
     return `(wire (pts (xy ${start.x} ${start.y}) (xy ${end.x} ${end.y}))
         (stroke (width 0) (type default)) (uuid ${quoteSExpression(randomUUID())}))`;
+}
+
+function orthogonalPoints(points: Point[]) {
+    const output: Point[] = [];
+    for (const point of points) {
+        const previous = output.at(-1);
+        if (!previous) {
+            output.push(point);
+            continue;
+        }
+        if (previous.x !== point.x && previous.y !== point.y) {
+            output.push({ x: point.x, y: previous.y });
+        }
+        if (pointKey(output.at(-1)!) !== pointKey(point)) output.push(point);
+    }
+    return output;
+}
+
+function nearlyEqual(left: number, right: number) {
+    return Math.abs(left - right) < 1e-6;
+}
+
+function routedSectionPoints(
+    section: CircuitAssembly['edges'][number]['sections'][number],
+    start: Point,
+    end: Point,
+    offset: Point,
+) {
+    const rawBends = section.bendPoints || [];
+    if (!rawBends.length) {
+        if (nearlyEqual(section.startPoint.x, section.endPoint.x)) {
+            return orthogonalPoints([start, { x: start.x, y: end.y }, end]);
+        }
+        if (nearlyEqual(section.startPoint.y, section.endPoint.y)) {
+            return orthogonalPoints([start, { x: end.x, y: start.y }, end]);
+        }
+        return orthogonalPoints([start, end]);
+    }
+
+    const bends = rawBends.map((point) => serverPoint(point, offset));
+    const firstRaw = rawBends[0];
+    if (nearlyEqual(section.startPoint.y, firstRaw.y)) bends[0].y = start.y;
+    else if (nearlyEqual(section.startPoint.x, firstRaw.x)) bends[0].x = start.x;
+
+    const lastIndex = rawBends.length - 1;
+    const lastRaw = rawBends[lastIndex];
+    if (nearlyEqual(section.endPoint.y, lastRaw.y)) bends[lastIndex].y = end.y;
+    else if (nearlyEqual(section.endPoint.x, lastRaw.x)) bends[lastIndex].x = end.x;
+
+    return orthogonalPoints([start, ...bends, end]);
+}
+
+function junction(point: Point) {
+    return `(junction (at ${point.x} ${point.y}) (diameter 0) (color 0 0 0 0)
+        (uuid ${quoteSExpression(randomUUID())}))`;
+}
+
+function pointOnSegment(point: Point, start: Point, end: Point) {
+    if (start.x === end.x && point.x === start.x) {
+        return point.y >= Math.min(start.y, end.y) && point.y <= Math.max(start.y, end.y);
+    }
+    if (start.y === end.y && point.y === start.y) {
+        return point.x >= Math.min(start.x, end.x) && point.x <= Math.max(start.x, end.x);
+    }
+    return false;
+}
+
+function segmentKey(start: Point, end: Point) {
+    const first = pointKey(start);
+    const second = pointKey(end);
+    return first < second ? `${first}|${second}` : `${second}|${first}`;
+}
+
+function perpendicularIntersection(left: RoutedSegment, right: RoutedSegment) {
+    const leftVertical = nearlyEqual(left.start.x, left.end.x);
+    const rightVertical = nearlyEqual(right.start.x, right.end.x);
+    if (leftVertical === rightVertical) return undefined;
+    const vertical = leftVertical ? left : right;
+    const horizontal = leftVertical ? right : left;
+    const point = { x: vertical.start.x, y: horizontal.start.y };
+    return pointOnSegment(point, vertical.start, vertical.end)
+        && pointOnSegment(point, horizontal.start, horizontal.end)
+        ? point
+        : undefined;
+}
+
+function normalizedNetSegments(segments: RoutedSegment[]) {
+    const groups = new Map<string, RoutedSegment[]>();
+    segments.forEach((segment, index) => {
+        const key = segment.signal || `__unknown_${index}`;
+        const group = groups.get(key) || [];
+        group.push(segment);
+        groups.set(key, group);
+    });
+
+    const output: RoutedSegment[] = [];
+    for (const [signalKey, group] of groups) {
+        const nodes = new Map<string, Point>();
+        for (const segment of group) {
+            nodes.set(pointKey(segment.start), segment.start);
+            nodes.set(pointKey(segment.end), segment.end);
+        }
+        for (let leftIndex = 0; leftIndex < group.length; leftIndex += 1) {
+            for (let rightIndex = leftIndex + 1; rightIndex < group.length; rightIndex += 1) {
+                const point = perpendicularIntersection(group[leftIndex], group[rightIndex]);
+                if (point) nodes.set(pointKey(point), point);
+            }
+        }
+
+        const deduplicated = new Map<string, RoutedSegment>();
+        for (const segment of group) {
+            const split = [...nodes.values()]
+                .filter((point) => pointOnSegment(point, segment.start, segment.end))
+                .sort((left, right) => nearlyEqual(segment.start.x, segment.end.x)
+                    ? left.y - right.y
+                    : left.x - right.x);
+            for (let index = 1; index < split.length; index += 1) {
+                const start = split[index - 1];
+                const end = split[index];
+                if (pointKey(start) === pointKey(end)) continue;
+                const signal = signalKey.startsWith('__unknown_') ? undefined : signalKey;
+                deduplicated.set(segmentKey(start, end), { start, end, signal });
+            }
+        }
+        output.push(...deduplicated.values());
+    }
+    return output;
+}
+
+function calculatedJunctions(segments: RoutedSegment[]) {
+    const degrees = new Map<string, { point: Point; signal: string; segments: Set<string> }>();
+    for (const segment of segments) {
+        if (!segment.signal) continue;
+        for (const point of [segment.start, segment.end]) {
+            const key = `${segment.signal}\u0000${pointKey(point)}`;
+            const node = degrees.get(key) || { point, signal: segment.signal, segments: new Set<string>() };
+            node.segments.add(segmentKey(segment.start, segment.end));
+            degrees.set(key, node);
+        }
+    }
+    return [...degrees.values()].filter((node) => node.segments.size >= 3).map((node) => node.point);
 }
 
 function noConnect(point: Point) {
@@ -372,11 +545,10 @@ function outwardStub(pin: Point, owner: Point, distance = 5.08) {
 }
 
 function insertionOffset(source: string) {
-    const preferred = [
-        ...findLists(source, 'sheet_instances'),
-        ...findLists(source, 'embedded_fonts'),
-    ].sort((left, right) => left.start - right.start)[0];
-    if (preferred) return preferred.start;
+    const sheetInstances = findLists(source, 'sheet_instances')[0];
+    if (sheetInstances) return sheetInstances.start;
+    const rootEmbeddedFonts = findLists(source, 'embedded_fonts').at(-1);
+    if (rootEmbeddedFonts) return rootEmbeddedFonts.start;
     const root = findLists(source, 'kicad_sch')[0];
     if (!root) throw new Error('invalid KiCad schematic');
     return root.end - 1;
@@ -419,7 +591,10 @@ export async function applyCircuitAssembly(
     const realAssets = await preparedRealAssets(assembly);
     const needsGround = assembly.components.some((component) => component.part_uuid === 'GND')
         || assembly.added_net?.some((net) => net.net === 'GND');
-    const groundSource = needsGround ? await getPowerSymbol('GND') : undefined;
+    const [groundSource, portSource] = await Promise.all([
+        needsGround ? getPowerSymbol('GND') : undefined,
+        getPowerSymbol('VCC'),
+    ]);
 
     return mutateSchematic(path, async (source) => {
         const version = targetVersion(source);
@@ -437,6 +612,17 @@ export async function applyCircuitAssembly(
         const removed = allExisting.filter((item) => removalDesignators.has(item.reference));
         const retained = allExisting.filter((item) => !removalDesignators.has(item.reference));
         const offset = placementOffset(source, assembly, retained, removed);
+        const serverShapePoints = new Map<string, Point>();
+        for (const edge of assembly.edges) {
+            for (const section of edge.sections || []) {
+                if (section.incomingShape) {
+                    serverShapePoints.set(section.incomingShape, serverPoint(section.startPoint, offset));
+                }
+                if (section.outgoingShape) {
+                    serverShapePoints.set(section.outgoingShape, serverPoint(section.endPoint, offset));
+                }
+            }
+        }
         const edits: SourceEdit[] = removed.map(({ range }) => ({
             start: range.start,
             end: range.end,
@@ -445,10 +631,13 @@ export async function applyCircuitAssembly(
 
         const existingPinPoints = new Map<string, Point>();
         const ownerAnchors = new Map<string, Point>();
+        const pinOwners = new Map<string, Point>();
         for (const item of allExisting) {
             ownerAnchors.set(item.reference, item.anchor);
             for (const [pin, point] of item.pins) {
-                existingPinPoints.set(`${item.reference}_pin_${pin}`, point);
+                const shape = `${item.reference}_pin_${pin}`;
+                existingPinPoints.set(shape, point);
+                pinOwners.set(shape, item.anchor);
             }
         }
         const disconnectPoints = new Set(removed.flatMap((item) => [...item.pins.values()].map(pointKey)));
@@ -478,8 +667,6 @@ export async function applyCircuitAssembly(
         const objects: string[] = [];
         const placed: PlacedComponent[] = [];
         const edgePins = new Map(existingPinPoints);
-        const edgeRoutePins = new Map<string, Point>();
-        const edgePinDirections = new Map<string, ReturnType<typeof pinDirection>>();
         const edgeSignals = new Map<string, string>();
         const globalSignals = new Set<string>(['GND']);
         const powerReference = nextPowerReference(source);
@@ -496,9 +683,33 @@ export async function applyCircuitAssembly(
             : undefined;
         if (groundEmbedded) definitions.set(groundEmbedded.id, groundEmbedded);
 
+        const portDefinitions = new Map<string, EmbeddedSymbol>();
+        const portEmbedded = (signal: string) => {
+            const existing = portDefinitions.get(signal);
+            if (existing) return existing;
+            const embedded = embeddedLibrarySymbol(
+                renamedPowerSymbol(portSource, signal),
+                'power',
+                version,
+            );
+            portDefinitions.set(signal, embedded);
+            definitions.set(embedded.id, embedded);
+            return embedded;
+        };
+
         for (const component of assembly.components) {
-            const anchor = componentAnchor(component, offset);
-            const rotation = normalizeRotation(component.pos.rotate);
+            const exact = component.designator;
+            const primaryPin = component.pins[0]
+                ? `${exact}_pin_${component.pins[0].pin_number}`
+                : undefined;
+            const shortAnchor = primaryPin ? serverShapePoints.get(primaryPin) : undefined;
+            const anchor = (component.part_uuid === 'GND'
+                || component.part_uuid === 'VCC'
+                || component.value === 'unknown_shortsym'
+                || component.designator.includes('|'))
+                ? shortAnchor || componentAnchor(component, offset)
+                : componentAnchor(component, offset);
+            const rotation = kicadRotation(component.pos.rotate);
             const componentPins = new Map<string, Point>();
             let kind: PlacedComponent['kind'];
 
@@ -514,6 +725,7 @@ export async function applyCircuitAssembly(
                     documentUuid,
                     reference,
                     value: 'GND',
+                    power: 'ground',
                 }));
                 for (const pin of uniquePins(groundEmbedded.pins).values()) {
                     componentPins.set(pin.number, transformedPin(pin, anchor, rotation, false));
@@ -525,8 +737,20 @@ export async function applyCircuitAssembly(
                 const signal = component.pins.find((pin) => pin.signal_name.trim())?.signal_name.trim();
                 if (!signal) throw new Error(`port signal missing: ${component.designator}`);
                 globalSignals.add(signal);
-                objects.push(globalLabel(signal, anchor, rotation));
-                for (const pin of component.pins) componentPins.set(String(pin.pin_number), anchor);
+                const embedded = portEmbedded(signal);
+                objects.push(symbolInstance({
+                    embedded,
+                    component,
+                    anchor,
+                    projectName,
+                    documentUuid,
+                    reference: powerReference(),
+                    value: signal,
+                    power: 'port',
+                }));
+                for (const pin of component.pins) {
+                    componentPins.set(String(pin.pin_number), anchor);
+                }
             } else {
                 kind = 'real';
                 if (!component.part_uuid) throw new Error(`part_uuid missing: ${component.designator}`);
@@ -541,7 +765,9 @@ export async function applyCircuitAssembly(
                     projectName,
                     documentUuid,
                 }));
+                const requestedPins = new Set(component.pins.map((pin) => String(pin.pin_number)));
                 for (const pin of uniquePins(embedded.pins).values()) {
+                    if (!requestedPins.has(pin.number)) continue;
                     componentPins.set(
                         pin.number,
                         transformedPin(pin, anchor, rotation, Boolean(component.pos.mirror)),
@@ -551,26 +777,16 @@ export async function applyCircuitAssembly(
 
             const placedComponent = { source: component, anchor, pins: componentPins, kind };
             placed.push(placedComponent);
-            const exact = component.designator;
             const base = baseDesignator(exact);
             ownerAnchors.set(exact, anchor);
             ownerAnchors.set(base, anchor);
-            const directionLanes = new Map<string, number>();
             for (const [pin, point] of componentPins) {
                 const exactShape = `${exact}_pin_${pin}`;
                 const baseShape = `${base}_pin_${pin}`;
                 edgePins.set(exactShape, point);
+                pinOwners.set(exactShape, anchor);
                 if (!edgePins.has(baseShape)) edgePins.set(baseShape, point);
-                if (kind === 'real') {
-                    const direction = pinDirection(point, anchor);
-                    const lane = directionLanes.get(direction) || 0;
-                    directionLanes.set(direction, lane + 1);
-                    const routePoint = outwardStub(point, anchor, 2.54 + lane * GRID_MM);
-                    edgeRoutePins.set(exactShape, routePoint);
-                    edgePinDirections.set(exactShape, direction);
-                    if (!edgeRoutePins.has(baseShape)) edgeRoutePins.set(baseShape, routePoint);
-                    if (!edgePinDirections.has(baseShape)) edgePinDirections.set(baseShape, direction);
-                }
+                if (!pinOwners.has(baseShape)) pinOwners.set(baseShape, anchor);
             }
             for (const pin of component.pins) {
                 const signal = pin.signal_name.trim();
@@ -583,16 +799,30 @@ export async function applyCircuitAssembly(
         }
 
         const usedShapes = new Set<string>();
-        type RoutedTerminal = {
-            actual: Point;
-            route: Point;
-            direction?: ReturnType<typeof pinDirection>;
+        const generatedSegments: RoutedSegment[] = [];
+        const requestedJunctions: Point[] = [];
+        const addedLocalLabels = new Set<string>();
+        const signalForEdge = (edge: CircuitAssembly['edges'][number]) => {
+            for (const section of edge.sections || []) {
+                const signal = (section.incomingShape && edgeSignals.get(section.incomingShape))
+                    || (section.outgoingShape && edgeSignals.get(section.outgoingShape));
+                if (signal) return signal;
+            }
+            return '';
         };
-        const routedNets = new Map<string, {
-            signal?: string;
-            terminals: Map<string, RoutedTerminal>;
-        }>();
+        const signalCounts = new Map<string, number>();
         for (const edge of assembly.edges) {
+            const signal = signalForEdge(edge);
+            signalCounts.set(signal, (signalCounts.get(signal) || 0) + 1);
+        }
+        const signalPriority = (signal: string) => {
+            if (signal === 'GND') return 0;
+            if (/^(\+|VCC|VDD)/i.test(signal)) return 1;
+            return 10 - (signalCounts.get(signal) || 0);
+        };
+        const routedEdges = [...assembly.edges].sort((left, right) =>
+            signalPriority(signalForEdge(left)) - signalPriority(signalForEdge(right)));
+        for (const edge of routedEdges) {
             for (const section of edge.sections || []) {
                 const start = section.incomingShape
                     ? edgePins.get(section.incomingShape)
@@ -614,45 +844,57 @@ export async function applyCircuitAssembly(
                     throw new Error(`conflicting edge signals: ${section.id}`);
                 }
                 const signal = sectionSignals.size === 1 ? [...sectionSignals][0] : undefined;
-                const netKey = signal ? `signal:${signal}` : `edge:${section.id}`;
-                const routedNet = routedNets.get(netKey) || { signal, terminals: new Map() };
-                const addTerminal = (shape: string | undefined, actual: Point) => {
-                    const key = shape || `point:${pointKey(actual)}`;
-                    routedNet.terminals.set(key, {
-                        actual,
-                        route: shape ? edgeRoutePins.get(shape) || actual : actual,
-                        direction: shape ? edgePinDirections.get(shape) : undefined,
-                    });
-                };
-                addTerminal(section.incomingShape, start);
-                addTerminal(section.outgoingShape, end);
-                routedNets.set(netKey, routedNet);
+                const points = routedSectionPoints(section, start, end, offset);
+                const sectionSegments: RoutedSegment[] = [];
+                for (let index = 1; index < points.length; index += 1) {
+                    const segment = { start: points[index - 1], end: points[index], signal };
+                    if (pointKey(segment.start) === pointKey(segment.end)) continue;
+                    sectionSegments.push(segment);
+                    generatedSegments.push(segment);
+                }
+                if (signal && !globalSignals.has(signal)
+                    && !addedLocalLabels.has(signal) && points.length > 1) {
+                    const longest = [...sectionSegments]
+                        .sort((left, right) =>
+                            Math.abs(right.end.x - right.start.x) + Math.abs(right.end.y - right.start.y)
+                            - Math.abs(left.end.x - left.start.x) - Math.abs(left.end.y - left.start.y))[0];
+                    if (longest) {
+                        objects.push(localLabel(signal, {
+                            x: snapped((longest.start.x + longest.end.x) / 2),
+                            y: snapped((longest.start.y + longest.end.y) / 2),
+                        }));
+                        addedLocalLabels.add(signal);
+                    }
+                }
+            }
+            for (const point of edge.junctionPoints || []) {
+                requestedJunctions.push(serverPoint(point, offset));
             }
         }
+        const normalizedSegments = normalizedNetSegments(generatedSegments);
+        for (const segment of normalizedSegments) objects.push(wireSegment(segment.start, segment.end));
 
-        for (const routedNet of routedNets.values()) {
-            for (const terminal of routedNet.terminals.values()) {
-                if (!terminal.direction) continue;
-                if (pointKey(terminal.actual) !== pointKey(terminal.route)) {
-                    objects.push(wireSegment(terminal.actual, terminal.route));
-                }
-                if (!routedNet.signal) continue;
-                objects.push(globalSignals.has(routedNet.signal)
-                    ? globalLabel(routedNet.signal, terminal.route)
-                    : localLabel(routedNet.signal, terminal.route));
-            }
+        const addedJunctions = new Set<string>();
+        for (const point of [...requestedJunctions, ...calculatedJunctions(normalizedSegments)]) {
+            if (!normalizedSegments.some((segment) => pointOnSegment(point, segment.start, segment.end))) continue;
+            const key = pointKey(point);
+            if (addedJunctions.has(key)) continue;
+            addedJunctions.add(key);
+            objects.push(junction(point));
         }
 
         const connectionKeys = new Set<string>();
         const addNamedConnection = (designator: string, pinNumber: string | number, signal: string) => {
             const base = baseDesignator(designator);
             const shape = `${base}_pin_${pinNumber}`;
-            const pin = edgePins.get(shape) || edgePins.get(`${designator}_pin_${pinNumber}`);
+            const exactShape = `${designator}_pin_${pinNumber}`;
+            const resolvedShape = edgePins.has(exactShape) ? exactShape : shape;
+            const pin = edgePins.get(resolvedShape);
             if (!pin) throw new Error(`pin not found: ${shape}`);
             const key = `${shape}\u0000${signal}`;
             if (connectionKeys.has(key)) return;
             connectionKeys.add(key);
-            const owner = ownerAnchors.get(base) || pin;
+            const owner = pinOwners.get(resolvedShape) || ownerAnchors.get(base) || pin;
             const end = outwardStub(pin, owner);
             if (pointKey(pin) !== pointKey(end)) objects.push(wireSegment(pin, end));
             if (signal === 'GND') {
@@ -674,9 +916,28 @@ export async function applyCircuitAssembly(
                     documentUuid,
                     reference: service.designator,
                     value: 'GND',
+                    power: 'ground',
                 }));
             } else {
-                objects.push(globalLabel(signal, end));
+                const service: CircuitAssemblyComponent = {
+                    designator: powerReference(),
+                    value: signal,
+                    pins: [{ pin_number: '1', name: signal, signal_name: signal }],
+                    block_name: '',
+                    search_query: '',
+                    part_uuid: 'VCC',
+                    pos: { x: 0, y: 0, width: 0, height: 0 },
+                };
+                objects.push(symbolInstance({
+                    embedded: portEmbedded(signal),
+                    component: service,
+                    anchor: end,
+                    projectName,
+                    documentUuid,
+                    reference: service.designator,
+                    value: signal,
+                    power: 'port',
+                }));
             }
         };
 

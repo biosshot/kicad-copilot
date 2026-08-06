@@ -24,6 +24,8 @@
     "clean": "rimraf dist",
     "typecheck": "tsc --noEmit",
     "inspect": "npm run build && npx @modelcontextprotocol/inspector node dist/index.js",
+    "test:assemble": "npm run build && node dist/assemble-schematic.js",
+    "test:assembly-scenarios": "npm run build && node dist/test-assembly-scenarios.js",
     "check": "npm run typecheck && npm run build",
     "prepack": "npm run build",
     "start": "node dist/index.js"

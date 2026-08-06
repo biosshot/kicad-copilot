@@ -1,9 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp';
 import * as z from 'zod/v4';
-import { saveCheckpoint } from '../checkpoints/store';
-import { applyCircuitAssembly } from '../kicad/assembly';
-import { getSchematic } from '../kicad/schematic-reader';
-import { CircuitAssembly, circuitModSchema } from '../types/circuit';
+import { extractCircuit } from '../circuit/extract';
+import { circuitModSchema } from '../types/circuit';
 import { SKILL_DOC_PATH } from '../utils/dirs';
 import { enqueueMutation } from '../utils/mutation-queue';
 import { postJson } from '../utils/server';
@@ -55,18 +53,7 @@ export function registerCircuitTools(server: McpServer) {
             }),
         },
         async ({ path, ...circuit }) => runTool(() => enqueueMutation(async () => {
-            const inputCircuit = await getSchematic(path);
-            await saveCheckpoint(path, 'Before extract_circuit');
-            const response = await postJson('/v1/mcp-tools/extract-circuit', {
-                circuit,
-                inputCircuit,
-            });
-            const record = typeof response === 'object' && response !== null
-                ? response as Record<string, unknown>
-                : undefined;
-            const assembly = (record?.circuit || response) as CircuitAssembly;
-            await applyCircuitAssembly(path, assembly, inputCircuit);
-            await getSchematic(path);
+            await extractCircuit(path, circuit);
             return 'ok';
         })),
     );

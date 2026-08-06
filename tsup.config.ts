@@ -7,7 +7,11 @@ const sdkDistDir = dirname(dirname(require.resolve('@modelcontextprotocol/sdk/pa
 const sdkEsmPath = (...parts: string[]) => join(sdkDistDir, 'esm', ...parts);
 
 export default defineConfig({
-    entry: ['src/index.ts'],
+    entry: {
+        index: 'src/index.ts',
+        'assemble-schematic': 'scripts/assemble-schematic.ts',
+        'test-assembly-scenarios': 'scripts/test-assembly-scenarios.ts',
+    },
     format: ['esm'],
     clean: true,
     dts: false,

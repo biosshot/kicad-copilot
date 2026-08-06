@@ -55,11 +55,10 @@ function documentUuid(source: string) {
 }
 
 function insertionOffset(source: string) {
-    const preferred = [
-        ...findLists(source, 'sheet_instances'),
-        ...findLists(source, 'embedded_fonts'),
-    ].sort((left, right) => left.start - right.start)[0];
-    if (preferred) return preferred.start;
+    const sheetInstances = findLists(source, 'sheet_instances')[0];
+    if (sheetInstances) return sheetInstances.start;
+    const rootEmbeddedFonts = findLists(source, 'embedded_fonts').at(-1);
+    if (rootEmbeddedFonts) return rootEmbeddedFonts.start;
 
     const root = findLists(source, 'kicad_sch')[0];
     if (!root) throw new Error('invalid KiCad schematic');
