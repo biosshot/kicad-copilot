@@ -149,6 +149,7 @@ export const ExplainComponentSchema = () => z.object({
     }).optional(),
     footprint_name: z.string().nullish(),
     footprint_uuid: z.string().nullish(),
+    block_name: z.string().nullish(),
 });
 
 export const ExplainCircuitStruct = () => z.object({

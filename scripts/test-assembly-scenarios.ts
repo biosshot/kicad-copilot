@@ -3,9 +3,11 @@
 import { copyFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { beautifySchematic } from '../src/circuit/beautify';
 import { extractCircuit } from '../src/circuit/extract';
 import { createDocument } from '../src/kicad/create-document';
 import { getSchematic } from '../src/kicad/schematic-reader';
+import { wireRangesToDisconnect } from '../src/kicad/wire-removal';
 import { CircuitMod, ExplainCircuit } from '../src/types/circuit';
 
 const RESISTOR_A = 'fa459f1466df4014badd43e0b80fd058';
@@ -47,7 +49,7 @@ function expect(condition: unknown, message: string): asserts condition {
 function expectComponent(
     circuit: ExplainCircuit,
     designator: string,
-    expected: { partUuid?: string; value?: string } = {},
+    expected: { partUuid?: string; value?: string; blockName?: string } = {},
 ) {
     const actual = component(circuit, designator);
     expect(actual, `${designator}: component missing`);
@@ -58,6 +60,10 @@ function expectComponent(
     if (expected.value) {
         expect(actual.value === expected.value,
             `${designator}: expected value ${expected.value}, got ${actual.value}`);
+    }
+    if (expected.blockName) {
+        expect(actual.block_name === expected.blockName,
+            `${designator}: expected block_name ${expected.blockName}, got ${actual.block_name || '<empty>'}`);
     }
     return actual;
 }
@@ -104,13 +110,46 @@ async function main() {
     const root = await mkdtemp(join(tmpdir(), 'kicad-copilot-assembly-'));
     let completed = false;
     try {
+        await runScenario('wire removal to junction', async () => {
+            const source = `(kicad_sch
+                (wire (pts (xy 0 0) (xy 10 0)))
+                (wire (pts (xy 10 0) (xy 10 10)))
+                (wire (pts (xy 10 10) (xy 20 10)))
+                (junction (at 20 10))
+                (wire (pts (xy 20 10) (xy 30 10)))
+                (wire (pts (xy 20 10) (xy 20 20))))`;
+            const removed = wireRangesToDisconnect(source, [{ x: 0, y: 0 }], []);
+            expect(removed.length === 3,
+                `wire removal: expected 3 segments before junction, got ${removed.length}`);
+            expect(removed.some((range) => range.text.includes('(xy 10 10) (xy 20 10)')),
+                'wire removal: segment after the bend was not removed');
+            expect(!removed.some((range) => range.text.includes('(xy 20 10) (xy 30 10)')),
+                'wire removal: traversal continued beyond the junction');
+        });
+
         const blank = await createSchematic(join(root, 'blank'));
         const fixture = await copySchematic(blank, join(root, 'fixture'));
         await extractCircuit(fixture, modification({
             add_components: [resistor('R1'), resistor('R2')],
         }));
-        expectComponent(await getSchematic(fixture), 'R1', { partUuid: RESISTOR_A });
+        expectComponent(await getSchematic(fixture), 'R1', {
+            partUuid: RESISTOR_A,
+            blockName: 'assembly_test',
+        });
         expectComponent(await getSchematic(fixture), 'R2', { partUuid: RESISTOR_A });
+
+        await runScenario('beautify schematic', async () => {
+            const path = await copySchematic(fixture, join(root, 'beautify'));
+            const { result, assembly } = await beautifySchematic(path, {
+                Feedback: ['R1', 'R2'],
+            });
+            expect(assembly.components.some((item) => item.designator === 'R1'),
+                'beautify: server assembly does not contain R1');
+            expect(assembly.components.some((item) => item.designator === 'R2'),
+                'beautify: server assembly does not contain R2');
+            expectComponent(result, 'R1', { partUuid: RESISTOR_A, blockName: 'Feedback' });
+            expectComponent(result, 'R2', { partUuid: RESISTOR_A, blockName: 'Feedback' });
+        });
 
         await runScenario('addition', async () => {
             const path = await copySchematic(blank, join(root, 'addition'));

@@ -32,6 +32,13 @@ Rules for "search_reused_block":
 - If you need to assemble a circuit or a block that resembles a standard unit (DC/DC, LDO, TTL, etc.), you must try to find it using "search_reused_block".
 - If the block doesn't match the specific parameters (VIN, VOUT), pay attention to the adjustable parameters that can be recalculated.
 </SPECIAL_RULE>
+<SPECIAL_RULE name="beautify_schematic">
+Rules for schematic reassembly "beautify_schematic":
+- Use it to reassemble existing components into compact functional blocks.
+- Pass the exact `.kicad_sch` path and group component designators by `block_name`.
+- Components not listed in `blocks` remain in place.
+- A component designator may appear in only one block.
+</SPECIAL_RULE>
 <OUTPUT_EXPECTATIONS>
 Call **get_schematic** with the exact target `.kicad_sch` path before modifying an existing circuit.
 

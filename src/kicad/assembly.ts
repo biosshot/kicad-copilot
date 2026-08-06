@@ -15,6 +15,7 @@ import {
 import { findLists, findQuotedProperty, quoteSExpression, SExpressionRange } from './sexpr/scan';
 import { embeddedLibrarySymbol, LibraryPin, librarySymbolPins } from './symbol';
 import { applySourceEdits, mutateSchematic, SourceEdit } from './schematic-writer';
+import { wireRangesToDisconnect } from './wire-removal';
 
 const SERVER_UNIT_MM = 0.254;
 const GRID_MM = 1.27;
@@ -365,6 +366,7 @@ function symbolInstance(options: {
         ${property('MPN', properties.MPN || value, options.anchor.x, options.anchor.y)}
         ${property('LCSC Part', properties['LCSC Part'] || '', options.anchor.x, options.anchor.y)}
         ${property('EasyEDA part_uuid', options.component.part_uuid || '', options.anchor.x, options.anchor.y)}
+        ${property('Block Name', options.component.block_name || '', options.anchor.x, options.anchor.y)}
         ${pins}
         (instances (project ${quoteSExpression(options.projectName)}
             (path ${quoteSExpression(`/${options.documentUuid}`)}
@@ -648,12 +650,13 @@ export async function applyCircuitAssembly(
             const point = existingPinPoints.get(`${baseDesignator(net.designator)}_pin_${net.pin_number}`);
             if (point) disconnectPoints.add(pointKey(point));
         }
-        for (const range of findLists(source, 'wire')) {
-            const points = xyPoints(range);
-            if (points.some((point, index) =>
-                (index === 0 || index === points.length - 1) && disconnectPoints.has(pointKey(point)))) {
-                edits.push({ start: range.start, end: range.end, text: '' });
-            }
+        const retainedPinPoints = retained.flatMap((item) => [...item.pins.values()]);
+        const parsedDisconnectPoints = [...disconnectPoints].map((key) => {
+            const [x, y] = key.split(',').map(Number);
+            return { x, y };
+        });
+        for (const range of wireRangesToDisconnect(source, parsedDisconnectPoints, retainedPinPoints)) {
+            edits.push({ start: range.start, end: range.end, text: '' });
         }
         for (const head of ['no_connect', 'global_label', 'label']) {
             for (const range of findLists(source, head)) {

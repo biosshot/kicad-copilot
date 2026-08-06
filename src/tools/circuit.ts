@@ -1,5 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp';
 import * as z from 'zod/v4';
+import { beautifySchematic } from '../circuit/beautify';
 import { extractCircuit } from '../circuit/extract';
 import { CircuitModStruct } from '../types/circuit';
 import { SKILL_DOC_PATH } from '../utils/dirs';
@@ -41,6 +42,25 @@ export function registerCircuitTools(server: McpServer) {
         async ({ query, page, limit }) => runTool(
             () => postJson('/v1/mcp-tools/search-reused-block', { query, page, limit }),
         ),
+    );
+
+    server.registerTool(
+        'beautify_schematic',
+        {
+            title: 'Beautify Schematic',
+            description: `Reassemble selected KiCad components into named functional blocks while preserving their electrical connections. For circuit workflow docs, read: ${SKILL_DOC_PATH}`,
+            inputSchema: z.object({
+                path: z.string().min(1).describe('Existing target .kicad_sch path.'),
+                blocks: z.record(
+                    z.string().min(1).describe('Block name.'),
+                    z.array(z.string().min(1)).min(1).describe('Component designators in the block.'),
+                ).describe('Component groups keyed by block name.'),
+            }),
+        },
+        async ({ path, blocks }) => runTool(() => enqueueMutation(async () => {
+            await beautifySchematic(path, blocks);
+            return 'ok';
+        })),
     );
 
     server.registerTool(

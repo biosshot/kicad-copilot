@@ -126,6 +126,9 @@ export function parseKicadXmlNetlist(xml: string): ExplainCircuit {
             || namedValue(properties, 'Footprint')
             || namedValue(fields, 'Footprint')
             || null;
+        const blockName = namedValue(properties, 'Block Name')
+            || namedValue(fields, 'Block Name')
+            || null;
 
         let component = componentsByDesignator.get(designator);
         if (!component) {
@@ -135,6 +138,7 @@ export function parseKicadXmlNetlist(xml: string): ExplainCircuit {
                 pins: [],
                 part_uuid: partUuid,
                 footprint_name: footprint,
+                block_name: blockName,
             };
             componentsByDesignator.set(designator, component);
             componentOrder.push(component);
