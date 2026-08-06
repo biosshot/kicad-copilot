@@ -15,7 +15,7 @@ export function registerDocumentTools(server: McpServer) {
         'get_schematic',
         {
             title: 'Get KiCad Schematic',
-            description: `Read exactly one .kicad_sch file as a compact component and net list. Agent instructions: ${SKILL_DOC_PATH}`,
+            description: `Get exactly one KiCad .kicad_sch file as a compact component and net list. For circuit workflow docs, read the local docs folder: ${SKILL_DOC_PATH}`,
             inputSchema: z.object({
                 path: z.string().min(1).describe('Target .kicad_sch file path.'),
             }),

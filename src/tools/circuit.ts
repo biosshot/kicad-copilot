@@ -11,8 +11,8 @@ export function registerCircuitTools(server: McpServer) {
     server.registerTool(
         'component_search',
         {
-            title: 'Search EasyEDA Component',
-            description: `Search a component by exact part_uuid or MPN. Agent instructions: ${SKILL_DOC_PATH}`,
+            title: 'Search Component',
+            description: 'Search a component by exact part_uuid or MPN.',
             inputSchema: z.object({
                 part_uuid: z.string().nullable().optional(),
                 MPN: z.string().nullable().optional(),
@@ -30,8 +30,8 @@ export function registerCircuitTools(server: McpServer) {
     server.registerTool(
         'search_reused_block',
         {
-            title: 'Search Reused Circuit Block',
-            description: `Search reusable circuit blocks that can be recalculated and inserted into a schematic. Agent instructions: ${SKILL_DOC_PATH}`,
+            title: 'Search Reused Block',
+            description: `Search reusable circuit blocks by function. For circuit workflow docs, read: ${SKILL_DOC_PATH}`,
             inputSchema: z.object({
                 query: z.string().min(1).describe('Query example: "3.3V power regulator"'),
                 page: z.number().int().min(1).default(1).describe('Current results page.'),
@@ -46,8 +46,8 @@ export function registerCircuitTools(server: McpServer) {
     server.registerTool(
         'extract_circuit',
         {
-            title: 'Extract Circuit into KiCad',
-            description: `Post-process circuit changes on the Circuit Copilot server and assemble them into one existing .kicad_sch file. Every added component must include part_uuid. Agent instructions: ${SKILL_DOC_PATH}`,
+            title: 'Extract Circuit',
+            description: `Apply circuit changes to a KiCad .kicad_sch file. Every added component must include part_uuid. For circuit modification docs, read: ${SKILL_DOC_PATH}`,
             inputSchema: circuitModSchema.extend({
                 path: z.string().min(1).describe('Existing target .kicad_sch path.'),
             }),

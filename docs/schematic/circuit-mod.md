@@ -8,8 +8,8 @@ electrical and packaging requirements.
 
 ## Extraction request
 
-`extract_circuit` extends the EasyEDA Copilot circuit modification contract
-with one local `path` to an existing `.kicad_sch` file.
+`extract_circuit` accepts circuit changes and one local `path` to an existing
+`.kicad_sch` file.
 
 The modification contains:
 
@@ -37,7 +37,7 @@ that should receive an explicit KiCad no-connect marker.
 GND becomes a KiCad GND power symbol. VCC and other named short symbols become
 KiCad global-label ports.
 
-Server edge sections become real KiCad wires. GND and named short-symbol ports
+Edge sections become real KiCad wires. GND and named short-symbol ports
 use KiCad power-style symbols at the wire endpoints. Internal named nets may
 receive one local label so their names survive a KiCad netlist round trip.
 
@@ -47,7 +47,7 @@ Remove components by base designator. Removing `U1` affects all its units.
 Request an explicit replacement by putting the old designator in
 `rm_components` and the new component with the same designator in
 `add_components`.
-When the server requests replacement, KiCad Copilot first attempts a safe
+When replacement is requested, KiCad Copilot first attempts a safe
 in-place replacement. If pin mapping is unsafe, it falls back to ordinary
 remove-and-assemble behavior in free sheet space.
 
