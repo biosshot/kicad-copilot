@@ -33,7 +33,11 @@ export async function normalizePcbCandidate(
     }
 }
 
-export async function refillAndInspectPcbCandidate(targetPath: string, root: SExpression[]) {
+export async function inspectPcbCandidate(
+    targetPath: string,
+    root: SExpression[],
+    refillZones = false,
+) {
     const id = randomUUID();
     const temporary = join(dirname(targetPath), `.${basename(targetPath)}.${id}.kicad_pcb`);
     const report = join(dirname(targetPath), `.${basename(targetPath)}.${id}.drc.json`);
@@ -41,8 +45,9 @@ export async function refillAndInspectPcbCandidate(targetPath: string, root: SEx
     try {
         await writeFile(temporary, serializePcb(root), { encoding: 'utf8', flag: 'wx' });
         await runProcessChecked(cli.path, [
-            'pcb', 'drc', '--refill-zones', '--save-board', '--severity-all',
-            '--format', 'json', '--output', report, temporary,
+            'pcb', 'drc',
+            ...(refillZones ? ['--refill-zones', '--save-board'] : []),
+            '--severity-all', '--format', 'json', '--output', report, temporary,
         ], { timeoutMs: 120_000 });
         await runProcessChecked(cli.path, ['pcb', 'upgrade', '--force', temporary], { timeoutMs: 60_000 });
         const [boardSource, reportSource] = await Promise.all([
@@ -62,4 +67,19 @@ export async function refillAndInspectPcbCandidate(targetPath: string, root: SEx
             rm(report, { force: true }),
         ]);
     }
+}
+
+export function pcbDrcMetrics(report: unknown) {
+    const value = report && typeof report === 'object' ? report as Record<string, unknown> : {};
+    const violations = Array.isArray(value.violations) ? value.violations : [];
+    const unconnected = Array.isArray(value.unconnected_items) ? value.unconnected_items.length : 0;
+    const shorts = violations.filter((violation) => (
+        violation && typeof violation === 'object'
+        && (violation as Record<string, unknown>).type === 'shorting_items'
+    )).length;
+    return { shorts, unconnected };
+}
+
+export async function refillAndInspectPcbCandidate(targetPath: string, root: SExpression[]) {
+    return inspectPcbCandidate(targetPath, root, true);
 }

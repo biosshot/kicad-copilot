@@ -11,6 +11,7 @@ The local files in this directory are the documentation source. Read only the do
 
 ## References
 
+- `kicad-cli.md`: preferred CLI workflow for checks, previews, exports, and other native operations.
 - `circuit-maker/instructions.md`: circuit creation and schematic modification rules.
 - `schematic/project-and-sheets.md`: project paths and hierarchical sheets.
 - `schematic/checkpoints.md`: checkpoint behavior and recovery.

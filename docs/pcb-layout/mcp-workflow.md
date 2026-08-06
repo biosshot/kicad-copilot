@@ -5,6 +5,7 @@ Read `dsl.ts` for placement syntax and `instructions.md` for placement and local
 ## Tools
 
 - `import_pcb_changes({ path })` explicitly synchronizes the target PCB from its associated schematic.
+- `set_pcb_stack_layers({ path, copper_layer_count })` sets 2-32 even copper layers before placement or routing.
 - `make_pcb_layout({ path, file })` reads the local DSL and associated schematic, runs placement, stores the BoardAssemble payload locally, and returns `layout_id` plus preview paths.
 - `wait_pcb_layout({ operation_id })` is needed only when `make_pcb_layout` returns `status: "running"` after its synchronous wait.
 - `cancel_pcb_layout({ operation_id })` stops an obsolete pending placement.
@@ -20,16 +21,17 @@ Read `dsl.ts` for placement syntax and `instructions.md` for placement and local
 ## Required Approval Flow
 
 1. Call `import_pcb_changes({ path })` for the target PCB.
-2. Write a small mechanical preview DSL: outline, holes, regions, pads, and mechanical/user-facing components.
-3. Add `solver({ preview: true, placeOnlyComponents: [...] })` and call `make_pcb_layout`.
-4. If the tool returns running, wait. When it completes, open `preview_path` and present the image to the user for mechanical approval.
-5. Do not assemble or run full placement before approval.
-6. After approval, write the complete placement DSL without preview filters and run `make_pcb_layout`.
-7. Fix hard errors only. Warnings are not a requirement to reach an ideal score; change one only if it visibly harms an explicit requirement.
-8. Open the final `preview_path` and request final placement approval.
-9. Assemble the intended PCB file using `layout_id`.
-10. Call `auto_route_pcb`. For a complete reroute, call `clear_pcb_routing` first.
-11. Wait when needed, then inspect the routed board and run final DRC in KiCad.
+2. If needed, call `set_pcb_stack_layers` before placement or routing.
+3. Write a small mechanical preview DSL: outline, holes, regions, pads, and mechanical/user-facing components.
+4. Add `solver({ preview: true, placeOnlyComponents: [...] })` and call `make_pcb_layout`.
+5. If the tool returns running, wait. When it completes, open `preview_path` and present the image to the user for mechanical approval.
+6. Do not assemble or run full placement before approval.
+7. After approval, write the complete placement DSL without preview filters and run `make_pcb_layout`.
+8. Fix hard errors only. Warnings are not a requirement to reach an ideal score; change one only if it visibly harms an explicit requirement.
+9. Open the final `preview_path` and request final placement approval.
+10. Assemble the intended PCB file using `layout_id`.
+11. Call `auto_route_pcb`. For a complete reroute, call `clear_pcb_routing` first.
+12. Wait when needed, then inspect the routed board and run final DRC with `kicad-cli` as documented in `../kicad-cli.md`.
 
 ## Result Handling
 

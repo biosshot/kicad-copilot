@@ -1,6 +1,7 @@
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { basename, dirname, extname, relative, resolve } from 'node:path';
 import { findLists, findQuotedProperty } from './sexpr/scan';
+import { getKicadCli } from './cli';
 
 const KICAD_EXTENSIONS = new Set([
     '.kicad_pro',
@@ -184,6 +185,12 @@ export async function getProjectInfo(inputPath: string) {
 
     if (!projectPaths.length) throw new Error('KiCad project not found');
 
-    const projects = await Promise.all(sortPaths(projectPaths).map(buildProjectTree));
-    return { projects };
+    const [projects, cli] = await Promise.all([
+        Promise.all(sortPaths(projectPaths).map(buildProjectTree)),
+        getKicadCli().catch(() => undefined),
+    ]);
+    return {
+        kicad_cli: cli ? { path: cli.path, version: cli.version } : null,
+        projects,
+    };
 }

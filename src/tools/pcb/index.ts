@@ -6,6 +6,7 @@ import { importPcbChanges } from '../../pcb/import';
 import { cancelPcbLayout, makePcbLayout, waitPcbLayout } from '../../pcb/layout-operation';
 import { pourPcbLayers } from '../../pcb/pour';
 import { autoRoutePcb, cancelAutoRoute, clearPcbRouting, waitAutoRoute } from '../../pcb/routing-operation';
+import { setPcbStackLayers } from '../../kicad/pcb-stack';
 import { DOCS_DIR } from '../../utils/dirs';
 import { enqueueMutation } from '../../utils/mutation-queue';
 import { runTool } from '../../utils/tool-result';
@@ -14,6 +15,26 @@ import { join } from 'node:path';
 const PCB_DOC_PATH = join(DOCS_DIR, 'pcb-layout', 'instructions.md');
 
 export function registerPcbTools(server: McpServer) {
+    server.registerTool(
+        'set_pcb_stack_layers',
+        {
+            title: 'Set PCB Stack Layers',
+            description: `Set the PCB copper layer count while preserving F.Cu and B.Cu. PCB instructions: ${PCB_DOC_PATH}`,
+            inputSchema: z.object({
+                path: z.string().min(1).describe('Target .kicad_pcb path.'),
+                copper_layer_count: z.union([
+                    z.literal(2), z.literal(4), z.literal(6), z.literal(8),
+                    z.literal(10), z.literal(12), z.literal(14), z.literal(16),
+                    z.literal(18), z.literal(20), z.literal(22), z.literal(24),
+                    z.literal(26), z.literal(28), z.literal(30), z.literal(32),
+                ]),
+            }),
+        },
+        async ({ path, copper_layer_count }) => runTool(
+            () => enqueueMutation(() => setPcbStackLayers(path, copper_layer_count)),
+        ),
+    );
+
     server.registerTool(
         'import_pcb_changes',
         {

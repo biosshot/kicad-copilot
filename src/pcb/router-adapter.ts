@@ -63,6 +63,20 @@ function polygonArea(points: Point[]) {
     }, 0) / 2);
 }
 
+function closedClockwisePath(points: number[][]) {
+    const open = points.length > 1
+        && points[0][0] === points.at(-1)![0]
+        && points[0][1] === points.at(-1)![1]
+        ? points.slice(0, -1)
+        : [...points];
+    const signedArea = open.reduce((sum, point, index) => {
+        const next = open[(index + 1) % open.length];
+        return sum + point[0] * next[1] - next[0] * point[1];
+    }, 0) / 2;
+    if (signedArea > 0) open.reverse();
+    return [...open, [...open[0]]];
+}
+
 function arcPoints(node: SExpression[]) {
     const start = pointAt(findChild(node, 'start'));
     const mid = pointAt(findChild(node, 'mid'));
@@ -239,8 +253,7 @@ function padGeometry(pad: SExpression[]) {
         { x: width / 2, y: height / 2 }, { x: -width / 2, y: height / 2 },
     ].map((point) => rotatePoint(point, rotation))
         .map((point) => [point.x + center.x, point.y + center.y]);
-    corners.push([...corners[0]]);
-    return { center, path: corners };
+    return { center, path: closedClockwisePath(corners) };
 }
 
 function nodeNetName(root: SExpression[], node: SExpression[]) {
@@ -310,6 +323,7 @@ export function buildRouterInput(root: SExpression[], options: {
         const reference = footprintReference(footprint) || `FP${componentIndex + 1}`;
         const footprintKey = `kicad_footprint_${componentIndex}`;
         const pads: Record<string, unknown> = {};
+        const padPaths: number[][][] = [];
         const nets: Record<string, string> = {};
         const pinName: Record<string, string> = {};
         for (const [padIndex, pad] of listChildren(footprint, 'pad').entries()) {
@@ -326,22 +340,34 @@ export function buildRouterInput(root: SExpression[], options: {
                 path: geometry.path,
                 diameter: null,
             };
+            padPaths.push(geometry.path);
             nets[key] = net;
             pinName[key] = padNumber(pad) || String(padIndex + 1);
         }
         if (!Object.keys(pads).length) continue;
         const at = footprintAt(footprint);
+        const componentLocation = toRouterPoint(at, outline.transform);
+        const componentRotation = ((at.rotate % 360) + 360) % 360;
         components[reference] = {
             name: reference,
             footprint: footprintKey,
             layer: footprintLayer(footprint) === 'B.Cu' ? 2 : 1,
-            location: toRouterPoint(at, outline.transform),
-            rotation: ((-at.rotate % 360) + 360) % 360,
+            location: componentLocation,
+            rotation: componentRotation,
             nets,
             pinName,
             reuseModules: { moduleName: '', groupID: '', channelID: reference },
         };
-        footprints[footprintKey] = { pads };
+        const padPoints = padPaths.flat();
+        footprints[footprintKey] = {
+            pads,
+            bbox: [
+                Math.min(...padPoints.map((point) => point[0])),
+                Math.max(...padPoints.map((point) => point[0])),
+                Math.min(...padPoints.map((point) => point[1])),
+                Math.max(...padPoints.map((point) => point[1])),
+            ],
+        };
     }
 
     const routedNets = [...netNames].filter((net) => !ignored.has(net));
@@ -386,8 +412,9 @@ export function buildRouterInput(root: SExpression[], options: {
             size: [numberAt(findChild(via, 'size'), 1) || viaDiameter, numberAt(findChild(via, 'drill'), 1) || viaDrill],
         }];
     });
-    const routerOutline = outline.points.map((point) => toRouterPoint(point, outline.transform));
-    routerOutline.push([...routerOutline[0]]);
+    const routerOutline = closedClockwisePath(
+        outline.points.map((point) => toRouterPoint(point, outline.transform)),
+    );
     const xs = routerOutline.map((point) => point[0]);
     const ys = routerOutline.map((point) => point[1]);
     const input: RouterInput = {

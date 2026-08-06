@@ -208,7 +208,7 @@ export async function finalizeSimplePourCandidate(path: string, root: SExpressio
     let inspected = await refillAndInspectPcbCandidate(path, root);
     const removed = removeInvalidGeneratedVias(inspected.root, applied.generatedViaIds, inspected.report);
     if (removed) inspected = await refillAndInspectPcbCandidate(path, inspected.root);
-    return { root: inspected.root, removedVias: removed };
+    return { root: inspected.root, report: inspected.report, removedVias: removed };
 }
 
 export async function pourPcbLayers(path: string, options: PourOptions) {

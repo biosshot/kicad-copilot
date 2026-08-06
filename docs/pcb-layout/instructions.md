@@ -12,13 +12,16 @@
 ## Workflow
 
 1. Read `dsl.ts`, this file, and the closest complete example.
-2. Make a **mechanical preview** first: board outline, holes, constraint regions, board pads, connectors, buttons, displays, LEDs, and other edge-facing parts. Use `solver({ preview: true, placeOnlyComponents: [...] })`.
-3. Open `preview_path` and show that image to the user. Ask for explicit confirmation of the mechanics. A preview is never assembled.
-4. After confirmation, remove preview filters and write the complete block/module/component layout.
-5. Run full placement, inspect `preview_path`, and fix fatal errors only.
-6. Show the final placement to the user for approval. Assemble only after that approval.
-7. Use `auto_route_pcb` only after the final placement is approved and assembled.
-8. Inspect the routed PCB in KiCad and run the final project DRC there.
+2. Set the required copper layer count with `set_pcb_stack_layers` before placement or routing.
+3. Make a **mechanical preview** first: board outline, holes, constraint regions, board pads, connectors, buttons, displays, LEDs, and other edge-facing parts. Use `solver({ preview: true, placeOnlyComponents: [...] })`.
+4. Open `preview_path` and show that image to the user. Ask for explicit confirmation of the mechanics. A preview is never assembled.
+5. After confirmation, remove preview filters and write the complete block/module/component layout.
+6. Run full placement, inspect `preview_path`, and fix fatal errors only.
+7. Show the final placement to the user for approval. Assemble only after that approval.
+8. Use `auto_route_pcb` only after the final placement is approved and assembled.
+9. Inspect the routed PCB and run final DRC with `kicad-cli`; see `../kicad-cli.md`.
+
+`set_pcb_stack_layers` preserves the outer copper layers and creates or removes standard `InN.Cu` layers. Decreasing is rejected when a removed layer is referenced. Boards with an explicit physical stackup must be changed in KiCad because this tool does not manage dielectric or material settings.
 
 If `make_pcb_layout` returns `status: "running"`, call `wait_pcb_layout({ operation_id })`. Otherwise use its completed result directly.
 
@@ -82,4 +85,4 @@ Use `compactness: "high"` only when board area is genuinely constrained.
 - If the result is running, call `wait_auto_route({ operation_id })`; use `cancel_auto_route` for obsolete work.
 - Never move components while routing is running. A changed PCB is rejected before application.
 - `pour_pcb_layers` rebuilds only MCP-managed zones and stitching vias. Manual zones are preserved.
-- Routing success is not final sign-off: inspect the board and run KiCad DRC after routing.
+- Routing success is not final sign-off: inspect the board and run `kicad-cli pcb drc` after routing.

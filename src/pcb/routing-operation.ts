@@ -3,8 +3,8 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { saveCheckpoint } from '../checkpoints/store';
 import { readPcb } from '../kicad/pcb-reader';
-import { normalizePcbCandidate } from '../kicad/pcb-validation';
-import { atomicWritePcb, sourceHash } from '../kicad/pcb-writer';
+import { inspectPcbCandidate, normalizePcbCandidate, pcbDrcMetrics } from '../kicad/pcb-validation';
+import { atomicWritePcb, serializePcb, sourceHash } from '../kicad/pcb-writer';
 import { TEMP_DIR } from '../utils/dirs';
 import { enqueueMutation } from '../utils/mutation-queue';
 import { applyRouterResult, buildRouterInput, clearRouting } from './router-adapter';
@@ -81,6 +81,8 @@ async function runOperation(operation: RouteOperation, options: AutoRouteOptions
         const pcb = await readPcb(operation.path);
         const initialHash = sourceHash(pcb.source);
         const routeLayers = options.routeLayers?.length ? options.routeLayers : ['F.Cu', 'B.Cu'];
+        operation.stage = 'checking';
+        const baselineDrc = pcbDrcMetrics((await inspectPcbCandidate(pcb.path, pcb.root)).report);
         operation.stage = 'exporting';
         const exported = buildRouterInput(pcb.root, {
             routeLayers,
@@ -111,16 +113,39 @@ async function runOperation(operation: RouteOperation, options: AutoRouteOptions
             const candidate = structuredClone(current.root);
             const counts = applyRouterResult(candidate, current.version, routerResult, exported.transform, routeLayers);
             const withGround = options.pourGnd !== false || options.stitchGnd !== false;
-            const normalized = withGround
-                ? (await finalizeSimplePourCandidate(current.path, candidate, applySimplePour(candidate, current.version, {
+            operation.stage = 'validating';
+            const inspected = withGround
+                ? await finalizeSimplePourCandidate(current.path, candidate, applySimplePour(candidate, current.version, {
                     net: 'GND',
                     layers: routeLayers,
                     stitchVias: options.stitchGnd !== false,
-                }))).root
-                : await normalizePcbCandidate(current.path, candidate, false);
+                }))
+                : await inspectPcbCandidate(current.path, candidate);
+            const candidateDrc = pcbDrcMetrics(inspected.report);
+            if (candidateDrc.shorts > 0 || candidateDrc.unconnected > baselineDrc.unconnected) {
+                await Promise.all([
+                    writeFile(
+                        join(artifactDirectory, `${operation.id}-rejected.kicad_pcb`),
+                        serializePcb(inspected.root),
+                    ),
+                    writeFile(
+                        join(artifactDirectory, `${operation.id}-rejected-drc.json`),
+                        JSON.stringify(inspected.report, null, 2),
+                    ),
+                ]);
+            }
+            if (candidateDrc.shorts > 0) {
+                throw new Error(`auto route rejected by KiCad DRC: ${candidateDrc.shorts} short circuit(s)`);
+            }
+            if (candidateDrc.unconnected > baselineDrc.unconnected) {
+                throw new Error(
+                    `auto route rejected by KiCad DRC: unconnected items increased `
+                    + `from ${baselineDrc.unconnected} to ${candidateDrc.unconnected}`,
+                );
+            }
             operation.controller.signal.throwIfAborted();
             await saveCheckpoint(current.path, 'Before local auto route');
-            await atomicWritePcb(current.path, current.source, normalized);
+            await atomicWritePcb(current.path, current.source, inspected.root);
             return counts;
         });
         operation.result = {
