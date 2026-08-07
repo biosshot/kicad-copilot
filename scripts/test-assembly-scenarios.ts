@@ -282,8 +282,8 @@ async function main() {
             second.pins[1].signal_name = 'GND';
             await extractCircuit(path, modification({ add_components: [first, second] }));
             const initialSource = await readFile(path, 'utf8');
-            expect(findLists(initialSource, 'global_label').length > 0,
-                'global labels: internal named net did not receive a global label');
+            expect(findLists(initialSource, 'global_label').length === 0,
+                'global labels: physically connected internal net received a global label');
             expect(findLists(initialSource, 'label').length === 0,
                 'global labels: assembly created a local label');
             expect(initialSource.includes('(lib_id "kicad-copilot:VCC_5V")'),

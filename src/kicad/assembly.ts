@@ -829,7 +829,6 @@ export async function applyCircuitAssembly(
         const placed: PlacedComponent[] = [];
         const edgePins = new Map(existingPinPoints);
         const edgeSignals = new Map<string, string>();
-        const globalSignals = new Set<string>(['GND']);
         const powerReference = nextPowerReference(source);
 
         for (const component of input.components) {
@@ -902,7 +901,6 @@ export async function applyCircuitAssembly(
                 kind = 'port';
                 const signal = component.pins.find((pin) => pin.signal_name.trim())?.signal_name.trim();
                 if (!signal) throw new Error(`port signal missing: ${component.designator}`);
-                globalSignals.add(signal);
                 const embedded = portEmbedded(signal);
                 objects.push(symbolInstance({
                     embedded,
@@ -982,7 +980,6 @@ export async function applyCircuitAssembly(
         const usedShapes = new Set<string>();
         const generatedSegments: RoutedSegment[] = [];
         const requestedJunctions: Point[] = [];
-        const addedLocalLabels = new Set<string>();
         const signalForEdge = (edge: CircuitAssembly['edges'][number]) => {
             for (const section of edge.sections || []) {
                 const signal = (section.incomingShape && edgeSignals.get(section.incomingShape))
@@ -1026,26 +1023,10 @@ export async function applyCircuitAssembly(
                 }
                 const signal = sectionSignals.size === 1 ? [...sectionSignals][0] : undefined;
                 const points = routedSectionPoints(section, start, end, offset);
-                const sectionSegments: RoutedSegment[] = [];
                 for (let index = 1; index < points.length; index += 1) {
                     const segment = { start: points[index - 1], end: points[index], signal };
                     if (pointKey(segment.start) === pointKey(segment.end)) continue;
-                    sectionSegments.push(segment);
                     generatedSegments.push(segment);
-                }
-                if (signal && !globalSignals.has(signal)
-                    && !addedLocalLabels.has(signal) && points.length > 1) {
-                    const longest = [...sectionSegments]
-                        .sort((left, right) =>
-                            Math.abs(right.end.x - right.start.x) + Math.abs(right.end.y - right.start.y)
-                            - Math.abs(left.end.x - left.start.x) - Math.abs(left.end.y - left.start.y))[0];
-                    if (longest) {
-                        objects.push(globalLabel(signal, {
-                            x: snapped((longest.start.x + longest.end.x) / 2),
-                            y: snapped((longest.start.y + longest.end.y) / 2),
-                        }));
-                        addedLocalLabels.add(signal);
-                    }
                 }
             }
             const junctionPoints = (edge as typeof edge & { junctionPoints?: Point[] }).junctionPoints;

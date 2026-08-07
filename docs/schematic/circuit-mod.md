@@ -38,8 +38,8 @@ GND becomes a KiCad GND power symbol. VCC and other named short symbols become
 KiCad global-label ports.
 
 Edge sections become real KiCad wires. GND and named short-symbol ports
-use KiCad power-style symbols at the wire endpoints. Internal named nets may
-receive one global label so their names and connectivity survive across sheets.
+use KiCad power-style symbols at the wire endpoints. A global label is added
+only when a named external or otherwise free pin cannot use a short symbol.
 
 ## Removal and replacement
 
