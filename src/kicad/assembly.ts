@@ -30,11 +30,6 @@ const CONNECTION_LENGTHS_MM = [
     ...Array.from({ length: 39 }, (_, index) => 40 + index * 20),
     15, 10, 5,
 ].map((value) => value * SERVER_UNIT_MM);
-const PORT_OFFSETS_MM = Array.from(
-    { length: 80 },
-    (_, index) => (index + 1) * 10 * SERVER_UNIT_MM,
-).flatMap((value) => [value, -value]);
-
 type Point = { x: number; y: number };
 type CircuitAssemblyComponent = CircuitAssembly['components'][number];
 type Rect = { left: number; top: number; right: number; bottom: number };
@@ -137,6 +132,33 @@ function renamedPowerSymbol(source: SExpression[], signal: string) {
     return cloned;
 }
 
+function powerPortSymbol(source: SExpression[], signal: string) {
+    const cloned = renamedPowerSymbol(source, signal);
+    const graphicHeads = new Set(['arc', 'bezier', 'circle', 'polyline', 'rectangle', 'text', 'text_box']);
+    const replaceGraphic = (node: SExpression) => {
+        if (!isSExpressionList(node)) return;
+        if (listHead(node) === 'symbol' && atom(node[1])?.endsWith('_0_1')) {
+            for (let index = node.length - 1; index >= 2; index -= 1) {
+                const item = node[index];
+                const head = isSExpressionList(item) ? listHead(item) : undefined;
+                if (head && graphicHeads.has(head)) {
+                    node.splice(index, 1);
+                }
+            }
+            node.push(parseSExpression(`(polyline
+                (pts (xy 0 0) (xy 0 2.54))
+                (stroke (width 0) (type default)) (fill (type none)))`));
+            node.push(parseSExpression(`(polyline
+                (pts (xy -1.27 2.54) (xy 1.27 2.54))
+                (stroke (width 0) (type default)) (fill (type none)))`));
+            return;
+        }
+        for (const item of node) replaceGraphic(item);
+    };
+    replaceGraphic(cloned);
+    return cloned;
+}
+
 function signalPortSymbol(source: SExpression[], signal: string) {
     const cloned = renamedPowerSymbol(source, signal);
     for (let index = cloned.length - 1; index >= 0; index -= 1) {
@@ -155,6 +177,30 @@ function signalPortSymbol(source: SExpression[], signal: string) {
         for (const item of node) normalize(item);
     };
     normalize(cloned);
+    return cloned;
+}
+
+function hiddenGlobalPortSymbol(source: SExpression[], signal: string) {
+    const cloned = renamedPowerSymbol(source, signal);
+    const internalName = `${signal}__global`;
+    const renameUnits = (node: SExpression) => {
+        if (!isSExpressionList(node)) return;
+        if (listHead(node) === 'symbol' && !isSExpressionList(node[1])) {
+            if (node[1].value === signal) node[1].value = internalName;
+            else if (node[1].value.startsWith(`${signal}_`)) {
+                node[1].value = `${internalName}${node[1].value.slice(signal.length)}`;
+            }
+        }
+        for (const item of node) renameUnits(item);
+    };
+    renameUnits(cloned);
+    for (let index = cloned.length - 1; index >= 0; index -= 1) {
+        const item = cloned[index];
+        if (isSExpressionList(item) && listHead(item) === 'symbol'
+            && atom(item[1])?.endsWith('_0_1')) {
+            cloned.splice(index, 1);
+        }
+    }
     return cloned;
 }
 
@@ -350,7 +396,11 @@ function placementOffset(
         }
     }
 
-    throw new Error('no free area on schematic sheet');
+    throw new Error(
+        `no free area on schematic sheet: paper=${paper.x}x${paper.y}, `
+        + `assembly=${rounded(bounds.right - bounds.left)}x${rounded(bounds.bottom - bounds.top)}, `
+        + `obstacles=${occupied.length}`,
+    );
 }
 
 function serverPoint(point: Point, offset: Point) {
@@ -395,6 +445,7 @@ function symbolInstance(options: {
     reference?: string;
     value?: string;
     power?: 'ground' | 'port';
+    hideValue?: boolean;
 }) {
     const reference = options.reference || baseDesignator(options.component.designator);
     const value = options.value || options.component.value;
@@ -424,7 +475,7 @@ function symbolInstance(options: {
         (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no)
         (uuid ${quoteSExpression(randomUUID())})
         ${property('Reference', reference, power ? options.anchor.x : realReference.x, power ? referenceY : realReference.y, Boolean(power), power ? 0 : realReference.angle)}
-        ${property('Value', value, power ? options.anchor.x : realValue.x, power ? valueY : realValue.y, false, power ? 0 : realValue.angle)}
+        ${property('Value', value, power ? options.anchor.x : realValue.x, power ? valueY : realValue.y, Boolean(options.hideValue), power ? 0 : realValue.angle)}
         ${property('Footprint', properties.Footprint || '', options.anchor.x, options.anchor.y)}
         ${property('Datasheet', properties.Datasheet || '', options.anchor.x, options.anchor.y)}
         ${property('Description', properties.Description || '', options.anchor.x, options.anchor.y)}
@@ -438,12 +489,12 @@ function symbolInstance(options: {
                 (reference ${quoteSExpression(reference)}) (unit ${unitNumber(options.component)})))))`;
 }
 
-function globalLabel(name: string, point: Point, angle = 0, hidden = false) {
+function globalLabel(name: string, point: Point, angle = 0) {
     const rotation = canonicalDirectionAngle(angle);
     const justify = rotation === 0 || rotation === 90 ? 'left' : 'right';
     return `(global_label ${quoteSExpression(name)} (shape bidirectional)
         (at ${point.x} ${point.y} ${rotation})
-        (effects (font (size 1.27 1.27)) (justify ${justify})${hidden ? ' (hide yes)' : ''})
+        (effects (font (size 1.27 1.27)) (justify ${justify}))
         (uuid ${quoteSExpression(randomUUID())})
         ${property('Intersheetrefs', '${INTERSHEET_REFS}', point.x, point.y, true)})`;
 }
@@ -473,7 +524,7 @@ function nearlyEqual(left: number, right: number) {
     return Math.abs(left - right) < 1e-6;
 }
 
-function routedSectionPoints(
+export function routedSectionPoints(
     section: CircuitAssembly['edges'][number]['sections'][number],
     start: Point,
     end: Point,
@@ -482,10 +533,32 @@ function routedSectionPoints(
     const rawBends = section.bendPoints || [];
     if (!rawBends.length) {
         if (nearlyEqual(section.startPoint.x, section.endPoint.x)) {
-            return orthogonalPoints([start, { x: start.x, y: end.y }, end]);
+            const serverX = serverPoint(section.startPoint, offset).x;
+            const routeX = nearlyEqual(start.x, end.x)
+                ? start.x
+                : nearlyEqual(start.x, serverX) || nearlyEqual(end.x, serverX)
+                    ? serverX
+                    : start.x;
+            return orthogonalPoints([
+                start,
+                { x: routeX, y: start.y },
+                { x: routeX, y: end.y },
+                end,
+            ]);
         }
         if (nearlyEqual(section.startPoint.y, section.endPoint.y)) {
-            return orthogonalPoints([start, { x: end.x, y: start.y }, end]);
+            const serverY = serverPoint(section.startPoint, offset).y;
+            const routeY = nearlyEqual(start.y, end.y)
+                ? start.y
+                : nearlyEqual(start.y, serverY) || nearlyEqual(end.y, serverY)
+                    ? serverY
+                    : start.y;
+            return orthogonalPoints([
+                start,
+                { x: start.x, y: routeY },
+                { x: end.x, y: routeY },
+                end,
+            ]);
         }
         return orthogonalPoints([start, end]);
     }
@@ -661,15 +734,17 @@ function directionAngles(primary: number, pinCount: number) {
     return [normalized, normalizeRotation(normalized + 90), normalizeRotation(normalized - 90)];
 }
 
-function segmentDirectionAngle(start: Point, end: Point) {
-    if (nearlyEqual(start.x, end.x)) return end.y < start.y ? 90 : 270;
-    return end.x < start.x ? 180 : 0;
+export function portDirectionAngles() {
+    // KiCad sheet Y grows downwards: up, down, right, left.
+    return [90, 270, 0, 180];
 }
 
 function insertionOffset(source: string) {
     const sheetInstances = findLists(source, 'sheet_instances')[0];
     if (sheetInstances) return sheetInstances.start;
-    const rootEmbeddedFonts = findLists(source, 'embedded_fonts').at(-1);
+    const library = findLists(source, 'lib_symbols')[0];
+    const rootEmbeddedFonts = findLists(source, 'embedded_fonts')
+        .find((range) => !library || range.start >= library.end);
     if (rootEmbeddedFonts) return rootEmbeddedFonts.start;
     const root = findLists(source, 'kicad_sch')[0];
     if (!root) throw new Error('invalid KiCad schematic');
@@ -743,6 +818,7 @@ export async function applyCircuitAssembly(
         const removed = allExisting.filter((item) => removalDesignators.has(item.reference));
         const retained = allExisting.filter((item) => !removalDesignators.has(item.reference));
         const retainedReal = retained.filter((item) => !item.service);
+        const fullPhysicalRebuild = removed.length > 0 && retainedReal.length === 0;
         const edits: SourceEdit[] = removed.map(({ range }) => ({
             start: range.start,
             end: range.end,
@@ -795,8 +871,15 @@ export async function applyCircuitAssembly(
             return { x, y };
         });
         const wirePlan = planWireRemoval(source, parsedDisconnectPoints, retainedPinPoints);
-        for (const wire of wirePlan.removed) {
-            edits.push({ start: wire.range.start, end: wire.range.end, text: '' });
+        if (fullPhysicalRebuild) {
+            for (const range of findLists(source, 'wire')) {
+                edits.push({ start: range.start, end: range.end, text: '' });
+            }
+            wirePlan.retained.length = 0;
+        } else {
+            for (const wire of wirePlan.removed) {
+                edits.push({ start: wire.range.start, end: wire.range.end, text: '' });
+            }
         }
         const retainedPinKeys = new Set(retainedPinPoints.map(pointKey));
         const touchedByRemoval = (point: Point) => disconnectPoints.has(pointKey(point))
@@ -807,7 +890,8 @@ export async function applyCircuitAssembly(
         const removedServices = new Set<ExistingSymbol>();
         for (const item of retained.filter((symbol) => symbol.service)) {
             const connectionPoints = item.pins.size ? [...item.pins.values()] : [item.anchor];
-            if (connectionPoints.some(touchedByRemoval) && !connectionPoints.some(remainsConnected)) {
+            if (fullPhysicalRebuild
+                || (connectionPoints.some(touchedByRemoval) && !connectionPoints.some(remainsConnected))) {
                 edits.push({ start: item.range.start, end: item.range.end, text: '' });
                 removedServices.add(item);
             }
@@ -815,15 +899,17 @@ export async function applyCircuitAssembly(
         for (const head of ['no_connect', 'global_label', 'hierarchical_label', 'label']) {
             for (const range of findLists(source, head)) {
                 const point = rangeAtPoint(range);
-                if (point && touchedByRemoval(point) && !remainsConnected(point)) {
+                if (fullPhysicalRebuild
+                    || (point && touchedByRemoval(point) && !remainsConnected(point))) {
                     edits.push({ start: range.start, end: range.end, text: '' });
                 }
             }
         }
         for (const range of findLists(source, 'junction')) {
             const point = rangeAtPoint(range);
-            if (point && touchedByRemoval(point)
-                && wireDirectionsAtPoint(point, wirePlan.retained) < 3) {
+            if (fullPhysicalRebuild
+                || (point && touchedByRemoval(point)
+                    && wireDirectionsAtPoint(point, wirePlan.retained) < 3)) {
                 edits.push({ start: range.start, end: range.end, text: '' });
             }
         }
@@ -886,16 +972,29 @@ export async function applyCircuitAssembly(
         if (groundEmbedded) definitions.set(groundEmbedded.id, groundEmbedded);
 
         const portDefinitions = new Map<string, EmbeddedSymbol>();
+        const globalPortDefinitions = new Map<string, EmbeddedSymbol>();
         const portEmbedded = (signal: string, power: boolean) => {
             const key = `${power ? 'power' : 'signal'}:${signal}`;
             const existing = portDefinitions.get(key);
             if (existing) return existing;
             const embedded = embeddedLibrarySymbol(
-                power ? renamedPowerSymbol(portSource, signal) : signalPortSymbol(portSource, signal),
+                power ? powerPortSymbol(portSource, signal) : signalPortSymbol(portSource, signal),
                 'kicad-copilot',
                 version,
             );
             portDefinitions.set(key, embedded);
+            definitions.set(embedded.id, embedded);
+            return embedded;
+        };
+        const globalPortEmbedded = (signal: string) => {
+            const existing = globalPortDefinitions.get(signal);
+            if (existing) return existing;
+            const embedded = embeddedLibrarySymbol(
+                hiddenGlobalPortSymbol(portSource, signal),
+                'kicad-copilot',
+                version,
+            );
+            globalPortDefinitions.set(signal, embedded);
             definitions.set(embedded.id, embedded);
             return embedded;
         };
@@ -957,7 +1056,19 @@ export async function applyCircuitAssembly(
                     value: signal,
                     power: 'port',
                 }));
-                if (!power) objects.push(globalLabel(signal, anchor, rotation, true));
+                if (!power) {
+                    objects.push(symbolInstance({
+                        embedded: globalPortEmbedded(signal),
+                        component,
+                        anchor,
+                        projectName,
+                        documentUuid,
+                        reference: powerReference(),
+                        value: signal,
+                        power: 'port',
+                        hideValue: true,
+                    }));
+                }
                 for (const pin of component.pins) {
                     componentPins.set(String(pin.pin_number), anchor);
                 }
@@ -1146,74 +1257,52 @@ export async function applyCircuitAssembly(
                 port: boolean;
             } | undefined;
 
-            search: for (const angle of directionAngles(primaryAngle, ownerPinPoints.length || 10)) {
+            const angles = preferLabel
+                ? directionAngles(primaryAngle, ownerPinPoints.length || 10)
+                : portDirectionAngles();
+            search: for (const angle of angles) {
                 const vector = directionVector(angle);
+                const ownerVector = {
+                    x: owner.x - pin.x,
+                    y: owner.y - pin.y,
+                };
+                if (vector.x * ownerVector.x + vector.y * ownerVector.y > 1e-6) {
+                    continue;
+                }
                 for (const port of variants) {
                     for (const length of CONNECTION_LENGTHS_MM) {
                         const elbow = {
                             x: snapped(pin.x + vector.x * length),
                             y: snapped(pin.y + vector.y * length),
                         };
-                        const offsets = port && vector.x !== 0 ? PORT_OFFSETS_MM : [0];
-                        for (const portOffset of offsets) {
-                            const terminal = {
-                                x: elbow.x,
-                                y: snapped(elbow.y + portOffset),
-                            };
-                            const points = pointKey(elbow) === pointKey(terminal)
-                                ? [pin, elbow]
-                                : [pin, elbow, terminal];
-                            if (points.some((point) => point.x < 0 || point.y < 0
-                                || point.x > paper.x || point.y > paper.y)) continue;
-                            const segments: RoutedSegment[] = [];
-                            for (let index = 1; index < points.length; index += 1) {
-                                if (pointKey(points[index - 1]) === pointKey(points[index])) continue;
-                                segments.push({
-                                    start: points[index - 1],
-                                    end: points[index],
-                                    signal,
-                                });
-                            }
-                            if (!segments.length) continue;
+                        const terminal = elbow;
+                        const points = [pin, terminal];
+                        if (points.some((point) => point.x < 0 || point.y < 0
+                            || point.x > paper.x || point.y > paper.y)) continue;
+                        const segments: RoutedSegment[] = [{ start: pin, end: terminal, signal }];
 
-                            const otherPins = allPinPoints.filter((point) => pointKey(point) !== pointKey(pin));
-                            if (otherPins.some((point) => segments.some((segment) => (
-                                pointOnSegment(point, segment.start, segment.end)
-                            )))) continue;
-                            if (connectionTerminals.some((point) => segments.some((segment) => (
-                                pointOnSegment(point, segment.start, segment.end)
-                            )))) continue;
-                            if (routingObstacles.some((obstacle) => {
-                                if (obstacle.signal === signal) return false;
-                                return segments.some((segment) => segmentsConflict(segment, obstacle));
-                            })) continue;
-                            if (routingObstacles.some((obstacle) => (
-                                pointOnSegment(terminal, obstacle.start, obstacle.end)
-                            ))) continue;
+                        const otherPins = allPinPoints.filter((point) => pointKey(point) !== pointKey(pin));
+                        if (otherPins.some((point) => segments.some((segment) => (
+                            pointOnSegment(point, segment.start, segment.end)
+                        )))) continue;
+                        if (connectionTerminals.some((point) => segments.some((segment) => (
+                            pointOnSegment(point, segment.start, segment.end)
+                        )))) continue;
+                        if (routingObstacles.some((obstacle) => {
+                            if (obstacle.signal === signal) return false;
+                            return segments.some((segment) => segmentsConflict(segment, obstacle));
+                        })) continue;
+                        if (routingObstacles.some((obstacle) => (
+                            pointOnSegment(terminal, obstacle.start, obstacle.end)
+                        ))) continue;
 
-                            if (port) {
-                                const otherOwnerPins = ownerPinPoints.filter(
-                                    (point) => pointKey(point) !== pointKey(pin),
-                                );
-                                if (vector.x !== 0 && otherOwnerPins.some((point) => (
-                                    nearlyEqual(point.y, terminal.y)
-                                ))) continue;
-                                if (vector.y !== 0 && otherOwnerPins.some((point) => (
-                                    nearlyEqual(point.x, terminal.x)
-                                ))) continue;
-                            }
-
-                            selected = {
-                                segments,
-                                terminal,
-                                terminalAngle: segmentDirectionAngle(
-                                    segments.at(-1)!.start,
-                                    segments.at(-1)!.end,
-                                ),
-                                port,
-                            };
-                            break search;
-                        }
+                        selected = {
+                            segments,
+                            terminal,
+                            terminalAngle: angle,
+                            port,
+                        };
+                        break search;
                     }
                 }
             }
@@ -1288,7 +1377,17 @@ export async function applyCircuitAssembly(
                     power: 'port',
                 }));
                 if (!power) {
-                    objects.push(globalLabel(signal, selected.terminal, service.pos.rotate, true));
+                    objects.push(symbolInstance({
+                        embedded: globalPortEmbedded(signal),
+                        component: service,
+                        anchor: selected.terminal,
+                        projectName,
+                        documentUuid,
+                        reference: powerReference(),
+                        value: signal,
+                        power: 'port',
+                        hideValue: true,
+                    }));
                 }
             }
         };

@@ -1,6 +1,6 @@
 import { saveCheckpoint } from '../checkpoints/store';
 import { applyCircuitAssembly } from '../kicad/assembly';
-import { getSchematic } from '../kicad/schematic-reader';
+import { getSchematic, getSchematicContext } from '../kicad/schematic-reader';
 import { CircuitAssembly, CircuitMod, ExplainCircuit } from '../types/circuit';
 import { postJson } from '../utils/server';
 
@@ -43,7 +43,7 @@ function withoutSelectedComponents(input: ExplainCircuit, selected: Set<string>)
 
 export async function beautifySchematic(path: string, blocks: SchematicBlocks) {
     const requested = selectedBlocks(blocks);
-    const inputCircuit = await getSchematic(path);
+    const { target: inputCircuit, project: projectCircuit } = await getSchematicContext(path);
     const components = new Map(inputCircuit.components.map((component) => [component.designator, component]));
     const missing = [...requested.keys()].filter((designator) => !components.has(designator));
     if (missing.length) throw new Error(`components not found: ${missing.join(', ')}`);
@@ -72,7 +72,7 @@ export async function beautifySchematic(path: string, blocks: SchematicBlocks) {
         external_rm_connect: null,
         external_connect: null,
     };
-    const serverInputCircuit = withoutSelectedComponents(inputCircuit, selected);
+    const serverInputCircuit = withoutSelectedComponents(projectCircuit, selected);
     const checkpointId = await saveCheckpoint(path, 'Before beautify_schematic');
     const response = await postJson('/v1/mcp-tools/extract-circuit', {
         circuit,

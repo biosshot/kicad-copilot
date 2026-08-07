@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, rm, stat } from 'node:fs/promises';
-import { basename, dirname, join, resolve } from 'node:path';
+import { mkdir, readFile, readdir, rm, stat } from 'node:fs/promises';
+import { basename, dirname, extname, join, resolve } from 'node:path';
 import { XMLParser } from 'fast-xml-parser';
 import { ExplainCircuit } from '../types/circuit';
 import { TEMP_DIR } from '../utils/dirs';
@@ -243,6 +243,46 @@ async function exportKicadXmlNetlist(path: string) {
 
 export async function getSchematic(path: string) {
     return parseKicadXmlNetlist(await exportKicadXmlNetlist(path));
+}
+
+async function projectRootSchematic(path: string) {
+    const target = resolve(path);
+    const targetStat = await stat(target).catch(() => undefined);
+    if (!targetStat?.isFile()) throw new Error(`path not found: ${target}`);
+
+    let directory = dirname(target);
+    while (true) {
+        const projectFiles = (await readdir(directory, { withFileTypes: true }).catch(() => []))
+            .filter((entry) => entry.isFile() && extname(entry.name).toLowerCase() === '.kicad_pro')
+            .map((entry) => resolve(directory, entry.name))
+            .sort();
+        const matches: string[] = [];
+        for (const projectFile of projectFiles) {
+            const root = resolve(directory, `${basename(projectFile, '.kicad_pro')}.kicad_sch`);
+            const rootStat = await stat(root).catch(() => undefined);
+            if (!rootStat?.isFile()) continue;
+            const reachable = await reachableSchematicFiles(root);
+            if (reachable.some((file) => file.toLowerCase() === target.toLowerCase())) matches.push(root);
+        }
+        if (matches.length > 1) {
+            throw new Error(`schematic belongs to multiple KiCad projects: ${target}`);
+        }
+        if (matches.length === 1) return matches[0];
+
+        const parent = dirname(directory);
+        if (parent === directory) return target;
+        directory = parent;
+    }
+}
+
+export async function getSchematicContext(path: string) {
+    const targetPath = resolve(path);
+    const projectPath = await projectRootSchematic(targetPath);
+    const target = await getSchematic(targetPath);
+    const project = projectPath.toLowerCase() === targetPath.toLowerCase()
+        ? target
+        : await getSchematic(projectPath);
+    return { target, project, projectPath };
 }
 
 export async function getPcbSchematic(path: string) {
