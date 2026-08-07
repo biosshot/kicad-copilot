@@ -27,3 +27,11 @@ parent schematic.
 Each physical `.kicad_sch` file is read and modified separately. A sheet file
 can appear in a hierarchy through a parent sheet reference. Use the physical
 file path supplied by the project tree when targeting a child sheet.
+
+## Sheet size
+
+The sheet size is stored directly in the `.kicad_sch` file. If an assembled
+circuit does not fit, change the top-level paper entry before retrying, for
+example from `(paper "A4")` to `(paper "A3")`. A custom millimetre size can be
+written as `(paper "User" 500 300)`. Save a checkpoint or backup before manual
+editing, and keep the S-expression syntax intact.

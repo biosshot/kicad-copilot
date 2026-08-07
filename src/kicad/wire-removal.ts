@@ -249,3 +249,17 @@ export function wireRangesToDisconnect(
 
     return [...removed].map((index) => wires[index].range);
 }
+
+/** Removes duplicate junctions and junctions that no longer join three wire directions. */
+export function redundantJunctionRanges(source: string) {
+    const wires = parsedWires(source);
+    const seen = new Set<string>();
+    return findLists(source, 'junction').filter((range) => {
+        const point = rangeAtPoint(range);
+        if (!point) return false;
+        const key = pointKey(point);
+        if (seen.has(key)) return true;
+        seen.add(key);
+        return wireDirectionsAtPoint(point, wires) < 3;
+    });
+}

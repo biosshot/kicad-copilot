@@ -21,7 +21,12 @@ import {
     normalizedComponentSymbol,
 } from './symbol';
 import { applySourceEdits, mutateSchematic, SourceEdit } from './schematic-writer';
-import { planWireRemoval, pointTouchesWire, wireDirectionsAtPoint } from './wire-removal';
+import {
+    planWireRemoval,
+    pointTouchesWire,
+    redundantJunctionRanges,
+    wireDirectionsAtPoint,
+} from './wire-removal';
 
 const SERVER_UNIT_MM = 0.254;
 const GRID_MM = 1.27;
@@ -31,6 +36,7 @@ const CONNECTION_LENGTHS_MM = [
     15, 10, 5,
 ].map((value) => value * SERVER_UNIT_MM);
 type Point = { x: number; y: number };
+type Placement = { offset: Point; rotation: number };
 type CircuitAssemblyComponent = CircuitAssembly['components'][number];
 type Rect = { left: number; top: number; right: number; bottom: number };
 type RoutedSegment = { start: Point; end: Point; signal?: string };
@@ -130,6 +136,15 @@ function renamedPowerSymbol(source: SExpression[], signal: string) {
     };
     replace(cloned);
     return cloned;
+}
+
+function rotatedPoint(point: Point, rotation: number): Point {
+    switch (normalizeRotation(rotation)) {
+        case 90: return { x: -point.y, y: point.x };
+        case 180: return { x: -point.x, y: -point.y };
+        case 270: return { x: point.y, y: -point.x };
+        default: return point;
+    }
 }
 
 function powerPortSymbol(source: SExpression[], signal: string) {
@@ -282,6 +297,8 @@ function rangeAtPoint(range: SExpressionRange) {
 function pageSize(source: string) {
     const paper = findLists(source, 'paper')[0]?.text || '';
     const name = paper.match(/\(paper\s+"([^"]+)"/)?.[1] || 'A4';
+    const custom = paper.match(/\(paper\s+"User"\s+([\d.]+)\s+([\d.]+)/i);
+    if (custom) return { x: Number(custom[1]), y: Number(custom[2]) };
     const sizes: Record<string, Point> = {
         A5: { x: 210, y: 148 },
         A4: { x: 297, y: 210 },
@@ -295,14 +312,43 @@ function pageSize(source: string) {
     return sizes[name] || sizes.A4;
 }
 
-function serverRect(assembly: CircuitAssembly) {
-    const rects = assembly.components.map((component) => ({
-        left: component.pos.x * SERVER_UNIT_MM,
-        right: (component.pos.x + component.pos.width) * SERVER_UNIT_MM,
-        top: component.pos.y * SERVER_UNIT_MM,
-        bottom: (component.pos.y + component.pos.height) * SERVER_UNIT_MM,
-    }));
-    for (const block of assembly.blocks_rect || []) {
+function serviceComponent(component: CircuitAssemblyComponent) {
+    return component.part_uuid === 'GND'
+        || component.part_uuid === 'VCC'
+        || component.value === 'unknown_shortsym'
+        || component.designator.includes('|');
+}
+
+export function serverRect(assembly: CircuitAssembly) {
+    const rects: Rect[] = [];
+    for (const component of assembly.components) {
+        const center = component.pos.center || {
+            x: component.pos.width / 2,
+            y: component.pos.height / 2,
+        };
+        if (serviceComponent(component)) {
+            const x = (component.pos.x + center.x) * SERVER_UNIT_MM;
+            const y = (component.pos.y + center.y) * SERVER_UNIT_MM;
+            rects.push({ left: x, right: x, top: y, bottom: y });
+            continue;
+        }
+        rects.push({
+            left: component.pos.x * SERVER_UNIT_MM,
+            right: (component.pos.x + component.pos.width) * SERVER_UNIT_MM,
+            top: component.pos.y * SERVER_UNIT_MM,
+            bottom: (component.pos.y + component.pos.height) * SERVER_UNIT_MM,
+        });
+    }
+    for (const edge of assembly.edges) {
+        for (const section of edge.sections || []) {
+            for (const point of [section.startPoint, ...(section.bendPoints || []), section.endPoint]) {
+                const x = point.x * SERVER_UNIT_MM;
+                const y = point.y * SERVER_UNIT_MM;
+                rects.push({ left: x, right: x, top: y, bottom: y });
+            }
+        }
+    }
+    for (const block of assembly.assembly_options?.draw_blocks ? assembly.blocks_rect || [] : []) {
         rects.push({
             left: block.x * SERVER_UNIT_MM,
             right: (block.x + block.width) * SERVER_UNIT_MM,
@@ -365,33 +411,37 @@ function placementOffset(
             y: removed.reduce((sum, item) => sum + item.anchor.y, 0) / removed.length,
         }
         : { x: paper.x / 2, y: paper.y / 2 };
-    const center = {
-        x: (bounds.left + bounds.right) / 2,
-        y: (bounds.top + bounds.bottom) / 2,
-    };
-    const initial = {
-        x: snapped(target.x - center.x),
-        y: snapped(target.y - center.y),
-    };
     const step = 5.08;
     const maxRadius = Math.ceil(Math.max(paper.x, paper.y) / step);
-    const tried = new Set<string>();
-
-    for (let radius = 0; radius <= maxRadius; radius += 1) {
-        for (let dx = -radius; dx <= radius; dx += 1) {
-            for (let dy = -radius; dy <= radius; dy += 1) {
-                if (radius && Math.abs(dx) !== radius && Math.abs(dy) !== radius) continue;
-                const offset = {
-                    x: snapped(initial.x + dx * step),
-                    y: snapped(initial.y + dy * step),
-                };
-                const key = pointKey(offset);
-                if (tried.has(key)) continue;
-                tried.add(key);
-                const candidate = translated(bounds, offset, 5.08);
-                if (candidate.left < 0 || candidate.top < 0
-                    || candidate.right > paper.x || candidate.bottom > paper.y) continue;
-                if (!occupied.some((rect) => intersects(candidate, rect))) return offset;
+    for (const rotation of [0, 270, 90, 180]) {
+        const orientedBounds = rotatedRect(bounds, rotation);
+        const center = {
+            x: (orientedBounds.left + orientedBounds.right) / 2,
+            y: (orientedBounds.top + orientedBounds.bottom) / 2,
+        };
+        const initial = {
+            x: snapped(target.x - center.x),
+            y: snapped(target.y - center.y),
+        };
+        const tried = new Set<string>();
+        for (let radius = 0; radius <= maxRadius; radius += 1) {
+            for (let dx = -radius; dx <= radius; dx += 1) {
+                for (let dy = -radius; dy <= radius; dy += 1) {
+                    if (radius && Math.abs(dx) !== radius && Math.abs(dy) !== radius) continue;
+                    const offset = {
+                        x: snapped(initial.x + dx * step),
+                        y: snapped(initial.y + dy * step),
+                    };
+                    const key = pointKey(offset);
+                    if (tried.has(key)) continue;
+                    tried.add(key);
+                    const candidate = translated(orientedBounds, offset, 5.08);
+                    if (candidate.left < 0 || candidate.top < 0
+                        || candidate.right > paper.x || candidate.bottom > paper.y) continue;
+                    if (!occupied.some((rect) => intersects(candidate, rect))) {
+                        return { offset, rotation };
+                    }
+                }
             }
         }
     }
@@ -403,16 +453,39 @@ function placementOffset(
     );
 }
 
-function serverPoint(point: Point, offset: Point) {
-    // KiCad sheet coordinates are Y-down, just like the assembly server.
-    // Only library-local pin coordinates need the Y conversion in transformedPin().
+export function emptySheetPlacement(source: string, assembly: CircuitAssembly) {
+    return placementOffset(source, assembly, [], []);
+}
+
+function rotatedRect(rect: Rect, rotation: number): Rect {
+    const points = [
+        { x: rect.left, y: rect.top },
+        { x: rect.right, y: rect.top },
+        { x: rect.right, y: rect.bottom },
+        { x: rect.left, y: rect.bottom },
+    ].map((point) => rotatedPoint(point, rotation));
     return {
-        x: snapped(offset.x + point.x * SERVER_UNIT_MM),
-        y: snapped(offset.y + point.y * SERVER_UNIT_MM),
+        left: Math.min(...points.map((point) => point.x)),
+        right: Math.max(...points.map((point) => point.x)),
+        top: Math.min(...points.map((point) => point.y)),
+        bottom: Math.max(...points.map((point) => point.y)),
     };
 }
 
-function componentAnchor(component: CircuitAssemblyComponent, offset: Point) {
+function serverPoint(point: Point, placement: Placement) {
+    // KiCad sheet coordinates are Y-down, just like the assembly server.
+    // Only library-local pin coordinates need the Y conversion in transformedPin().
+    const rotated = rotatedPoint({
+        x: point.x * SERVER_UNIT_MM,
+        y: point.y * SERVER_UNIT_MM,
+    }, placement.rotation);
+    return {
+        x: snapped(placement.offset.x + rotated.x),
+        y: snapped(placement.offset.y + rotated.y),
+    };
+}
+
+function componentAnchor(component: CircuitAssemblyComponent, placement: Placement) {
     const center = component.pos.center || {
         x: component.pos.width / 2,
         y: component.pos.height / 2,
@@ -420,7 +493,7 @@ function componentAnchor(component: CircuitAssemblyComponent, offset: Point) {
     return serverPoint({
         x: component.pos.x + center.x,
         y: component.pos.y + center.y,
-    }, offset);
+    }, placement);
 }
 
 function effects(hidden = false) {
@@ -446,10 +519,11 @@ function symbolInstance(options: {
     value?: string;
     power?: 'ground' | 'port';
     hideValue?: boolean;
+    rotation?: number;
 }) {
     const reference = options.reference || baseDesignator(options.component.designator);
     const value = options.value || options.component.value;
-    const rotation = kicadRotation(options.component.pos.rotate);
+    const rotation = kicadRotation(options.rotation ?? options.component.pos.rotate);
     const mirror = options.component.pos.mirror ? '(mirror x)' : '';
     const properties = options.embedded.properties;
     const power = options.power;
@@ -528,12 +602,14 @@ export function routedSectionPoints(
     section: CircuitAssembly['edges'][number]['sections'][number],
     start: Point,
     end: Point,
-    offset: Point,
+    placement: Placement,
 ) {
     const rawBends = section.bendPoints || [];
+    const serverStart = serverPoint(section.startPoint, placement);
+    const serverEnd = serverPoint(section.endPoint, placement);
     if (!rawBends.length) {
-        if (nearlyEqual(section.startPoint.x, section.endPoint.x)) {
-            const serverX = serverPoint(section.startPoint, offset).x;
+        if (nearlyEqual(serverStart.x, serverEnd.x)) {
+            const serverX = serverStart.x;
             const routeX = nearlyEqual(start.x, end.x)
                 ? start.x
                 : nearlyEqual(start.x, serverX) || nearlyEqual(end.x, serverX)
@@ -546,8 +622,8 @@ export function routedSectionPoints(
                 end,
             ]);
         }
-        if (nearlyEqual(section.startPoint.y, section.endPoint.y)) {
-            const serverY = serverPoint(section.startPoint, offset).y;
+        if (nearlyEqual(serverStart.y, serverEnd.y)) {
+            const serverY = serverStart.y;
             const routeY = nearlyEqual(start.y, end.y)
                 ? start.y
                 : nearlyEqual(start.y, serverY) || nearlyEqual(end.y, serverY)
@@ -563,15 +639,15 @@ export function routedSectionPoints(
         return orthogonalPoints([start, end]);
     }
 
-    const bends = rawBends.map((point) => serverPoint(point, offset));
-    const firstRaw = rawBends[0];
-    if (nearlyEqual(section.startPoint.y, firstRaw.y)) bends[0].y = start.y;
-    else if (nearlyEqual(section.startPoint.x, firstRaw.x)) bends[0].x = start.x;
+    const bends = rawBends.map((point) => serverPoint(point, placement));
+    const firstRaw = bends[0];
+    if (nearlyEqual(serverStart.y, firstRaw.y)) bends[0].y = start.y;
+    else if (nearlyEqual(serverStart.x, firstRaw.x)) bends[0].x = start.x;
 
     const lastIndex = rawBends.length - 1;
-    const lastRaw = rawBends[lastIndex];
-    if (nearlyEqual(section.endPoint.y, lastRaw.y)) bends[lastIndex].y = end.y;
-    else if (nearlyEqual(section.endPoint.x, lastRaw.x)) bends[lastIndex].x = end.x;
+    const lastRaw = bends[lastIndex];
+    if (nearlyEqual(serverEnd.y, lastRaw.y)) bends[lastIndex].y = end.y;
+    else if (nearlyEqual(serverEnd.x, lastRaw.x)) bends[lastIndex].x = end.x;
 
     return orthogonalPoints([start, ...bends, end]);
 }
@@ -914,7 +990,7 @@ export async function applyCircuitAssembly(
             }
         }
 
-        const offset = placementOffset(
+        const placement = placementOffset(
             source,
             assembly,
             retained.filter((item) => !removedServices.has(item)),
@@ -924,10 +1000,10 @@ export async function applyCircuitAssembly(
         for (const edge of assembly.edges) {
             for (const section of edge.sections || []) {
                 if (section.incomingShape) {
-                    serverShapePoints.set(section.incomingShape, serverPoint(section.startPoint, offset));
+                    serverShapePoints.set(section.incomingShape, serverPoint(section.startPoint, placement));
                 }
                 if (section.outgoingShape) {
-                    serverShapePoints.set(section.outgoingShape, serverPoint(section.endPoint, offset));
+                    serverShapePoints.set(section.outgoingShape, serverPoint(section.endPoint, placement));
                 }
             }
         }
@@ -1009,9 +1085,9 @@ export async function applyCircuitAssembly(
                 || component.part_uuid === 'VCC'
                 || component.value === 'unknown_shortsym'
                 || component.designator.includes('|'))
-                ? shortAnchor || componentAnchor(component, offset)
-                : componentAnchor(component, offset);
-            const rotation = kicadRotation(component.pos.rotate);
+                ? shortAnchor || componentAnchor(component, placement)
+                : componentAnchor(component, placement);
+            const rotation = kicadRotation((component.pos.rotate || 0) + placement.rotation);
             const componentPins = new Map<string, Point>();
             const componentPinLabelAngles = new Map<string, number>();
             let kind: PlacedComponent['kind'];
@@ -1029,6 +1105,7 @@ export async function applyCircuitAssembly(
                     reference,
                     value: 'GND',
                     power: 'ground',
+                    rotation,
                 }));
                 for (const pin of uniquePins(groundEmbedded.pins).values()) {
                     componentPins.set(pin.number, transformedPin(pin, anchor, rotation, false));
@@ -1055,6 +1132,7 @@ export async function applyCircuitAssembly(
                     reference,
                     value: signal,
                     power: 'port',
+                    rotation,
                 }));
                 if (!power) {
                     objects.push(symbolInstance({
@@ -1067,6 +1145,7 @@ export async function applyCircuitAssembly(
                         value: signal,
                         power: 'port',
                         hideValue: true,
+                        rotation,
                     }));
                 }
                 for (const pin of component.pins) {
@@ -1084,6 +1163,7 @@ export async function applyCircuitAssembly(
                     anchor,
                     projectName,
                     documentUuid,
+                    rotation,
                 }));
                 const requestedPins = new Set(component.pins.map((pin) => String(pin.pin_number)));
                 for (const pin of uniquePins(embedded.pins).values()) {
@@ -1161,10 +1241,10 @@ export async function applyCircuitAssembly(
             for (const section of edge.sections || []) {
                 const start = section.incomingShape
                     ? edgePins.get(section.incomingShape)
-                    : serverPoint(section.startPoint, offset);
+                    : serverPoint(section.startPoint, placement);
                 const end = section.outgoingShape
                     ? edgePins.get(section.outgoingShape)
-                    : serverPoint(section.endPoint, offset);
+                    : serverPoint(section.endPoint, placement);
                 if (section.incomingShape && !start) throw new Error(`pin not found: ${section.incomingShape}`);
                 if (section.outgoingShape && !end) throw new Error(`pin not found: ${section.outgoingShape}`);
                 if (!start || !end) throw new Error(`edge endpoint not found: ${section.id}`);
@@ -1179,7 +1259,7 @@ export async function applyCircuitAssembly(
                     throw new Error(`conflicting edge signals: ${section.id}`);
                 }
                 const signal = sectionSignals.size === 1 ? [...sectionSignals][0] : undefined;
-                const points = routedSectionPoints(section, start, end, offset);
+                const points = routedSectionPoints(section, start, end, placement);
                 for (let index = 1; index < points.length; index += 1) {
                     const segment = { start: points[index - 1], end: points[index], signal };
                     if (pointKey(segment.start) === pointKey(segment.end)) continue;
@@ -1188,7 +1268,7 @@ export async function applyCircuitAssembly(
             }
             const junctionPoints = (edge as typeof edge & { junctionPoints?: Point[] }).junctionPoints;
             for (const point of junctionPoints || []) {
-                requestedJunctions.push(serverPoint(point, offset));
+                requestedJunctions.push(serverPoint(point, placement));
             }
         }
         const normalizedSegments = normalizedNetSegments(generatedSegments);
@@ -1196,7 +1276,7 @@ export async function applyCircuitAssembly(
 
         const addedJunctions = new Set<string>();
         for (const point of [...requestedJunctions, ...calculatedJunctions(normalizedSegments)]) {
-            if (!normalizedSegments.some((segment) => pointOnSegment(point, segment.start, segment.end))) continue;
+            if (wireDirectionsAtPoint(point, normalizedSegments) < 3) continue;
             const key = pointKey(point);
             if (addedJunctions.has(key)) continue;
             addedJunctions.add(key);
@@ -1270,7 +1350,10 @@ export async function applyCircuitAssembly(
                     continue;
                 }
                 for (const port of variants) {
-                    for (const length of CONNECTION_LENGTHS_MM) {
+                    const lengths = preferLabel
+                        ? [...CONNECTION_LENGTHS_MM, 0]
+                        : CONNECTION_LENGTHS_MM;
+                    for (const length of lengths) {
                         const elbow = {
                             x: snapped(pin.x + vector.x * length),
                             y: snapped(pin.y + vector.y * length),
@@ -1279,7 +1362,9 @@ export async function applyCircuitAssembly(
                         const points = [pin, terminal];
                         if (points.some((point) => point.x < 0 || point.y < 0
                             || point.x > paper.x || point.y > paper.y)) continue;
-                        const segments: RoutedSegment[] = [{ start: pin, end: terminal, signal }];
+                        const segments: RoutedSegment[] = length
+                            ? [{ start: pin, end: terminal, signal }]
+                            : [];
 
                         const otherPins = allPinPoints.filter((point) => pointKey(point) !== pointKey(pin));
                         if (otherPins.some((point) => segments.some((segment) => (
@@ -1292,7 +1377,7 @@ export async function applyCircuitAssembly(
                             if (obstacle.signal === signal) return false;
                             return segments.some((segment) => segmentsConflict(segment, obstacle));
                         })) continue;
-                        if (routingObstacles.some((obstacle) => (
+                        if (length && routingObstacles.some((obstacle) => (
                             pointOnSegment(terminal, obstacle.start, obstacle.end)
                         ))) continue;
 
@@ -1444,11 +1529,11 @@ export async function applyCircuitAssembly(
         if (assembly.assembly_options?.draw_blocks) {
             for (const block of assembly.blocks_rect || []) {
                 if (block.name.includes('__v_root__')) continue;
-                const first = serverPoint({ x: block.x, y: block.y }, offset);
+                const first = serverPoint({ x: block.x, y: block.y }, placement);
                 const second = serverPoint({
                     x: block.x + block.width,
                     y: block.y + block.height,
-                }, offset);
+                }, placement);
                 const start = { x: Math.min(first.x, second.x) - GRID_MM, y: Math.min(first.y, second.y) - GRID_MM };
                 const end = { x: Math.max(first.x, second.x) + GRID_MM, y: Math.max(first.y, second.y) + GRID_MM };
                 objects.push(`(rectangle (start ${start.x} ${start.y}) (end ${end.x} ${end.y})
@@ -1491,6 +1576,11 @@ export async function applyCircuitAssembly(
                 .map((definition) => definition.symbol),
             realAssets.values(),
         );
-        return applySourceEdits(source, edits);
+        const candidate = applySourceEdits(source, edits);
+        return applySourceEdits(candidate, redundantJunctionRanges(candidate).map((range) => ({
+            start: range.start,
+            end: range.end,
+            text: '',
+        })));
     });
 }

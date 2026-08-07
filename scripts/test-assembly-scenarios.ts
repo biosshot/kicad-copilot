@@ -5,7 +5,12 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { beautifySchematic } from '../src/circuit/beautify';
 import { targetCircuitAssembly } from '../src/circuit/target-assembly';
-import { portDirectionAngles, routedSectionPoints } from '../src/kicad/assembly';
+import {
+    emptySheetPlacement,
+    portDirectionAngles,
+    routedSectionPoints,
+    serverRect,
+} from '../src/kicad/assembly';
 import { listCheckpoints, saveCheckpoint } from '../src/checkpoints/store';
 import { extractCircuit } from '../src/circuit/extract';
 import { getSupportedKicadCli } from '../src/kicad/cli';
@@ -15,8 +20,12 @@ import { getSchematic, getSchematicContext } from '../src/kicad/schematic-reader
 import { parseSExpression, printSExpression } from '../src/kicad/sexpr/ast';
 import { findLists } from '../src/kicad/sexpr/scan';
 import { normalizedComponentSymbol } from '../src/kicad/symbol';
-import { planWireRemoval, wireRangesToDisconnect } from '../src/kicad/wire-removal';
-import { CircuitMod, CircuitModStruct, ExplainCircuit } from '../src/types/circuit';
+import {
+    planWireRemoval,
+    redundantJunctionRanges,
+    wireRangesToDisconnect,
+} from '../src/kicad/wire-removal';
+import { CircuitAssembly, CircuitMod, CircuitModStruct, ExplainCircuit } from '../src/types/circuit';
 import { runProcessChecked } from '../src/utils/process';
 
 const RESISTOR_A = 'fa459f1466df4014badd43e0b80fd058';
@@ -145,7 +154,9 @@ async function main() {
                 id: 'grid-correction',
                 startPoint: { x: 0, y: 0 },
                 endPoint: { x: 0, y: 80 },
-            }, { x: 1.27, y: 0 }, { x: 0, y: 20.32 }, { x: 0, y: 0 });
+            }, { x: 1.27, y: 0 }, { x: 0, y: 20.32 }, {
+                offset: { x: 0, y: 0 }, rotation: 0,
+            });
             expect(points.length === 3,
                 `grid correction: expected a short pin stub and server trunk, got ${points.length} points`);
             expect(points[0].x === 1.27 && points[1].x === 0 && points[1].y === 0,
@@ -157,6 +168,63 @@ async function main() {
         await runScenario('port direction order', async () => {
             expect(portDirectionAngles().join(',') === '90,270,0,180',
                 'port directions: expected up, down, right, left');
+        });
+
+        await runScenario('placement bounds use rendered geometry', async () => {
+            const assembly = {
+                metadata: { project_name: 'test', description: 'test' },
+                components: [{
+                    ...resistor('VCC|1', 'VCC', 'VCC'),
+                    pos: { x: 0, y: 0, center: { x: 500, y: 500 }, width: 1000, height: 1000 },
+                }],
+                edges: [{
+                    sources: [], targets: [], container: 'test',
+                    sections: [{
+                        id: 'route', startPoint: { x: 0, y: 0 }, endPoint: { x: 100, y: 50 },
+                    }],
+                }],
+                blocks: [],
+                blocks_rect: [{ name: 'hidden', description: '', x: 0, y: 0, width: 2000, height: 2000 }],
+            } as CircuitAssembly;
+            const hiddenBlockBounds = serverRect(assembly);
+            expect(hiddenBlockBounds.right === 127 && hiddenBlockBounds.bottom === 127,
+                `placement bounds: hidden geometry inflated bounds: ${JSON.stringify(hiddenBlockBounds)}`);
+            assembly.assembly_options = { draw_blocks: true };
+            const drawnBlockBounds = serverRect(assembly);
+            expect(drawnBlockBounds.right === 508 && drawnBlockBounds.bottom === 508,
+                'placement bounds: visible block was excluded');
+        });
+
+        await runScenario('assembly placement rotates to fit sheet', async () => {
+            const component = {
+                ...resistor('R1'),
+                pos: { x: 0, y: 0, center: { x: 250, y: 450 }, width: 500, height: 900 },
+            };
+            const assembly = {
+                metadata: { project_name: 'test', description: 'test' },
+                components: [component], edges: [], blocks: [],
+            } as CircuitAssembly;
+            const placement = emptySheetPlacement('(kicad_sch (paper "A4"))', assembly);
+            expect(placement.rotation === 270,
+                `placement rotation: expected 270, got ${placement.rotation}`);
+            const custom = emptySheetPlacement('(kicad_sch (paper "User" 500 300))', assembly);
+            expect(custom.rotation === 0,
+                `custom paper: expected unrotated placement, got ${custom.rotation}`);
+        });
+
+        await runScenario('redundant junction cleanup', async () => {
+            const source = `(kicad_sch
+                (wire (pts (xy 0 0) (xy 10 0)))
+                (wire (pts (xy 10 0) (xy 20 0)))
+                (wire (pts (xy 10 0) (xy 10 10)))
+                (junction (at 5 0))
+                (junction (at 10 0))
+                (junction (at 10 0)))`;
+            const redundant = redundantJunctionRanges(source);
+            expect(redundant.length === 2,
+                `junction cleanup: expected orphan and duplicate, got ${redundant.length}`);
+            expect(redundant.some((range) => range.text.includes('(at 5 0)')),
+                'junction cleanup: straight-line junction remains');
         });
 
         await runScenario('cross-sheet assembly isolation', async () => {
@@ -395,6 +463,9 @@ async function main() {
             const repeated = await beautifySchematic(path, { Divider: ['R10', 'R11'] });
             expectComponent(repeated.result, 'R10', { blockName: 'Divider' });
             expectComponent(repeated.result, 'R11', { blockName: 'Divider' });
+            const repeatedSource = await readFile(path, 'utf8');
+            expect(redundantJunctionRanges(repeatedSource).length === 0,
+                'beautify topology: redundant junctions remain');
         });
 
         await runScenario('addition', async () => {

@@ -31,3 +31,9 @@ an open KiCad editor buffer to reload.
 An older unsaved editor buffer was probably saved after the MCP operation.
 Use `list_checkpoints` and `restore_checkpoint` when available, then reopen the
 restored file in KiCad.
+
+## `no free area on schematic sheet`
+
+The assembled block does not fit the target sheet or overlaps retained
+content. Increase the top-level `(paper ...)` size in the target `.kicad_sch`
+file, for example from `(paper "A4")` to `(paper "A3")`, then retry.
