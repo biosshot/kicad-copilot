@@ -3,6 +3,7 @@ import { applyCircuitAssembly } from '../kicad/assembly';
 import { getSchematic, getSchematicContext } from '../kicad/schematic-reader';
 import { CircuitAssembly, CircuitMod, ExplainCircuit } from '../types/circuit';
 import { postJson } from '../utils/server';
+import { targetCircuitAssembly } from './target-assembly';
 
 export type SchematicBlocks = Record<string, string[]>;
 
@@ -78,7 +79,11 @@ export async function beautifySchematic(path: string, blocks: SchematicBlocks) {
         circuit,
         inputCircuit: serverInputCircuit,
     });
-    const assembly = serverAssembly(response);
+    const assembly = targetCircuitAssembly(
+        serverAssembly(response),
+        inputCircuit,
+        projectCircuit,
+    );
     assembly.rm_components = [...new Set([
         ...(assembly.rm_components || []).map(baseDesignator),
         ...selected,

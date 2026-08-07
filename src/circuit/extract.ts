@@ -3,6 +3,7 @@ import { applyCircuitAssembly } from '../kicad/assembly';
 import { getSchematic, getSchematicContext } from '../kicad/schematic-reader';
 import { CircuitAssembly, CircuitMod, ExplainCircuit } from '../types/circuit';
 import { postJson } from '../utils/server';
+import { targetCircuitAssembly } from './target-assembly';
 
 type ExtractCircuitOptions = {
     onAssembly?: (assembly: CircuitAssembly) => void | Promise<void>;
@@ -76,7 +77,11 @@ export async function extractCircuit(
     const record = typeof response === 'object' && response !== null
         ? response as Record<string, unknown>
         : undefined;
-    const assembly = (record?.circuit || response) as CircuitAssembly;
+    const assembly = targetCircuitAssembly(
+        (record?.circuit || response) as CircuitAssembly,
+        inputCircuit,
+        projectCircuit,
+    );
     await options.onAssembly?.(assembly);
     const applyResult = await applyCircuitAssembly(path, assembly, inputCircuit);
     if (applyResult === 'unchanged') {

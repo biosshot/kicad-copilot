@@ -275,12 +275,30 @@ async function projectRootSchematic(path: string) {
     }
 }
 
+async function physicalDesignators(path: string) {
+    const source = await readFile(path, 'utf8');
+    const designators = new Set<string>();
+    for (const range of findLists(source, 'symbol')) {
+        const value = parseSExpression(range.text);
+        if (!findSexprChild(value, 'lib_id')) continue;
+        const reference = sexprProperty(value, 'Reference') || '';
+        if (reference && !reference.startsWith('#')) designators.add(baseDesignator(reference));
+    }
+    return designators;
+}
+
 export async function getSchematicContext(path: string) {
     const targetPath = resolve(path);
     const projectPath = await projectRootSchematic(targetPath);
-    const target = await getSchematic(targetPath);
+    const exportedTarget = await getSchematic(targetPath);
+    const targetDesignators = await physicalDesignators(targetPath);
+    const target = {
+        components: exportedTarget.components.filter((component) => (
+            targetDesignators.has(component.designator)
+        )),
+    };
     const project = projectPath.toLowerCase() === targetPath.toLowerCase()
-        ? target
+        ? exportedTarget
         : await getSchematic(projectPath);
     return { target, project, projectPath };
 }

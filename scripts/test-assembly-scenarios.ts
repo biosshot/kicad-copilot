@@ -4,6 +4,7 @@ import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promi
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { beautifySchematic } from '../src/circuit/beautify';
+import { targetCircuitAssembly } from '../src/circuit/target-assembly';
 import { portDirectionAngles, routedSectionPoints } from '../src/kicad/assembly';
 import { listCheckpoints, saveCheckpoint } from '../src/checkpoints/store';
 import { extractCircuit } from '../src/circuit/extract';
@@ -158,6 +159,43 @@ async function main() {
                 'port directions: expected up, down, right, left');
         });
 
+        await runScenario('cross-sheet assembly isolation', async () => {
+            const local = resistor('R1');
+            const foreign = resistor('R2');
+            const assembly = targetCircuitAssembly({
+                metadata: { project_name: 'test', description: 'test' },
+                components: [
+                    { ...local, pos: { x: 0, y: 0, center: { x: 0, y: 0 }, width: 10, height: 10 } },
+                    { ...foreign, pos: { x: 20, y: 0, center: { x: 0, y: 0 }, width: 10, height: 10 } },
+                ],
+                reused_blocks: [],
+                edges: [{
+                    sources: ['R1_pin_1'], targets: ['R2_pin_1'], container: 'test',
+                    sections: [{
+                        id: 'foreign-edge', startPoint: { x: 0, y: 0 }, endPoint: { x: 20, y: 0 },
+                        incomingShape: 'R1_pin_1', outgoingShape: 'R2_pin_1',
+                    }],
+                }],
+                blocks: [],
+                added_net: [
+                    { designator: 'R1', pin_number: '1', net: 'LOCAL' },
+                    { designator: 'R2', pin_number: '1', net: 'FOREIGN' },
+                ],
+                rm_net: [{ designator: 'R2', pin_number: '2', net: 'FOREIGN' }],
+                rm_components: ['R2'],
+            }, { components: [local] }, { components: [local, foreign] });
+            expect(assembly.components.every((component) => component.designator !== 'R2'),
+                'cross-sheet isolation: foreign component remains');
+            expect(assembly.edges.length === 0,
+                'cross-sheet isolation: foreign edge remains');
+            expect(assembly.added_net?.length === 1 && assembly.added_net[0].designator === 'R1',
+                'cross-sheet isolation: added_net was not scoped to target');
+            expect(assembly.rm_net?.length === 0,
+                'cross-sheet isolation: foreign rm_net remains');
+            expect(assembly.rm_components?.length === 0,
+                'cross-sheet isolation: foreign removal remains');
+        });
+
         await runScenario('wire removal to junction', async () => {
             const source = `(kicad_sch
                 (wire (pts (xy 0 0) (xy 10 0)))
@@ -297,6 +335,13 @@ async function main() {
             expectComponent(context.project, 'R200');
             expect(context.projectPath === rootPath,
                 `project context: expected ${rootPath}, got ${context.projectPath}`);
+
+            const rootContext = await getSchematicContext(rootPath);
+            expectComponent(rootContext.target, 'R100');
+            expect(!component(rootContext.target, 'R200'),
+                'project context: root target contains a child-sheet component');
+            expectComponent(rootContext.project, 'R100');
+            expectComponent(rootContext.project, 'R200');
         });
 
         await runScenario('beautify schematic', async () => {
