@@ -88,7 +88,7 @@ function densePortMismatches(circuit: CircuitMod, assembly: Awaited<ReturnType<t
     )));
     const serviceValues = new Set(findLists(source, 'symbol')
         .filter((range) => range.text.includes('(lib_id ')
-            && (findQuotedProperty(range.text, 'Reference') || '').startsWith('#PWR'))
+            && /^#(?:PWR|PORT)/.test(findQuotedProperty(range.text, 'Reference') || ''))
         .map((range) => findQuotedProperty(range.text, 'Value') || ''));
     const usedShapes = new Set(assembly.edges.flatMap((edge) => edge.sections.flatMap((section) => [
         section.incomingShape,

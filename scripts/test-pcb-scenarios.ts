@@ -6,10 +6,11 @@ import { applyBoardAssemble } from '../src/kicad/board-assemble';
 import { createDocument } from '../src/kicad/create-document';
 import { getSupportedKicadCli } from '../src/kicad/cli';
 import { setPcbStackLayers } from '../src/kicad/pcb-stack';
-import { footprintAt, footprintLayer, footprintReference, listChildren, pcbFootprints, readPcb } from '../src/kicad/pcb-reader';
+import { footprintAt, footprintIsGenerated, footprintLayer, footprintReference, listChildren, pcbFootprints, readPcb } from '../src/kicad/pcb-reader';
+import { footprintGeometryIsNormalized, normalizeEasyEdaFootprintGeometry } from '../src/kicad/footprint-normalization';
 import { atomicWritePcb, parsePcbSource } from '../src/kicad/pcb-writer';
 import { pcbTemplate } from '../src/kicad/pcb-template';
-import { atom, findChild, isSExpressionList, token } from '../src/kicad/sexpr/ast';
+import { atom, findChild, isSExpressionList, parseSExpression, printSExpression, token } from '../src/kicad/sexpr/ast';
 import { importPcbChanges } from '../src/pcb/import';
 import { buildRouterInput } from '../src/pcb/router-adapter';
 import { runProcessChecked } from '../src/utils/process';
@@ -30,6 +31,33 @@ async function copperLayerNames(path: string) {
 }
 
 async function main() {
+    const geometry = parseSExpression(`(footprint "kicad-copilot:part"
+        (at 10 20 30)
+        (property "EasyEDA part_uuid" "part" (at 1 2 15))
+        (fp_line (start 1 2) (end -3 4))
+        (pad "1" smd custom (at 5 -6 45) (primitives (gr_poly (pts (xy 1 2)))))
+        (model "part.wrl" (offset (xyz 2 -3 4)) (rotate (xyz 10 20 270))))`);
+    assert.equal(normalizeEasyEdaFootprintGeometry(geometry), true);
+    assert.deepEqual(findChild(geometry, 'at')?.slice(1).map(atom), ['10', '20', '30']);
+    assert.deepEqual(findChild(findChild(geometry, 'fp_line')!, 'start')?.slice(1).map(atom), ['-1', '-2']);
+    assert.deepEqual(findChild(findChild(geometry, 'fp_line')!, 'end')?.slice(1).map(atom), ['3', '-4']);
+    const geometryPad = listChildren(geometry, 'pad')[0];
+    assert.deepEqual(findChild(geometryPad, 'at')?.slice(1).map(atom), ['-5', '6', '225']);
+    assert.deepEqual(findChild(findChild(findChild(geometryPad, 'primitives')!, 'gr_poly')!, 'pts')?.[1],
+        [token('xy'), token('1'), token('2')]);
+    const geometryModel = findChild(geometry, 'model')!;
+    assert.deepEqual(findChild(findChild(geometryModel, 'offset')!, 'xyz')?.slice(1).map(atom), ['-2', '3', '4']);
+    assert.deepEqual(findChild(findChild(geometryModel, 'rotate')!, 'xyz')?.slice(1).map(atom), ['10', '20', '90']);
+    const normalizedGeometry = printSExpression(geometry);
+    assert.equal(normalizeEasyEdaFootprintGeometry(geometry), false);
+    assert.equal(printSExpression(geometry), normalizedGeometry, 'footprint normalization must be idempotent');
+    const standardGeometry = parseSExpression(`(footprint "Package_SO:SOIC-8"
+        (property "EasyEDA part_uuid" "part") (pad "1" smd rect (at 1 2)))`);
+    const originalStandardGeometry = printSExpression(standardGeometry);
+    assert.equal(normalizeEasyEdaFootprintGeometry(standardGeometry), false);
+    assert.equal(printSExpression(standardGeometry), originalStandardGeometry,
+        'non-project footprints must not be normalized');
+
     parsePcbSource(pcbTemplate(9));
     parsePcbSource(pcbTemplate(10));
     const directory = await mkdtemp(join(tmpdir(), 'kicad-copilot-pcb-'));
@@ -75,6 +103,9 @@ async function main() {
         await verifyWithCli(targetPcb);
 
         const board = await readPcb(targetPcb);
+        assert.ok(pcbFootprints(board.root)
+            .filter((footprint) => !footprintIsGenerated(footprint))
+            .every(footprintGeometryIsNormalized), 'imported EasyEDA footprints must use normalized geometry');
         const refs = pcbFootprints(board.root).map(footprintReference).filter((value): value is string => Boolean(value));
         assert.ok(refs.length >= 2, 'import must retain schematic footprints');
         applyBoardAssemble(board.root, board.version, {

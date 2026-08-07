@@ -137,6 +137,41 @@ function renamedPowerSymbol(source: SExpression[], signal: string) {
     return cloned;
 }
 
+function signalPortSymbol(source: SExpression[], signal: string) {
+    const cloned = renamedPowerSymbol(source, signal);
+    for (let index = cloned.length - 1; index >= 0; index -= 1) {
+        const item = cloned[index];
+        if (isSExpressionList(item) && listHead(item) === 'power') cloned.splice(index, 1);
+    }
+    const normalize = (node: SExpression) => {
+        if (!isSExpressionList(node)) return;
+        if (listHead(node) === 'pin' && !isSExpressionList(node[1])) {
+            node[1].value = 'passive';
+        }
+        if (listHead(node) === 'property' && atom(node[1]) === 'Reference'
+            && !isSExpressionList(node[2])) {
+            node[2].value = '#PORT';
+        }
+        for (const item of node) normalize(item);
+    };
+    normalize(cloned);
+    return cloned;
+}
+
+function isPowerSignal(signalName: string) {
+    if (!signalName) return false;
+    const signal = signalName.toUpperCase();
+    if (signal.includes('GND')) return false;
+    if (signal === 'BATTERY') return true;
+    if (/^USB_[V\d]/i.test(signalName)) return true;
+    if (/^V(?:CC|DD|BAT|IN|OUT|REF|REG|PP|SS|EE|BUS|[0-9])/i.test(signalName)) return true;
+    if (/^[AVDG]?V(?:DD|CC)/i.test(signalName)) return true;
+    if (/^[+-]?V[+-]?$|^V$/i.test(signalName)) return true;
+    if (/^[+-]?\d+(?:\.\d+)?V/i.test(signalName)) return true;
+    if (/^\d+V\d+$/i.test(signalName)) return true;
+    return false;
+}
+
 function embeddedSymbols(source: string) {
     const range = findLists(source, 'lib_symbols')[0];
     if (!range) throw new Error('invalid KiCad schematic: lib_symbols not found');
@@ -174,7 +209,7 @@ function instanceData(range: SExpressionRange, symbols: Map<string, SExpression[
         anchor,
         pins,
         pinLabelAngles,
-        service: reference.startsWith('#PWR'),
+        service: reference.startsWith('#PWR') || reference.startsWith('#PORT'),
     } satisfies ExistingSymbol;
 }
 
@@ -403,12 +438,12 @@ function symbolInstance(options: {
                 (reference ${quoteSExpression(reference)}) (unit ${unitNumber(options.component)})))))`;
 }
 
-function globalLabel(name: string, point: Point, angle = 0) {
+function globalLabel(name: string, point: Point, angle = 0, hidden = false) {
     const rotation = canonicalDirectionAngle(angle);
     const justify = rotation === 0 || rotation === 90 ? 'left' : 'right';
     return `(global_label ${quoteSExpression(name)} (shape bidirectional)
         (at ${point.x} ${point.y} ${rotation})
-        (effects (font (size 1.27 1.27)) (justify ${justify}))
+        (effects (font (size 1.27 1.27)) (justify ${justify})${hidden ? ' (hide yes)' : ''})
         (uuid ${quoteSExpression(randomUUID())})
         ${property('Intersheetrefs', '${INTERSHEET_REFS}', point.x, point.y, true)})`;
 }
@@ -647,6 +682,12 @@ function nextPowerReference(source: string) {
     return () => `#PWR${String(value++).padStart(4, '0')}`;
 }
 
+function nextPortReference(source: string) {
+    const numbers = [...source.matchAll(/#PORT0*(\d+)/g)].map((match) => Number(match[1]));
+    let value = (numbers.length ? Math.max(...numbers) : 0) + 1;
+    return () => `#PORT${String(value++).padStart(4, '0')}`;
+}
+
 function preparedRealAssets(assembly: CircuitAssembly, input: ExplainCircuit) {
     const uuids = [...new Set([
         ...assembly.components
@@ -830,6 +871,7 @@ export async function applyCircuitAssembly(
         const edgePins = new Map(existingPinPoints);
         const edgeSignals = new Map<string, string>();
         const powerReference = nextPowerReference(source);
+        const portReference = nextPortReference(source);
 
         for (const component of input.components) {
             for (const pin of component.pins) {
@@ -844,15 +886,16 @@ export async function applyCircuitAssembly(
         if (groundEmbedded) definitions.set(groundEmbedded.id, groundEmbedded);
 
         const portDefinitions = new Map<string, EmbeddedSymbol>();
-        const portEmbedded = (signal: string) => {
-            const existing = portDefinitions.get(signal);
+        const portEmbedded = (signal: string, power: boolean) => {
+            const key = `${power ? 'power' : 'signal'}:${signal}`;
+            const existing = portDefinitions.get(key);
             if (existing) return existing;
             const embedded = embeddedLibrarySymbol(
-                renamedPowerSymbol(portSource, signal),
+                power ? renamedPowerSymbol(portSource, signal) : signalPortSymbol(portSource, signal),
                 'kicad-copilot',
                 version,
             );
-            portDefinitions.set(signal, embedded);
+            portDefinitions.set(key, embedded);
             definitions.set(embedded.id, embedded);
             return embedded;
         };
@@ -901,17 +944,20 @@ export async function applyCircuitAssembly(
                 kind = 'port';
                 const signal = component.pins.find((pin) => pin.signal_name.trim())?.signal_name.trim();
                 if (!signal) throw new Error(`port signal missing: ${component.designator}`);
-                const embedded = portEmbedded(signal);
+                const power = component.part_uuid === 'VCC' || isPowerSignal(signal);
+                const embedded = portEmbedded(signal, power);
+                const reference = power ? powerReference() : portReference();
                 objects.push(symbolInstance({
                     embedded,
                     component,
                     anchor,
                     projectName,
                     documentUuid,
-                    reference: powerReference(),
+                    reference,
                     value: signal,
                     power: 'port',
                 }));
+                if (!power) objects.push(globalLabel(signal, anchor, rotation, true));
                 for (const pin of component.pins) {
                     componentPins.set(String(pin.pin_number), anchor);
                 }
@@ -1214,13 +1260,14 @@ export async function applyCircuitAssembly(
                     power: 'ground',
                 }));
             } else {
+                const power = isPowerSignal(signal);
                 const service: CircuitAssemblyComponent = {
-                    designator: powerReference(),
+                    designator: power ? powerReference() : portReference(),
                     value: signal,
                     pins: [{ pin_number: '1', name: signal, signal_name: signal }],
                     block_name: '',
                     search_query: '',
-                    part_uuid: 'VCC',
+                    part_uuid: power ? 'VCC' : '7523d33c197549a39030c4ac7fddee68',
                     pos: {
                         x: 0,
                         y: 0,
@@ -1231,7 +1278,7 @@ export async function applyCircuitAssembly(
                     },
                 };
                 objects.push(symbolInstance({
-                    embedded: portEmbedded(signal),
+                    embedded: portEmbedded(signal, power),
                     component: service,
                     anchor: selected.terminal,
                     projectName,
@@ -1240,6 +1287,9 @@ export async function applyCircuitAssembly(
                     value: signal,
                     power: 'port',
                 }));
+                if (!power) {
+                    objects.push(globalLabel(signal, selected.terminal, service.pos.rotate, true));
+                }
             }
         };
 

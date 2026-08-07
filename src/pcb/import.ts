@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { basename } from 'node:path';
 import { saveCheckpoint } from '../checkpoints/store';
 import { resolveFootprintDefinition } from '../kicad/footprint-library';
+import { normalizeEasyEdaFootprintGeometry } from '../kicad/footprint-normalization';
 import { setFootprintSide } from '../kicad/board-assemble';
 import {
     childText,
@@ -253,6 +254,7 @@ export async function importPcbChanges(pcbPathInput: string, schematicOverride?:
             setFootprintSide(next, layer === 'B.Cu' ? 'B.Cu' : 'F.Cu');
             setChild(next, 'at', [token(String(placement.x)), token(String(placement.y)), token(String(placement.rotate))]);
             updateFootprintMetadata(pcb.root, next, component, schematicPath, pcb.version);
+            normalizeEasyEdaFootprintGeometry(next);
             if (current) replaceRootItem(pcb.root, current, next);
             else pcb.root.push(next);
             current = next;

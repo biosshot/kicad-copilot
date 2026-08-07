@@ -18,6 +18,7 @@ import {
     pcbFootprints,
     propertyValue,
 } from './pcb-reader';
+import { normalizeEasyEdaFootprintGeometry } from './footprint-normalization';
 
 const CLEAN_HEADS = new Set([
     'segment', 'arc', 'via', 'zone',
@@ -166,6 +167,7 @@ function moveComponents(root: SExpression[], assemble: BoardAssemble, offset: { 
             console.error(`[assemble_pcb_layout] component not found: ${placement.designator}`);
             continue;
         }
+        normalizeEasyEdaFootprintGeometry(footprint);
         const targetLayer = placement.layer === 'top' ? 'F.Cu' : 'B.Cu';
         setFootprintSide(footprint, targetLayer);
         const point = kicadPoint(placement);

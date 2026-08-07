@@ -336,6 +336,33 @@ async function main() {
             expectSignal(result, 'R2', '1', 'TEST_NET');
         });
 
+        await runScenario('signal port is not a power symbol', async () => {
+            const path = await copySchematic(fixture, join(root, 'signal-port'));
+            const { result } = await extractScenario(path, modification({
+                external_connect: [
+                    { designator: 'R1', pin_number: '1', signal_name: 'UART_RX' },
+                ],
+            }));
+            expectSignal(result, 'R1', '1', 'UART_RX');
+            const source = await readFile(path, 'utf8');
+            expect(source.includes('(property "Reference" "#PORT'),
+                'signal port: instance does not use a #PORT reference');
+            const definition = findLists(source, 'symbol').find((range) => (
+                range.text.startsWith('(symbol "kicad-copilot:UART_RX"')
+            ));
+            expect(definition, 'signal port: embedded symbol definition missing');
+            expect(!definition.text.includes('(power global)'),
+                'signal port: embedded symbol is still marked as global power');
+            expect(definition.text.includes('(pin passive line'),
+                'signal port: embedded symbol pin is not passive');
+            const label = findLists(source, 'global_label').find((range) => (
+                range.text.startsWith('(global_label "UART_RX"')
+            ));
+            expect(label?.text.includes('(hide yes)'),
+                'signal port: hidden global connectivity label missing');
+            await ercReport(path);
+        });
+
         await runScenario('net disconnection', async () => {
             const path = await copySchematic(fixture, join(root, 'disconnection'));
             await extractScenario(path, modification({
