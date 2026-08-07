@@ -26,6 +26,7 @@
     "inspect": "npm run build && npx @modelcontextprotocol/inspector node dist/index.js",
     "test:assemble": "npm run build && node dist/assemble-schematic.js",
     "test:assembly-scenarios": "npm run build && node dist/test-assembly-scenarios.js",
+    "test:extract-regressions": "npm run build && node dist/test-extract-regressions.js",
     "test:pcb-scenarios": "npm run build && node dist/test-pcb-scenarios.js",
     "test:pcb-live": "npm run build && node dist/test-pcb-live.js",
     "test:routing-live": "npm run build && node dist/test-routing-live.js",

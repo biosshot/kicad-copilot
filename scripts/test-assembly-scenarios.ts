@@ -14,7 +14,7 @@ import { parseSExpression, printSExpression } from '../src/kicad/sexpr/ast';
 import { findLists } from '../src/kicad/sexpr/scan';
 import { normalizedComponentSymbol } from '../src/kicad/symbol';
 import { planWireRemoval, wireRangesToDisconnect } from '../src/kicad/wire-removal';
-import { CircuitMod, ExplainCircuit } from '../src/types/circuit';
+import { CircuitMod, CircuitModStruct, ExplainCircuit } from '../src/types/circuit';
 import { runProcessChecked } from '../src/utils/process';
 
 const RESISTOR_A = 'fa459f1466df4014badd43e0b80fd058';
@@ -205,6 +205,14 @@ async function main() {
                 'pin types: passive component pins are not Passive');
         });
 
+        await runScenario('unknown circuit fields rejected', async () => {
+            const parsed = CircuitModStruct().safeParse({
+                ...modification(),
+                add_nets: [{ designator: 'J2', pin_number: 1, signal_name: 'RX' }],
+            });
+            expect(!parsed.success, 'unknown circuit field add_nets was silently ignored');
+        });
+
         const blank = await createSchematic(join(root, 'blank'));
         const fixture = await copySchematic(blank, join(root, 'fixture'));
         await extractCircuit(fixture, modification({
@@ -274,6 +282,10 @@ async function main() {
             second.pins[1].signal_name = 'GND';
             await extractCircuit(path, modification({ add_components: [first, second] }));
             const initialSource = await readFile(path, 'utf8');
+            expect(findLists(initialSource, 'global_label').length > 0,
+                'global labels: internal named net did not receive a global label');
+            expect(findLists(initialSource, 'label').length === 0,
+                'global labels: assembly created a local label');
             expect(initialSource.includes('(lib_id "kicad-copilot:VCC_5V")'),
                 'project library: generated power port uses an unregistered library');
             const initialErc = await ercReport(path);
@@ -321,6 +333,26 @@ async function main() {
             expect(assembly.added_net?.length === 2,
                 `net connection: expected 2 added_net entries, got ${assembly.added_net?.length || 0}`);
             expectSignal(result, 'R1', '1', 'TEST_NET');
+            expectSignal(result, 'R2', '1', 'TEST_NET');
+        });
+
+        await runScenario('net disconnection', async () => {
+            const path = await copySchematic(fixture, join(root, 'disconnection'));
+            await extractScenario(path, modification({
+                external_connect: [
+                    { designator: 'R1', pin_number: '1', signal_name: 'TEST_NET' },
+                    { designator: 'R2', pin_number: '1', signal_name: 'TEST_NET' },
+                ],
+            }));
+            const { result, assembly } = await extractScenario(path, modification({
+                external_rm_connect: [
+                    { designator: 'R1', pin_number: '1' },
+                ],
+            }));
+            expect(assembly.rm_net?.some((item) => item.designator === 'R1'
+                && String(item.pin_number) === '1'),
+            'net disconnection: server assembly does not contain R1.1 rm_net');
+            expectSignal(result, 'R1', '1', '');
             expectSignal(result, 'R2', '1', 'TEST_NET');
         });
 

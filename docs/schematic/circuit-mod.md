@@ -39,7 +39,7 @@ KiCad global-label ports.
 
 Edge sections become real KiCad wires. GND and named short-symbol ports
 use KiCad power-style symbols at the wire endpoints. Internal named nets may
-receive one local label so their names survive a KiCad netlist round trip.
+receive one global label so their names and connectivity survive across sheets.
 
 ## Removal and replacement
 

@@ -40,7 +40,7 @@ export async function mutateSchematic(
         throw new Error(`path not found: ${target}`);
     });
     const candidate = await transform(original);
-    if (candidate === original) return 'ok';
+    if (candidate === original) return 'unchanged';
 
     const cli = await getSupportedKicadCli();
     await validateSchematicSource(cli, dirname(target), candidate);

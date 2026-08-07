@@ -12,6 +12,7 @@ export default defineConfig({
         index: 'src/index.ts',
         'assemble-schematic': 'scripts/assemble-schematic.ts',
         'test-assembly-scenarios': 'scripts/test-assembly-scenarios.ts',
+        'test-extract-regressions': 'scripts/test-extract-regressions.ts',
         'test-pcb-scenarios': 'scripts/test-pcb-scenarios.ts',
         'test-pcb-live': 'scripts/test-pcb-live.ts',
         'test-routing-live': 'scripts/test-routing-live.ts',

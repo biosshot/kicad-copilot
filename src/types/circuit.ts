@@ -171,7 +171,7 @@ export const CircuitModStruct = () => z.object({
         pin_number: z.union([z.number(), z.string()]).describe('Target component pin number'),
         signal_name: z.string().describe('Signal name'),
     })).nullable().describe('Use only when you need to connect to a pin of an external component that you have not modified and that does not have a signal_name'),
-});
+}).strict();
 
 export type CircuitMod = z.infer<ReturnType<typeof CircuitModStruct>>;
 export type ExplainCircuit = z.infer<ReturnType<typeof ExplainCircuitStruct>>;
