@@ -1,35 +1,52 @@
-import { randomUUID } from 'node:crypto';
-import { readFile, rm, writeFile } from 'node:fs/promises';
-import { basename, dirname, join } from 'node:path';
+import { access, copyFile, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { basename, dirname, extname, join } from 'node:path';
 import { getSupportedKicadCli } from './cli';
 import { parsePcbSource, serializePcb } from './pcb-writer';
 import { SExpression } from './sexpr/ast';
 import { runProcessChecked } from '../utils/process';
+import { findPcbProjectPath } from '../pcb/router-rules';
+
+async function prepareCandidate(targetPath: string, root: SExpression[]) {
+    const targetDirectory = dirname(targetPath);
+    const targetBasename = basename(targetPath, extname(targetPath));
+    const directory = await mkdtemp(join(targetDirectory, `.${targetBasename}.candidate-`));
+    const temporary = join(directory, `${targetBasename}.kicad_pcb`);
+    const report = join(directory, `${targetBasename}.drc.json`);
+    try {
+        await writeFile(temporary, serializePcb(root), { encoding: 'utf8', flag: 'wx' });
+        const projectPath = await findPcbProjectPath(targetPath);
+        if (projectPath) {
+            await copyFile(projectPath, join(directory, `${targetBasename}.kicad_pro`));
+            const customRules = projectPath.replace(/\.kicad_pro$/i, '.kicad_dru');
+            if (await access(customRules).then(() => true, () => false)) {
+                await copyFile(customRules, join(directory, `${targetBasename}.kicad_dru`));
+            }
+        }
+        return { directory, temporary, report };
+    } catch (error) {
+        await rm(directory, { recursive: true, force: true });
+        throw error;
+    }
+}
 
 export async function normalizePcbCandidate(
     targetPath: string,
     root: SExpression[],
     refillZones = false,
 ) {
-    const id = randomUUID();
-    const temporary = join(dirname(targetPath), `.${basename(targetPath)}.${id}.kicad_pcb`);
-    const report = join(dirname(targetPath), `.${basename(targetPath)}.${id}.drc.json`);
+    const candidate = await prepareCandidate(targetPath, root);
     const cli = await getSupportedKicadCli();
     try {
-        await writeFile(temporary, serializePcb(root), { encoding: 'utf8', flag: 'wx' });
         if (refillZones) {
             await runProcessChecked(cli.path, [
                 'pcb', 'drc', '--refill-zones', '--save-board',
-                '--format', 'json', '--output', report, temporary,
+                '--format', 'json', '--output', candidate.report, candidate.temporary,
             ], { timeoutMs: 120_000 });
         }
-        await runProcessChecked(cli.path, ['pcb', 'upgrade', '--force', temporary], { timeoutMs: 60_000 });
-        return parsePcbSource(await readFile(temporary, 'utf8'));
+        await runProcessChecked(cli.path, ['pcb', 'upgrade', '--force', candidate.temporary], { timeoutMs: 60_000 });
+        return parsePcbSource(await readFile(candidate.temporary, 'utf8'));
     } finally {
-        await Promise.all([
-            rm(temporary, { force: true }),
-            rm(report, { force: true }),
-        ]);
+        await rm(candidate.directory, { recursive: true, force: true });
     }
 }
 
@@ -38,21 +55,18 @@ export async function inspectPcbCandidate(
     root: SExpression[],
     refillZones = false,
 ) {
-    const id = randomUUID();
-    const temporary = join(dirname(targetPath), `.${basename(targetPath)}.${id}.kicad_pcb`);
-    const report = join(dirname(targetPath), `.${basename(targetPath)}.${id}.drc.json`);
+    const candidate = await prepareCandidate(targetPath, root);
     const cli = await getSupportedKicadCli();
     try {
-        await writeFile(temporary, serializePcb(root), { encoding: 'utf8', flag: 'wx' });
         await runProcessChecked(cli.path, [
             'pcb', 'drc',
             ...(refillZones ? ['--refill-zones', '--save-board'] : []),
-            '--severity-all', '--format', 'json', '--output', report, temporary,
+            '--severity-all', '--format', 'json', '--output', candidate.report, candidate.temporary,
         ], { timeoutMs: 120_000 });
-        await runProcessChecked(cli.path, ['pcb', 'upgrade', '--force', temporary], { timeoutMs: 60_000 });
+        await runProcessChecked(cli.path, ['pcb', 'upgrade', '--force', candidate.temporary], { timeoutMs: 60_000 });
         const [boardSource, reportSource] = await Promise.all([
-            readFile(temporary, 'utf8'),
-            readFile(report, 'utf8').catch(() => '{}'),
+            readFile(candidate.temporary, 'utf8'),
+            readFile(candidate.report, 'utf8').catch(() => '{}'),
         ]);
         let reportJson: unknown = {};
         try {
@@ -62,10 +76,7 @@ export async function inspectPcbCandidate(
         }
         return { root: parsePcbSource(boardSource), report: reportJson };
     } finally {
-        await Promise.all([
-            rm(temporary, { force: true }),
-            rm(report, { force: true }),
-        ]);
+        await rm(candidate.directory, { recursive: true, force: true });
     }
 }
 
@@ -77,7 +88,20 @@ export function pcbDrcMetrics(report: unknown) {
         violation && typeof violation === 'object'
         && (violation as Record<string, unknown>).type === 'shorting_items'
     )).length;
-    return { shorts, unconnected };
+    const errorViolations = violations.flatMap((violation) => {
+        if (!violation || typeof violation !== 'object') return [];
+        const item = violation as Record<string, unknown>;
+        if (item.severity !== 'error') return [];
+        const type = typeof item.type === 'string' ? item.type : 'unknown';
+        const subjects = (Array.isArray(item.items) ? item.items : []).map((subject) => {
+            if (!subject || typeof subject !== 'object') return String(subject);
+            const fields = subject as Record<string, unknown>;
+            if (typeof fields.uuid === 'string') return fields.uuid;
+            return JSON.stringify({ description: fields.description, pos: fields.pos });
+        }).sort();
+        return [{ key: `${type}:${subjects.join('|')}`, type }];
+    });
+    return { shorts, unconnected, errorViolations };
 }
 
 export async function refillAndInspectPcbCandidate(targetPath: string, root: SExpression[]) {

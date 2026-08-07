@@ -13,6 +13,7 @@ import { pcbTemplate } from '../src/kicad/pcb-template';
 import { atom, findChild, isSExpressionList, parseSExpression, printSExpression, SExpression, token } from '../src/kicad/sexpr/ast';
 import { importPcbChanges } from '../src/pcb/import';
 import { buildRouterInput } from '../src/pcb/router-adapter';
+import { netClassFor, readPcbRoutingRules } from '../src/pcb/router-rules';
 import { runProcessChecked } from '../src/utils/process';
 
 async function verifyWithCli(path: string) {
@@ -156,9 +157,53 @@ async function main() {
         assert.ok(printSExpression(bottomReference).includes('(justify mirror)'),
             'back reference text must be mirrored');
         assert.deepEqual(footprintAt(hole), { x: 148.5, y: 95, rotate: 0 });
-        const router = buildRouterInput(assembled.root, {
+        const preliminaryRouter = buildRouterInput(assembled.root, {
             routeLayers: ['F.Cu', 'B.Cu'], ignoreNets: ['GND'], speedFirst: true,
         });
+        const classifiedNet = preliminaryRouter.routedNets[0];
+        assert.ok(classifiedNet, 'router rules test requires at least one routable net');
+        await writeFile(join(directory, 'stm32_debug.kicad_pro'), JSON.stringify({
+            board: { design_settings: { rules: {
+                min_clearance: 0.18,
+                min_copper_edge_clearance: 0.5,
+                min_track_width: 0.2,
+                min_via_diameter: 0.5,
+                min_through_hole_diameter: 0.25,
+                min_via_annular_width: 0.15,
+            } } },
+            net_settings: {
+                classes: [
+                    {
+                        name: 'Default', clearance: 0.2, track_width: 0.25,
+                        via_diameter: 0.6, via_drill: 0.3,
+                        diff_pair_width: 0.25, diff_pair_gap: 0.2,
+                    },
+                    {
+                        name: 'Fine', clearance: 0.12, track_width: 0.15,
+                        via_diameter: 0.4, via_drill: 0.2,
+                        diff_pair_width: 0.16, diff_pair_gap: 0.13,
+                    },
+                ],
+                netclass_assignments: { [classifiedNet]: 'Fine' },
+                netclass_patterns: [{ netclass: 'Fine', pattern: 'UART_*' }],
+            },
+        }), 'utf8');
+        const designRules = await readPcbRoutingRules(targetPcb);
+        assert.equal(netClassFor(designRules, classifiedNet), 'Fine');
+        assert.equal(netClassFor(designRules, 'UART_RX'), 'Fine');
+        const router = buildRouterInput(assembled.root, {
+            routeLayers: ['F.Cu', 'B.Cu'], ignoreNets: ['GND'], speedFirst: true, designRules,
+        });
+        const classifiedRouterNet = router.input.nets.find((item) => item.net === classifiedNet)!;
+        const ruleId = classifiedRouterNet.safeClearance as string;
+        const safeRule = (router.input.rules.safeClearances as Record<string, Array<Record<string, number>>>)[ruleId][0];
+        assert.equal(safeRule.trackToTrack, 0.18, 'netclass clearance must respect the board minimum');
+        assert.equal(safeRule.trackToBoardOutline, 0.5, 'router must use copper edge clearance');
+        const trackRule = (router.input.rules.trackWidths as Record<string, Array<{ trackWidth: number[] }>>)[ruleId][0];
+        assert.deepEqual(trackRule.trackWidth.slice(0, 2), [0.2, 0.2],
+            'netclass track width must respect the board minimum');
+        assert.deepEqual((router.input.rules.viaSizes as Record<string, number[]>)[`via_${ruleId}`], [0.55, 0.25],
+            'via size must respect diameter, drill and annular-width minimums');
         const routerTop = router.input.components[refs[0]] as { footprint: string; rotation: number };
         const routerBottom = router.input.components[refs[1]] as { footprint: string; rotation: number };
         assert.equal(routerTop.rotation, footprintAt(top).rotate, 'router rotation must match KiCad rotation');

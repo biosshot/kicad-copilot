@@ -18,6 +18,7 @@ import {
     pcbFootprints,
 } from '../kicad/pcb-reader';
 import { RouterResult } from './router-runtime';
+import { netClassFor, PcbRoutingRules } from './router-rules';
 
 type Point = { x: number; y: number };
 
@@ -266,34 +267,124 @@ function nodeNetName(root: SExpression[], node: SExpression[]) {
     return atom(found?.[2]) || '';
 }
 
-function rules(layers: number[], clearance: number, width: number, viaDiameter: number, viaDrill: number) {
-    const spacing = {
-        layers,
-        trackToTrack: clearance,
-        trackToVia: clearance,
-        trackToPad: clearance,
-        trackToFillRegion: clearance,
-        trackToProhibitedRegion: clearance,
-        trackToBoardOutline: clearance,
-        viaToVia: clearance,
-        viaToPad: clearance,
-        viaToFillRegion: clearance,
-        viaToProhibitedRegion: clearance,
-        viaToBoardOutline: clearance,
-    };
+type EffectiveRouterClass = {
+    id: string;
+    nets: string[];
+    clearance: number;
+    edgeClearance: number;
+    minimumTrackWidth: number;
+    trackWidth: number;
+    viaDiameter: number;
+    viaDrill: number;
+    diffPairWidth: number;
+    diffPairGap: number;
+};
+
+function routerRules(layers: number[], classes: EffectiveRouterClass[]) {
     return {
-        safeClearances: { copperThickness1oz: [spacing] },
-        trackWidths: { copperThickness1oz: [{ layers, trackWidth: [width, width, Math.max(width, 2.54)] }] },
-        viaSizes: { viaSize: [viaDiameter, viaDrill] },
-        differentialPairs: {
-            differentialPair: [{
+        safeClearances: Object.fromEntries(classes.map((item) => [item.id, [{
+            layers,
+            trackToTrack: item.clearance,
+            trackToVia: item.clearance,
+            trackToPad: item.clearance,
+            trackToFillRegion: item.clearance,
+            trackToProhibitedRegion: item.clearance,
+            trackToBoardOutline: item.edgeClearance,
+            viaToVia: item.clearance,
+            viaToPad: item.clearance,
+            viaToFillRegion: item.clearance,
+            viaToProhibitedRegion: item.clearance,
+            viaToBoardOutline: item.edgeClearance,
+        }]])),
+        trackWidths: Object.fromEntries(classes.map((item) => [item.id, [{
+            layers,
+            trackWidth: [item.minimumTrackWidth, item.trackWidth, Math.max(item.trackWidth, 2.54)],
+        }]])),
+        viaSizes: Object.fromEntries(classes.map((item) => [
+            `via_${item.id}`, [item.viaDiameter, item.viaDrill],
+        ])),
+        differentialPairs: Object.fromEntries(classes.map((item) => [
+            `diff_${item.id}`,
+            [{
                 layers, lengthTolerance: 0.254,
-                width: [width, width, Math.max(width, 2.54)],
-                clearance: [clearance, clearance],
+                width: [item.minimumTrackWidth, item.diffPairWidth, Math.max(item.diffPairWidth, 2.54)],
+                clearance: [item.diffPairGap, item.diffPairGap],
             }],
-        },
+        ])),
         trackLengths: { netLength: [0, 0] },
     };
+}
+
+function positive(value: number, fallback: number) {
+    return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function effectiveRouterClasses(
+    nets: string[],
+    rules: PcbRoutingRules | undefined,
+    overrides: { clearance?: number; trackWidth?: number; viaDiameter?: number; viaDrill?: number },
+) {
+    const fallback = {
+        name: 'Default', clearance: 0.2, trackWidth: 0.25,
+        viaDiameter: 0.6, viaDrill: 0.3, diffPairWidth: 0.25, diffPairGap: 0.2,
+    };
+    const source = rules || {
+        minimumClearance: 0,
+        minimumTrackWidth: 0,
+        minimumViaDiameter: 0,
+        minimumViaDrill: 0,
+        minimumViaAnnularWidth: 0,
+        copperEdgeClearance: 0,
+        classes: [fallback],
+        assignments: {},
+        patterns: [],
+    };
+    const byName = new Map(source.classes.map((item) => [item.name, item]));
+    if (!byName.has('Default')) byName.set('Default', fallback);
+    const grouped = new Map<string, string[]>();
+    for (const net of nets) {
+        const name = netClassFor(source, net);
+        const values = grouped.get(name) || [];
+        values.push(net);
+        grouped.set(name, values);
+    }
+    if (!grouped.size) grouped.set('Default', []);
+    return [...grouped].map(([name, classNets], index) => {
+        const item = byName.get(name) || byName.get('Default')!;
+        const clearance = Math.max(
+            positive(overrides.clearance ?? item.clearance, 0.2),
+            source.minimumClearance,
+        );
+        const minimumTrackWidth = positive(
+            source.minimumTrackWidth,
+            positive(overrides.trackWidth ?? item.trackWidth, 0.25),
+        );
+        const trackWidth = Math.max(
+            positive(overrides.trackWidth ?? item.trackWidth, 0.25),
+            minimumTrackWidth,
+        );
+        const viaDrill = Math.max(
+            positive(overrides.viaDrill ?? item.viaDrill, 0.3),
+            positive(source.minimumViaDrill, positive(overrides.viaDrill ?? item.viaDrill, 0.3)),
+        );
+        const viaDiameter = Math.max(
+            positive(overrides.viaDiameter ?? item.viaDiameter, 0.6),
+            source.minimumViaDiameter,
+            viaDrill + source.minimumViaAnnularWidth * 2,
+        );
+        return {
+            id: `kicad_class_${index}`,
+            nets: classNets,
+            clearance,
+            edgeClearance: Math.max(clearance, source.copperEdgeClearance),
+            minimumTrackWidth,
+            trackWidth,
+            viaDiameter,
+            viaDrill,
+            diffPairWidth: Math.max(positive(item.diffPairWidth, trackWidth), minimumTrackWidth),
+            diffPairGap: Math.max(positive(item.diffPairGap, clearance), clearance),
+        } satisfies EffectiveRouterClass;
+    });
 }
 
 export function buildRouterInput(root: SExpression[], options: {
@@ -304,6 +395,7 @@ export function buildRouterInput(root: SExpression[], options: {
     trackWidth?: number;
     viaDiameter?: number;
     viaDrill?: number;
+    designRules?: PcbRoutingRules;
 }) {
     const outline = boardOutline(root);
     const availableLayers = copperLayers(root);
@@ -371,10 +463,9 @@ export function buildRouterInput(root: SExpression[], options: {
     }
 
     const routedNets = [...netNames].filter((net) => !ignored.has(net));
-    const clearance = options.clearance ?? 0.2;
-    const width = options.trackWidth ?? 0.25;
-    const viaDiameter = options.viaDiameter ?? 0.6;
-    const viaDrill = options.viaDrill ?? 0.3;
+    const classes = effectiveRouterClasses(routedNets, options.designRules, options);
+    const classByNet = new Map(classes.flatMap((item) => item.nets.map((net) => [net, item] as const)));
+    const defaultClass = classes[0] || effectiveRouterClasses([''], options.designRules, options)[0];
     const tracks = listChildren(root, 'segment').flatMap((segment, index) => {
         const net = nodeNetName(root, segment);
         const layer = routerLayerId(childText(segment, 'layer') || '');
@@ -387,7 +478,7 @@ export function buildRouterInput(root: SExpression[], options: {
                 toRouterPoint(pointAt(findChild(segment, 'start')), outline.transform),
                 toRouterPoint(pointAt(findChild(segment, 'end')), outline.transform),
             ],
-            width: numberAt(findChild(segment, 'width'), 1) || width,
+            width: numberAt(findChild(segment, 'width'), 1) || defaultClass.trackWidth,
         }];
     });
     for (const [index, arc] of listChildren(root, 'arc').entries()) {
@@ -399,7 +490,7 @@ export function buildRouterInput(root: SExpression[], options: {
             layer,
             net,
             path: arcPoints(arc).map((point) => toRouterPoint(point, outline.transform)),
-            width: numberAt(findChild(arc, 'width'), 1) || width,
+            width: numberAt(findChild(arc, 'width'), 1) || defaultClass.trackWidth,
         });
     }
     const vias = listChildren(root, 'via').flatMap((via, index) => {
@@ -409,7 +500,10 @@ export function buildRouterInput(root: SExpression[], options: {
             id: `existing-${index}`,
             location: toRouterPoint(pointAt(findChild(via, 'at')), outline.transform),
             net,
-            size: [numberAt(findChild(via, 'size'), 1) || viaDiameter, numberAt(findChild(via, 'drill'), 1) || viaDrill],
+            size: [
+                numberAt(findChild(via, 'size'), 1) || defaultClass.viaDiameter,
+                numberAt(findChild(via, 'drill'), 1) || defaultClass.viaDrill,
+            ],
         }];
     });
     const routerOutline = closedClockwisePath(
@@ -424,15 +518,19 @@ export function buildRouterInput(root: SExpression[], options: {
             notRoute: allLayerIds.filter((id) => !selected.includes(id)),
         },
         routingCorner: '45',
-        rules: rules(selected, clearance, width, viaDiameter, viaDrill),
+        rules: routerRules(selected, classes),
         classes: {
-            netClasses: {}, differentialPairClasses: {},
-            netClearancesClasses: { copperThickness1oz: routedNets },
+            netClasses: Object.fromEntries(classes.map((item) => [item.id, item.nets])),
+            differentialPairClasses: {},
+            netClearancesClasses: Object.fromEntries(classes.map((item) => [item.id, item.nets])),
         },
-        nets: routedNets.map((net) => ({
-            net, routing: true, safeClearance: 'copperThickness1oz', trackWidth: 'copperThickness1oz',
-            viaSize: 'viaSize', differentialPair: 'differentialPair', trackLength: 'netLength',
-        })),
+        nets: routedNets.map((net) => {
+            const item = classByNet.get(net) || defaultClass;
+            return {
+                net, routing: true, safeClearance: item.id, trackWidth: item.id,
+                viaSize: `via_${item.id}`, differentialPair: `diff_${item.id}`, trackLength: 'netLength',
+            };
+        }),
         components,
         footprints,
         constraintRegions: {},

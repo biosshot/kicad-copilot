@@ -10,6 +10,7 @@ import { enqueueMutation } from '../utils/mutation-queue';
 import { applyRouterResult, buildRouterInput, clearRouting } from './router-adapter';
 import { applySimplePour, finalizeSimplePourCandidate } from './pour';
 import { runLocalRouter } from './router-runtime';
+import { readPcbRoutingRules } from './router-rules';
 
 export type AutoRouteOptions = {
     ignoreNets?: string[];
@@ -82,12 +83,17 @@ async function runOperation(operation: RouteOperation, options: AutoRouteOptions
         const initialHash = sourceHash(pcb.source);
         const routeLayers = options.routeLayers?.length ? options.routeLayers : ['F.Cu', 'B.Cu'];
         operation.stage = 'checking';
-        const baselineDrc = pcbDrcMetrics((await inspectPcbCandidate(pcb.path, pcb.root)).report);
+        const [baselineInspection, designRules] = await Promise.all([
+            inspectPcbCandidate(pcb.path, pcb.root),
+            readPcbRoutingRules(pcb.path),
+        ]);
+        const baselineDrc = pcbDrcMetrics(baselineInspection.report);
         operation.stage = 'exporting';
         const exported = buildRouterInput(pcb.root, {
             routeLayers,
             ignoreNets: options.ignoreNets?.length ? options.ignoreNets : ['GND'],
             speedFirst: options.routingEffectPriority === 'SPEED_FIRST',
+            designRules,
         });
         operation.controller.signal.throwIfAborted();
         const artifactDirectory = join(TEMP_DIR, 'autorouter');
@@ -122,7 +128,11 @@ async function runOperation(operation: RouteOperation, options: AutoRouteOptions
                 }))
                 : await inspectPcbCandidate(current.path, candidate);
             const candidateDrc = pcbDrcMetrics(inspected.report);
-            if (candidateDrc.shorts > 0 || candidateDrc.unconnected > baselineDrc.unconnected) {
+            const baselineErrors = new Set(baselineDrc.errorViolations.map((item) => item.key));
+            const newErrors = candidateDrc.errorViolations.filter((item) => !baselineErrors.has(item.key));
+            if (candidateDrc.shorts > 0
+                || candidateDrc.unconnected > baselineDrc.unconnected
+                || newErrors.length > 0) {
                 await Promise.all([
                     writeFile(
                         join(artifactDirectory, `${operation.id}-rejected.kicad_pcb`),
@@ -141,6 +151,13 @@ async function runOperation(operation: RouteOperation, options: AutoRouteOptions
                 throw new Error(
                     `auto route rejected by KiCad DRC: unconnected items increased `
                     + `from ${baselineDrc.unconnected} to ${candidateDrc.unconnected}`,
+                );
+            }
+            if (newErrors.length) {
+                const types = [...new Set(newErrors.map((item) => item.type))];
+                throw new Error(
+                    `auto route rejected by KiCad DRC: ${newErrors.length} new error(s) `
+                    + `(${types.join(', ')})`,
                 );
             }
             operation.controller.signal.throwIfAborted();
