@@ -176,15 +176,8 @@ function powerPortSymbol(source: SExpression[], signal: string) {
 
 function signalPortSymbol(source: SExpression[], signal: string) {
     const cloned = renamedPowerSymbol(source, signal);
-    for (let index = cloned.length - 1; index >= 0; index -= 1) {
-        const item = cloned[index];
-        if (isSExpressionList(item) && listHead(item) === 'power') cloned.splice(index, 1);
-    }
     const normalize = (node: SExpression) => {
         if (!isSExpressionList(node)) return;
-        if (listHead(node) === 'pin' && !isSExpressionList(node[1])) {
-            node[1].value = 'passive';
-        }
         if (listHead(node) === 'property' && atom(node[1]) === 'Reference'
             && !isSExpressionList(node[2])) {
             node[2].value = '#PORT';
@@ -192,30 +185,6 @@ function signalPortSymbol(source: SExpression[], signal: string) {
         for (const item of node) normalize(item);
     };
     normalize(cloned);
-    return cloned;
-}
-
-function hiddenGlobalPortSymbol(source: SExpression[], signal: string) {
-    const cloned = renamedPowerSymbol(source, signal);
-    const internalName = `${signal}__global`;
-    const renameUnits = (node: SExpression) => {
-        if (!isSExpressionList(node)) return;
-        if (listHead(node) === 'symbol' && !isSExpressionList(node[1])) {
-            if (node[1].value === signal) node[1].value = internalName;
-            else if (node[1].value.startsWith(`${signal}_`)) {
-                node[1].value = `${internalName}${node[1].value.slice(signal.length)}`;
-            }
-        }
-        for (const item of node) renameUnits(item);
-    };
-    renameUnits(cloned);
-    for (let index = cloned.length - 1; index >= 0; index -= 1) {
-        const item = cloned[index];
-        if (isSExpressionList(item) && listHead(item) === 'symbol'
-            && atom(item[1])?.endsWith('_0_1')) {
-            cloned.splice(index, 1);
-        }
-    }
     return cloned;
 }
 
@@ -411,7 +380,7 @@ function placementOffset(
             y: removed.reduce((sum, item) => sum + item.anchor.y, 0) / removed.length,
         }
         : { x: paper.x / 2, y: paper.y / 2 };
-    const step = 5.08;
+    const step = GRID_MM;
     const maxRadius = Math.ceil(Math.max(paper.x, paper.y) / step);
     for (const rotation of [0, 270, 90, 180]) {
         const orientedBounds = rotatedRect(bounds, rotation);
@@ -453,8 +422,9 @@ function placementOffset(
     );
 }
 
-export function emptySheetPlacement(source: string, assembly: CircuitAssembly) {
-    return placementOffset(source, assembly, [], []);
+export function emptySheetPlacement(source: string, assembly: CircuitAssembly, target?: Point) {
+    const removed = target ? [{ anchor: target } as ExistingSymbol] : [];
+    return placementOffset(source, assembly, [], removed);
 }
 
 function rotatedRect(rect: Rect, rotation: number): Rect {
@@ -994,7 +964,7 @@ export async function applyCircuitAssembly(
             source,
             assembly,
             retained.filter((item) => !removedServices.has(item)),
-            removed,
+            fullPhysicalRebuild ? [] : removed,
         );
         const serverShapePoints = new Map<string, Point>();
         for (const edge of assembly.edges) {
@@ -1048,7 +1018,6 @@ export async function applyCircuitAssembly(
         if (groundEmbedded) definitions.set(groundEmbedded.id, groundEmbedded);
 
         const portDefinitions = new Map<string, EmbeddedSymbol>();
-        const globalPortDefinitions = new Map<string, EmbeddedSymbol>();
         const portEmbedded = (signal: string, power: boolean) => {
             const key = `${power ? 'power' : 'signal'}:${signal}`;
             const existing = portDefinitions.get(key);
@@ -1059,18 +1028,6 @@ export async function applyCircuitAssembly(
                 version,
             );
             portDefinitions.set(key, embedded);
-            definitions.set(embedded.id, embedded);
-            return embedded;
-        };
-        const globalPortEmbedded = (signal: string) => {
-            const existing = globalPortDefinitions.get(signal);
-            if (existing) return existing;
-            const embedded = embeddedLibrarySymbol(
-                hiddenGlobalPortSymbol(portSource, signal),
-                'kicad-copilot',
-                version,
-            );
-            globalPortDefinitions.set(signal, embedded);
             definitions.set(embedded.id, embedded);
             return embedded;
         };
@@ -1134,20 +1091,6 @@ export async function applyCircuitAssembly(
                     power: 'port',
                     rotation,
                 }));
-                if (!power) {
-                    objects.push(symbolInstance({
-                        embedded: globalPortEmbedded(signal),
-                        component,
-                        anchor,
-                        projectName,
-                        documentUuid,
-                        reference: powerReference(),
-                        value: signal,
-                        power: 'port',
-                        hideValue: true,
-                        rotation,
-                    }));
-                }
                 for (const pin of component.pins) {
                     componentPins.set(String(pin.pin_number), anchor);
                 }
@@ -1461,19 +1404,6 @@ export async function applyCircuitAssembly(
                     value: signal,
                     power: 'port',
                 }));
-                if (!power) {
-                    objects.push(symbolInstance({
-                        embedded: globalPortEmbedded(signal),
-                        component: service,
-                        anchor: selected.terminal,
-                        projectName,
-                        documentUuid,
-                        reference: powerReference(),
-                        value: signal,
-                        power: 'port',
-                        hideValue: true,
-                    }));
-                }
             }
         };
 
