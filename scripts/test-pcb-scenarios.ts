@@ -10,7 +10,7 @@ import { footprintAt, footprintIsGenerated, footprintLayer, footprintReference, 
 import { footprintGeometryIsNormalized, normalizeEasyEdaFootprintGeometry } from '../src/kicad/footprint-normalization';
 import { atomicWritePcb, parsePcbSource } from '../src/kicad/pcb-writer';
 import { pcbTemplate } from '../src/kicad/pcb-template';
-import { atom, findChild, isSExpressionList, parseSExpression, printSExpression, token } from '../src/kicad/sexpr/ast';
+import { atom, findChild, isSExpressionList, parseSExpression, printSExpression, SExpression, token } from '../src/kicad/sexpr/ast';
 import { importPcbChanges } from '../src/pcb/import';
 import { buildRouterInput } from '../src/pcb/router-adapter';
 import { runProcessChecked } from '../src/utils/process';
@@ -111,8 +111,14 @@ async function main() {
         applyBoardAssemble(board.root, board.version, {
             board: { polygon: [{ x: -20, y: -15 }, { x: 20, y: -15 }, { x: 20, y: 15 }, { x: -20, y: 15 }] },
             components: [
-                { designator: refs[0], x: -5, y: 4, rotate: 30, layer: 'top' },
-                { designator: refs[1], x: 5, y: -6, rotate: 270, layer: 'bottom' },
+                {
+                    designator: refs[0], x: -5, y: 4, rotate: 30, layer: 'top',
+                    designatorText: { x: -5, y: 7, rotate: 0, height: 0.9 },
+                },
+                {
+                    designator: refs[1], x: 5, y: -6, rotate: 270, layer: 'bottom',
+                    designatorText: { x: 8, y: -6, rotate: 90, height: 0.9 },
+                },
             ],
             vias: [{ x: 0, y: 10, diameter: 3.2, drill: 3.2 }],
         });
@@ -125,6 +131,30 @@ async function main() {
         assert.deepEqual(footprintAt(top), { x: 143.5, y: 101, rotate: 150 });
         assert.deepEqual(footprintAt(bottom), { x: 153.5, y: 111, rotate: 90 });
         assert.equal(footprintLayer(bottom), 'B.Cu');
+        const topReference = top.find((item) => isSExpressionList(item)
+            && item[0] && !isSExpressionList(item[0]) && item[0].value === 'property'
+            && atom(item[1]) === 'Reference') as SExpression[];
+        const bottomReference = bottom.find((item) => isSExpressionList(item)
+            && item[0] && !isSExpressionList(item[0]) && item[0].value === 'property'
+            && atom(item[1]) === 'Reference') as SExpression[];
+        const topReferenceAt = findChild(topReference, 'at')?.slice(1).map((item) => Number(atom(item)));
+        assert.ok(topReferenceAt
+            && Math.abs(topReferenceAt[0] + 1.5) < 1e-9
+            && Math.abs(topReferenceAt[1] - 2.598076211353316) < 1e-9
+            && topReferenceAt[2] === 0,
+        'front reference text has an invalid position or rotation');
+        assert.equal(atom(findChild(topReference, 'layer')?.[1]), 'F.SilkS');
+        assert.ok(!printSExpression(topReference).includes('(justify mirror)'),
+            'front reference text must not be mirrored');
+        const bottomReferenceAt = findChild(bottomReference, 'at')?.slice(1).map((item) => Number(atom(item)));
+        assert.ok(bottomReferenceAt
+            && Math.abs(bottomReferenceAt[0]) < 1e-9
+            && Math.abs(bottomReferenceAt[1] + 3) < 1e-9
+            && bottomReferenceAt[2] === 270,
+        'back reference text has an invalid position or rotation');
+        assert.equal(atom(findChild(bottomReference, 'layer')?.[1]), 'B.SilkS');
+        assert.ok(printSExpression(bottomReference).includes('(justify mirror)'),
+            'back reference text must be mirrored');
         assert.deepEqual(footprintAt(hole), { x: 148.5, y: 95, rotate: 0 });
         const router = buildRouterInput(assembled.root, {
             routeLayers: ['F.Cu', 'B.Cu'], ignoreNets: ['GND'], speedFirst: true,

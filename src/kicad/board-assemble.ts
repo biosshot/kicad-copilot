@@ -91,9 +91,37 @@ function swapSideLayers(node: SExpression[]) {
     });
 }
 
+function setTextMirror(node: SExpression[], mirrored: boolean) {
+    let effects = findChild(node, 'effects');
+    if (!effects) {
+        if (!mirrored) return;
+        effects = [token('effects')];
+        node.push(effects);
+    }
+    let justify = findChild(effects, 'justify');
+    if (!justify) {
+        if (!mirrored) return;
+        justify = [token('justify')];
+        effects.push(justify);
+    }
+    const hasMirror = justify.some((item) => !isSExpressionList(item) && atom(item) === 'mirror');
+    if (mirrored && !hasMirror) justify.push(token('mirror'));
+    if (!mirrored && hasMirror) {
+        justify.splice(1, justify.length - 1, ...justify.slice(1).filter(
+            (item) => isSExpressionList(item) || atom(item) !== 'mirror',
+        ));
+    }
+    if (justify.length === 1) effects.splice(effects.indexOf(justify), 1);
+}
+
 export function setFootprintSide(node: SExpression[], targetLayer: 'F.Cu' | 'B.Cu') {
     if (footprintLayer(node) !== targetLayer) swapSideLayers(node);
     setChild(node, 'layer', [token(targetLayer, true)]);
+    for (const child of node) {
+        if (!isSExpressionList(child)) continue;
+        const head = listHead(child);
+        if (head === 'property' || head === 'fp_text') setTextMirror(child, targetLayer === 'B.Cu');
+    }
 }
 
 function referenceProperty(footprint: SExpression[]) {
@@ -140,7 +168,7 @@ function setReferenceText(
     );
     setChild(property, 'at', [
         token(String(local.x)), token(String(local.y)),
-        token(String(normalizeRotation(text.rotate - footprintRotation))),
+        token(String(normalizeRotation(-text.rotate))),
     ]);
     setChild(property, 'layer', [token(placement.layer === 'top' ? 'F.SilkS' : 'B.SilkS', true)]);
     let effects = findChild(property, 'effects');
