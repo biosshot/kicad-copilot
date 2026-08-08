@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { applyBoardAssemble } from '../src/kicad/board-assemble';
 import { createDocument } from '../src/kicad/create-document';
-import { getSupportedKicadCli } from '../src/kicad/cli';
+import { getSupportedKicadCli, preferredSupportedKicadCli } from '../src/kicad/cli';
 import { setPcbStackLayers } from '../src/kicad/pcb-stack';
 import { footprintAt, footprintIsGenerated, footprintLayer, footprintReference, listChildren, pcbFootprints, readPcb } from '../src/kicad/pcb-reader';
 import { footprintGeometryIsNormalized, normalizeEasyEdaFootprintGeometry } from '../src/kicad/footprint-normalization';
@@ -34,6 +34,12 @@ async function copperLayerNames(path: string) {
 }
 
 async function main() {
+    assert.equal(preferredSupportedKicadCli([
+        { path: 'path-kicad-8', version: '8.0.9', major: 8 },
+        { path: 'installed-kicad-9', version: '9.0.7', major: 9 },
+        { path: 'installed-kicad-10', version: '10.0.1', major: 10 },
+    ])?.path, 'installed-kicad-10', 'CLI discovery must skip KiCad 8 and prefer KiCad 10');
+
     const routeDrc = routeDrcChanges(
         { shorts: 0, unconnected: 0, errorViolations: [] },
         { shorts: 1, unconnected: 0, errorViolations: [{ key: 'shorting_items:a|b', type: 'shorting_items' }] },

@@ -10,6 +10,16 @@ export type KicadCli = {
 
 let discovery: Promise<KicadCli> | undefined;
 
+function supported(cli: KicadCli) {
+    return cli.major === 9 || cli.major === 10;
+}
+
+export function preferredSupportedKicadCli(candidates: KicadCli[]) {
+    return candidates
+        .filter(supported)
+        .sort((left, right) => right.major - left.major)[0];
+}
+
 function standardCandidates() {
     if (process.platform === 'win32') {
         const roots = [
@@ -59,19 +69,39 @@ async function inspectCandidate(candidate: string) {
 
 async function discoverKicadCli() {
     const configured = process.env.KICAD_CLI_PATH;
-    const candidates = [configured, 'kicad-cli', ...standardCandidates()]
-        .filter((value): value is string => Boolean(value));
+    if (configured) {
+        const cli = await inspectCandidate(configured);
+        if (!cli) throw new Error(`KICAD_CLI_PATH is not a working kicad-cli: ${configured}`);
+        if (!supported(cli)) throw new Error(`unsupported KiCad version: ${cli.version}`);
+        return cli;
+    }
+
+    const candidates = ['kicad-cli', ...standardCandidates()];
+    const discovered: KicadCli[] = [];
 
     for (const candidate of [...new Set(candidates)]) {
         const cli = await inspectCandidate(candidate);
-        if (cli) return cli;
+        if (cli) discovered.push(cli);
+    }
+
+    const preferred = preferredSupportedKicadCli(discovered);
+    if (preferred) return preferred;
+
+    if (discovered.length) {
+        throw new Error(`unsupported KiCad version: ${discovered.map((item) => item.version).join(', ')}`);
     }
 
     throw new Error('kicad-cli not found');
 }
 
 export function getKicadCli() {
-    discovery ??= discoverKicadCli();
+    if (!discovery) {
+        const pending = discoverKicadCli();
+        discovery = pending;
+        void pending.catch(() => {
+            if (discovery === pending) discovery = undefined;
+        });
+    }
     return discovery;
 }
 
