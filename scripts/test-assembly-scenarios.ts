@@ -6,8 +6,10 @@ import { dirname, join } from 'node:path';
 import { beautifySchematic } from '../src/circuit/beautify';
 import { targetCircuitAssembly } from '../src/circuit/target-assembly';
 import {
+    clearPortAnchor,
     emptySheetPlacement,
     portDirectionAngles,
+    portOffsetCandidates,
     routedSectionPoints,
     serverRect,
 } from '../src/kicad/assembly';
@@ -168,6 +170,26 @@ async function main() {
         await runScenario('port direction order', async () => {
             expect(portDirectionAngles().join(',') === '90,270,0,180',
                 'port directions: expected up, down, right, left');
+            expect(portOffsetCandidates(90).join(',') === '0',
+                'port offset: vertical ports must remain on their wire');
+            const horizontalOffsets = portOffsetCandidates(0);
+            expect(horizontalOffsets[0] === -2.54 && horizontalOffsets[1] === 2.54,
+                `port offset: expected perpendicular offsets, got ${horizontalOffsets.slice(0, 2)}`);
+        });
+
+        await runScenario('port anchor avoids adjacent pins', async () => {
+            const target = { x: 100.33, y: 50.8 };
+            const adjusted = clearPortAnchor(
+                target,
+                target,
+                { x: 90.17, y: 50.8 },
+                [target, { x: 100.33, y: 53.34 }],
+                { x: 297, y: 210 },
+            );
+            expect(adjusted.x > target.x,
+                `port clearance: expected an outward stub, got ${JSON.stringify(adjusted)}`);
+            expect(Math.abs(adjusted.y - target.y) < 1e-6,
+                'port clearance: port moved across adjacent pins');
         });
 
         await runScenario('placement bounds use rendered geometry', async () => {
@@ -541,6 +563,24 @@ async function main() {
                 `net connection: expected 2 added_net entries, got ${assembly.added_net?.length || 0}`);
             expectSignal(result, 'R1', '1', 'TEST_NET');
             expectSignal(result, 'R2', '1', 'TEST_NET');
+        });
+
+        await runScenario('connection removes no-connect marker', async () => {
+            const path = await copySchematic(blank, join(root, 'connect-no-connect'));
+            const unused = resistor('R30');
+            unused.pins[0].signal_name = 'NC';
+            await extractScenario(path, modification({ add_components: [unused] }));
+            const before = await readFile(path, 'utf8');
+            expect(findLists(before, 'no_connect').length === 1,
+                'no-connect replacement: marker was not created');
+
+            const { result } = await extractScenario(path, modification({
+                external_connect: [{ designator: 'R30', pin_number: '1', signal_name: 'NEW_NET' }],
+            }));
+            expectSignal(result, 'R30', '1', 'NEW_NET');
+            const after = await readFile(path, 'utf8');
+            expect(findLists(after, 'no_connect').length === 0,
+                'no-connect replacement: marker remains on connected pin');
         });
 
         await runScenario('signal port is one movable object without duplicate label', async () => {

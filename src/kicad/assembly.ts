@@ -30,11 +30,16 @@ import {
 
 const SERVER_UNIT_MM = 0.254;
 const GRID_MM = 1.27;
+const PORT_PIN_CLEARANCE_MM = GRID_MM * 3;
 const CONNECTION_LENGTHS_MM = [
     20, 30,
     ...Array.from({ length: 39 }, (_, index) => 40 + index * 20),
     15, 10, 5,
 ].map((value) => value * SERVER_UNIT_MM);
+const PORT_OFFSET_LENGTHS_MM = Array.from(
+    { length: 80 },
+    (_, index) => (index + 1) * 10 * SERVER_UNIT_MM,
+);
 type Point = { x: number; y: number };
 type Placement = { offset: Point; rotation: number };
 type CircuitAssemblyComponent = CircuitAssembly['components'][number];
@@ -761,6 +766,43 @@ function outwardLabelAngle(pin: Point, owner: Point) {
     }
 }
 
+export function clearPortAnchor(
+    anchor: Point,
+    connectedPin: Point,
+    owner: Point,
+    pins: Point[],
+    paper: Point,
+) {
+    const collides = (point: Point) => pins.some((pin) => (
+        Math.abs(point.x - pin.x) < PORT_PIN_CLEARANCE_MM
+        && Math.abs(point.y - pin.y) < PORT_PIN_CLEARANCE_MM
+    ));
+    if (!collides(anchor)) return anchor;
+
+    const delta = {
+        x: anchor.x - connectedPin.x,
+        y: anchor.y - connectedPin.y,
+    };
+    const direction = Math.abs(delta.x) > 1e-6 || Math.abs(delta.y) > 1e-6
+        ? (Math.abs(delta.x) >= Math.abs(delta.y)
+            ? { x: Math.sign(delta.x), y: 0 }
+            : { x: 0, y: Math.sign(delta.y) })
+        : directionVector(outwardLabelAngle(connectedPin, owner));
+
+    for (const length of CONNECTION_LENGTHS_MM) {
+        const candidate = {
+            x: snapped(connectedPin.x + direction.x * length),
+            y: snapped(connectedPin.y + direction.y * length),
+        };
+        if (candidate.x < PORT_PIN_CLEARANCE_MM || candidate.y < PORT_PIN_CLEARANCE_MM
+            || candidate.x > paper.x - PORT_PIN_CLEARANCE_MM
+            || candidate.y > paper.y - PORT_PIN_CLEARANCE_MM) continue;
+        if (!collides(candidate)) return candidate;
+    }
+
+    return anchor;
+}
+
 function canonicalDirectionAngle(angle: number) {
     return normalizeRotation(Math.round(normalizeRotation(angle) / 90) * 90);
 }
@@ -783,6 +825,12 @@ function directionAngles(primary: number, pinCount: number) {
 export function portDirectionAngles() {
     // KiCad sheet Y grows downwards: up, down, right, left.
     return [90, 270, 0, 180];
+}
+
+export function portOffsetCandidates(angle: number) {
+    const vector = directionVector(angle);
+    if (vector.x === 0) return [0];
+    return PORT_OFFSET_LENGTHS_MM.flatMap((length) => [-length, length]);
 }
 
 function insertionOffset(source: string) {
@@ -1031,6 +1079,36 @@ export async function applyCircuitAssembly(
             definitions.set(embedded.id, embedded);
             return embedded;
         };
+        const paper = pageSize(source);
+        const connectedRealPin = (serviceShape: string, anchor: Point) => {
+            const shapes = new Set<string>();
+            for (const edge of assembly.edges) {
+                if (!(edge.sections || []).some((section) => (
+                    section.incomingShape === serviceShape || section.outgoingShape === serviceShape
+                ))) continue;
+                for (const section of edge.sections || []) {
+                    if (section.incomingShape && section.incomingShape !== serviceShape) {
+                        shapes.add(section.incomingShape);
+                    }
+                    if (section.outgoingShape && section.outgoingShape !== serviceShape) {
+                        shapes.add(section.outgoingShape);
+                    }
+                }
+            }
+            return [...shapes]
+                .map((shape) => ({
+                    shape,
+                    point: edgePins.get(shape),
+                    owner: pinOwners.get(shape),
+                }))
+                .filter((item): item is { shape: string; point: Point; owner: Point } => (
+                    Boolean(item.point && item.owner)
+                ))
+                .sort((left, right) => (
+                    Math.hypot(left.point.x - anchor.x, left.point.y - anchor.y)
+                    - Math.hypot(right.point.x - anchor.x, right.point.y - anchor.y)
+                ))[0];
+        };
 
         for (const component of assembly.components) {
             const exact = component.designator;
@@ -1038,12 +1116,24 @@ export async function applyCircuitAssembly(
                 ? `${exact}_pin_${component.pins[0].pin_number}`
                 : undefined;
             const shortAnchor = primaryPin ? serverShapePoints.get(primaryPin) : undefined;
-            const anchor = (component.part_uuid === 'GND'
+            let anchor = (component.part_uuid === 'GND'
                 || component.part_uuid === 'VCC'
                 || component.value === 'unknown_shortsym'
                 || component.designator.includes('|'))
                 ? shortAnchor || componentAnchor(component, placement)
                 : componentAnchor(component, placement);
+            if (primaryPin && serviceComponent(component)) {
+                const connected = connectedRealPin(primaryPin, anchor);
+                if (connected) {
+                    anchor = clearPortAnchor(
+                        anchor,
+                        connected.point,
+                        connected.owner,
+                        [...edgePins.values()],
+                        paper,
+                    );
+                }
+            }
             const rotation = kicadRotation((component.pos.rotate || 0) + placement.rotation);
             const componentPins = new Map<string, Point>();
             const componentPinLabelAngles = new Map<string, number>();
@@ -1226,7 +1316,6 @@ export async function applyCircuitAssembly(
             objects.push(junction(point));
         }
 
-        const paper = pageSize(source);
         const routingObstacles: RoutedSegment[] = [
             ...wirePlan.retained.map((wire) => ({ start: wire.start, end: wire.end })),
             ...normalizedSegments,
@@ -1237,6 +1326,18 @@ export async function applyCircuitAssembly(
         const connectionTerminals: Point[] = [];
 
         const connectionKeys = new Set<string>();
+        const removedNoConnects = new Set<number>(
+            edits.filter((edit) => edit.text === '').map((edit) => edit.start),
+        );
+        const removeNoConnectAt = (point: Point) => {
+            for (const range of findLists(source, 'no_connect')) {
+                const existing = rangeAtPoint(range);
+                if (!existing || pointKey(existing) !== pointKey(point)) continue;
+                if (removedNoConnects.has(range.start)) continue;
+                edits.push({ start: range.start, end: range.end, text: '' });
+                removedNoConnects.add(range.start);
+            }
+        };
         const pendingConnections: Array<{
             designator: string;
             pinNumber: string | number;
@@ -1269,6 +1370,7 @@ export async function applyCircuitAssembly(
             const resolvedShape = edgePins.has(exactShape) ? exactShape : shape;
             const pin = edgePins.get(resolvedShape);
             if (!pin) throw new Error(`pin not found: ${shape}`);
+            removeNoConnectAt(pin);
             const owner = pinOwners.get(resolvedShape) || ownerAnchors.get(base) || pin;
             const ownerPinPoints = ownerPins.get(designator) || ownerPins.get(base) || [];
             const primaryAngle = pinLabelAngles.get(resolvedShape) ?? outwardLabelAngle(pin, owner);
@@ -1301,36 +1403,49 @@ export async function applyCircuitAssembly(
                             x: snapped(pin.x + vector.x * length),
                             y: snapped(pin.y + vector.y * length),
                         };
-                        const terminal = elbow;
-                        const points = [pin, terminal];
-                        if (points.some((point) => point.x < 0 || point.y < 0
-                            || point.x > paper.x || point.y > paper.y)) continue;
-                        const segments: RoutedSegment[] = length
-                            ? [{ start: pin, end: terminal, signal }]
-                            : [];
+                        const offsets = port ? portOffsetCandidates(angle) : [0];
+                        for (const offset of offsets) {
+                            const terminal = {
+                                x: elbow.x,
+                                y: snapped(elbow.y + offset),
+                            };
+                            const points = [pin, elbow, terminal];
+                            if (points.some((point) => point.x < 0 || point.y < 0
+                                || point.x > paper.x || point.y > paper.y)) continue;
+                            if (port && vector.x !== 0 && ownerPinPoints.some((point) => (
+                                pointKey(point) !== pointKey(pin) && nearlyEqual(point.y, terminal.y)
+                            ))) continue;
+                            const segments = points.slice(1).flatMap((point, index): RoutedSegment[] => (
+                                pointKey(points[index]) === pointKey(point)
+                                    ? []
+                                    : [{ start: points[index], end: point, signal }]
+                            ));
 
-                        const otherPins = allPinPoints.filter((point) => pointKey(point) !== pointKey(pin));
-                        if (otherPins.some((point) => segments.some((segment) => (
-                            pointOnSegment(point, segment.start, segment.end)
-                        )))) continue;
-                        if (connectionTerminals.some((point) => segments.some((segment) => (
-                            pointOnSegment(point, segment.start, segment.end)
-                        )))) continue;
-                        if (routingObstacles.some((obstacle) => {
-                            if (obstacle.signal === signal) return false;
-                            return segments.some((segment) => segmentsConflict(segment, obstacle));
-                        })) continue;
-                        if (length && routingObstacles.some((obstacle) => (
-                            pointOnSegment(terminal, obstacle.start, obstacle.end)
-                        ))) continue;
+                            const otherPins = allPinPoints.filter((point) => pointKey(point) !== pointKey(pin));
+                            if (otherPins.some((point) => segments.some((segment) => (
+                                pointOnSegment(point, segment.start, segment.end)
+                            )))) continue;
+                            if (connectionTerminals.some((point) => segments.some((segment) => (
+                                pointOnSegment(point, segment.start, segment.end)
+                            )))) continue;
+                            if (routingObstacles.some((obstacle) => {
+                                if (obstacle.signal === signal) return false;
+                                return segments.some((segment) => segmentsConflict(segment, obstacle));
+                            })) continue;
+                            if (segments.length && routingObstacles.some((obstacle) => (
+                                pointOnSegment(terminal, obstacle.start, obstacle.end)
+                            ))) continue;
 
-                        selected = {
-                            segments,
-                            terminal,
-                            terminalAngle: angle,
-                            port,
-                        };
-                        break search;
+                            selected = {
+                                segments,
+                                terminal,
+                                terminalAngle: port && vector.x !== 0
+                                    ? (offset < 0 ? 90 : 270)
+                                    : angle,
+                                port,
+                            };
+                            break search;
+                        }
                     }
                 }
             }
@@ -1410,7 +1525,7 @@ export async function applyCircuitAssembly(
         for (const item of assembly.added_net || []) {
             const oldSignal = inputSignal(input, item.designator, item.pin_number);
             if (oldSignal === item.net) continue;
-            if (oldSignal && oldSignal !== item.net) {
+            if (oldSignal && oldSignal.trim().toUpperCase() !== 'NC' && oldSignal !== item.net) {
                 throw new Error(`pin already connected to ${oldSignal}: ${item.designator}.${item.pin_number}`);
             }
             queueNamedConnection(item.designator, item.pin_number, item.net);
