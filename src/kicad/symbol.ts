@@ -16,6 +16,12 @@ export type LibraryPin = {
     angle: number;
 };
 
+export type LibraryPropertyPosition = {
+    x: number;
+    y: number;
+    angle: number;
+};
+
 export function librarySymbolName(symbol: SExpression[]) {
     const name = atom(symbol[1]);
     if (!name) throw new Error('KiCad symbol name not found');
@@ -26,6 +32,21 @@ export function librarySymbolProperties(symbol: SExpression[]) {
     return Object.fromEntries(symbol
         .filter((item): item is SExpression[] => isSExpressionList(item) && listHead(item) === 'property')
         .map((item) => [atom(item[1]) || '', atom(item[2]) || '']));
+}
+
+export function librarySymbolPropertyPositions(symbol: SExpression[]) {
+    const positions = new Map<string, LibraryPropertyPosition>();
+    for (const item of symbol) {
+        if (!isSExpressionList(item) || listHead(item) !== 'property') continue;
+        const name = atom(item[1]);
+        const at = findChild(item, 'at');
+        const x = Number(atom(at?.[1]));
+        const y = Number(atom(at?.[2]));
+        const angle = Number(atom(at?.[3]) || 0);
+        if (!name || !Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(angle)) continue;
+        positions.set(name, { x, y, angle });
+    }
+    return positions;
 }
 
 export function librarySymbolPins(symbol: SExpression[]) {
@@ -165,5 +186,6 @@ export function embeddedLibrarySymbol(
         symbol: output,
         pins: librarySymbolPins(source),
         properties: librarySymbolProperties(source),
+        propertyPositions: librarySymbolPropertyPositions(source),
     };
 }

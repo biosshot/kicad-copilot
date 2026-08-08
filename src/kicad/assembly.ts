@@ -18,6 +18,7 @@ import { findLists, findQuotedProperty, quoteSExpression, SExpressionRange } fro
 import {
     embeddedLibrarySymbol,
     LibraryPin,
+    LibraryPropertyPosition,
     librarySymbolPins,
     normalizedComponentSymbol,
 } from './symbol';
@@ -108,12 +109,33 @@ function atPoint(list: SExpression[] | undefined) {
     return { x, y };
 }
 
-function transformedPin(pin: LibraryPin, anchor: Point, rotation: number, mirror: boolean) {
+function transformedLocalPoint(
+    point: Pick<LibraryPin, 'x' | 'y'>,
+    anchor: Point,
+    rotation: number,
+    mirror: boolean,
+) {
     const radians = rotation * Math.PI / 180;
-    const localY = mirror ? -pin.y : pin.y;
+    const localY = mirror ? -point.y : point.y;
     return {
-        x: rounded(anchor.x + pin.x * Math.cos(radians) - localY * Math.sin(radians)),
-        y: rounded(anchor.y - pin.x * Math.sin(radians) - localY * Math.cos(radians)),
+        x: rounded(anchor.x + point.x * Math.cos(radians) - localY * Math.sin(radians)),
+        y: rounded(anchor.y - point.x * Math.sin(radians) - localY * Math.cos(radians)),
+    };
+}
+
+function transformedPin(pin: LibraryPin, anchor: Point, rotation: number, mirror: boolean) {
+    return transformedLocalPoint(pin, anchor, rotation, mirror);
+}
+
+function transformedPropertyPosition(
+    position: LibraryPropertyPosition,
+    anchor: Point,
+    rotation: number,
+    mirror: boolean,
+) {
+    return {
+        ...transformedLocalPoint(position, anchor, rotation, mirror),
+        angle: normalizeRotation(rotation + (mirror ? -position.angle : position.angle)),
     };
 }
 
@@ -483,19 +505,24 @@ function symbolInstance(options: {
     const mirror = options.component.pos.mirror ? '(mirror x)' : '';
     const properties = options.embedded.properties;
     const power = options.power;
-    const sideways = !power && (rotation === 90 || rotation === 270);
     const referenceY = power === 'ground'
         ? options.anchor.y + 6.35
         : options.anchor.y - 6.35;
     const valueY = power === 'ground'
         ? options.anchor.y + 3.556
         : options.anchor.y - 3.556;
-    const realReference = sideways
-        ? { x: options.anchor.x + 8.89, y: options.anchor.y - 1.27, angle: rotation }
-        : { x: options.anchor.x, y: options.anchor.y - 10.16, angle: 0 };
-    const realValue = sideways
-        ? { x: options.anchor.x + 8.89, y: options.anchor.y + 1.27, angle: rotation }
-        : { x: options.anchor.x, y: options.anchor.y + 10.16, angle: 0 };
+    const realReference = transformedPropertyPosition(
+        options.embedded.propertyPositions.get('Reference') || { x: 0, y: 5.08, angle: 0 },
+        options.anchor,
+        rotation,
+        Boolean(options.component.pos.mirror),
+    );
+    const realValue = transformedPropertyPosition(
+        options.embedded.propertyPositions.get('Value') || { x: 0, y: -5.08, angle: 0 },
+        options.anchor,
+        rotation,
+        Boolean(options.component.pos.mirror),
+    );
     const pins = [...uniquePins(options.embedded.pins).keys()]
         .map((number) => `(pin ${quoteSExpression(number)} (uuid ${quoteSExpression(randomUUID())}))`)
         .join(' ');

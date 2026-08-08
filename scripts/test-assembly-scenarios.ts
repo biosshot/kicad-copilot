@@ -518,6 +518,50 @@ async function main() {
             expect(!assembledSource.includes('(lib_id "kicad-copilot:EDGE_B")'),
                 'best-effort edge: conflicting server edge was replaced with a client port');
         });
+        await runScenario('component fields preserve converted symbol positions', async () => {
+            const path = await copySchematic(blank, join(root, 'component-fields'));
+            const source = resistor('R95');
+            const assembly: CircuitAssembly = {
+                metadata: { project_name: 'test', description: 'component fields' },
+                components: [{
+                    ...source,
+                    pos: { x: 0, y: 0, center: { x: 5, y: 5 }, width: 10, height: 10, rotate: 90 },
+                }],
+                reused_blocks: [],
+                edges: [],
+                blocks: [],
+            };
+            await applyCircuitAssembly(path, assembly, { components: [] });
+            const result = await readFile(path, 'utf8');
+            const instance = findLists(result, 'symbol').find((range) => (
+                range.text.includes('(lib_id "kicad-copilot:')
+                && range.text.includes('(property "Reference" "R95"')
+            ));
+            expect(instance, 'component fields: R95 instance missing');
+            const anchorMatch = instance.text.match(
+                /\(lib_id\s+"[^"]+"\)\s+\(at\s+(-?[\d.]+)\s+(-?[\d.]+)/,
+            );
+            const referenceMatch = instance.text.match(
+                /\(property\s+"Reference"\s+"R95"\s+\(at\s+(-?[\d.]+)\s+(-?[\d.]+)/,
+            );
+            const valueMatch = instance.text.match(
+                /\(property\s+"Value"\s+"10k"\s+\(at\s+(-?[\d.]+)\s+(-?[\d.]+)/,
+            );
+            expect(anchorMatch && referenceMatch && valueMatch,
+                'component fields: instance coordinates missing');
+            const anchor = { x: Number(anchorMatch[1]), y: Number(anchorMatch[2]) };
+            const reference = { x: Number(referenceMatch[1]), y: Number(referenceMatch[2]) };
+            const value = { x: Number(valueMatch[1]), y: Number(valueMatch[2]) };
+            const distance = (point: { x: number; y: number }) => Math.hypot(
+                point.x - anchor.x,
+                point.y - anchor.y,
+            );
+            expect(distance(reference) <= 6.35 && distance(value) <= 6.35,
+                `component fields: converted offsets were inflated: ${JSON.stringify({ anchor, reference, value })}`);
+            const dot = (reference.x - anchor.x) * (value.x - anchor.x)
+                + (reference.y - anchor.y) * (value.y - anchor.y);
+            expect(dot < 0, 'component fields: Reference and Value were forced onto the same side');
+        });
         const fixture = await copySchematic(blank, join(root, 'fixture'));
         await extractCircuit(fixture, modification({
             add_components: [resistor('R1'), resistor('R2')],
