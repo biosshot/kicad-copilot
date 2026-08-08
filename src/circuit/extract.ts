@@ -87,7 +87,13 @@ export async function extractCircuit(
     await options.onAssembly?.(assembly);
     let applyResult: Awaited<ReturnType<typeof applyCircuitAssembly>>;
     try {
-        applyResult = await applyCircuitAssembly(path, assembly, inputCircuit, diagnostics.report);
+        applyResult = await applyCircuitAssembly(
+            path,
+            assembly,
+            inputCircuit,
+            diagnostics.report,
+            diagnostics.warn,
+        );
     } catch (error) {
         throw errorWithDiagnostics(error, diagnostics.summary());
     }

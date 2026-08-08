@@ -236,7 +236,7 @@ async function main() {
                 'placement bounds: visible block was excluded');
         });
 
-        await runScenario('assembly placement never rotates to fit sheet', async () => {
+        await runScenario('oversized assembly uses unrotated best-effort placement', async () => {
             const component = {
                 ...resistor('R1'),
                 pos: { x: 0, y: 0, center: { x: 250, y: 450 }, width: 500, height: 900 },
@@ -245,16 +245,41 @@ async function main() {
                 metadata: { project_name: 'test', description: 'test' },
                 components: [component], edges: [], blocks: [],
             } as CircuitAssembly;
-            let failure = '';
-            try {
-                emptySheetPlacement('(kicad_sch (paper "A4"))', assembly);
-            } catch (error) {
-                failure = error instanceof Error ? error.message : String(error);
-            }
-            expect(/no free area on schematic sheet/i.test(failure),
-                `placement rotation: oversized assembly must fail without rotation, got ${failure}`);
+            const fallback = emptySheetPlacement('(kicad_sch (paper "A4"))', assembly);
+            expect(/no free area on schematic sheet/i.test(fallback.warning || ''),
+                `placement fallback: missing warning ${fallback.warning}`);
+            expect(!('rotation' in fallback), 'placement fallback: global rotation leaked into placement');
             const custom = emptySheetPlacement('(kicad_sch (paper "User" 500 300))', assembly);
             expect(!('rotation' in custom), 'custom paper: global rotation leaked into placement');
+            expect(!custom.warning, `custom paper: unexpected placement warning ${custom.warning}`);
+        });
+
+        await runScenario('near-fit assembly ignores only unavailable page padding', async () => {
+            const width = 271.145 / 0.254;
+            const height = 205.359 / 0.254;
+            const assembly = {
+                metadata: { project_name: 'test', description: 'test' },
+                components: [{
+                    ...resistor('R1'),
+                    pos: {
+                        x: 0,
+                        y: 0,
+                        center: { x: width / 2, y: height / 2 },
+                        width,
+                        height,
+                    },
+                }],
+                edges: [],
+                blocks: [],
+            } as CircuitAssembly;
+            const placement = emptySheetPlacement('(kicad_sch (paper "A4"))', assembly);
+            const bounds = serverRect(assembly);
+            expect(Boolean(placement.warning), 'near-fit placement: missing fallback warning');
+            expect(bounds.left + placement.offset.x >= 0
+                && bounds.top + placement.offset.y >= 0
+                && bounds.right + placement.offset.x <= 297
+                && bounds.bottom + placement.offset.y <= 210,
+            `near-fit placement: assembly left the sheet ${JSON.stringify(placement)}`);
         });
 
         await runScenario('tight assembly placement uses KiCad grid', async () => {
@@ -342,13 +367,19 @@ async function main() {
         await runScenario('LLM diagnostic limit', async () => {
             const diagnostics = createDiagnosticCollector(MAX_TOOL_DIAGNOSTICS, () => undefined);
             for (let index = 0; index < 40; index += 1) diagnostics.report(`error ${index + 1}`);
+            for (let index = 0; index < 40; index += 1) diagnostics.warn(`warning ${index + 1}`);
             const summary = diagnostics.summary();
             const toolResult = diagnosticToolResult(summary);
             expect(summary.errors.length === 36, `diagnostics: expected 36 errors, got ${summary.errors.length}`);
             expect(summary.error_count === 40 && summary.omitted_errors === 4,
                 `diagnostics: invalid totals ${JSON.stringify(summary)}`);
+            expect(summary.warnings.length === 36, `diagnostics: expected 36 warnings, got ${summary.warnings.length}`);
+            expect(summary.warning_count === 40 && summary.omitted_warnings === 4,
+                `diagnostics: invalid warning totals ${JSON.stringify(summary)}`);
             expect(typeof toolResult === 'object' && toolResult.errors.length === 36,
                 'diagnostics: tool result exceeds the LLM limit');
+            expect(typeof toolResult === 'object' && toolResult.warnings.length === 36,
+                'diagnostics: warning result exceeds the LLM limit');
         });
 
         await runScenario('wire removal to junction', async () => {

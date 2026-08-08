@@ -4,6 +4,9 @@ export type DiagnosticSummary = {
     errors: string[];
     error_count: number;
     omitted_errors: number;
+    warnings: string[];
+    warning_count: number;
+    omitted_warnings: number;
 };
 
 export type DiagnosticReporter = (error: unknown, context?: string) => void;
@@ -29,7 +32,9 @@ export function createDiagnosticCollector(
     write: (message: string) => void = (message) => console.error(message),
 ) {
     const errors: string[] = [];
+    const warnings: string[] = [];
     let errorCount = 0;
+    let warningCount = 0;
 
     const report: DiagnosticReporter = (error, context) => {
         const message = context ? `${context}: ${errorMessage(error)}` : errorMessage(error);
@@ -38,20 +43,32 @@ export function createDiagnosticCollector(
         write(`[schematic assembly] ${message}`);
     };
 
+    const warn: DiagnosticReporter = (warning, context) => {
+        const message = context ? `${context}: ${errorMessage(warning)}` : errorMessage(warning);
+        warningCount += 1;
+        if (warnings.length < limit) warnings.push(message);
+        write(`[schematic assembly warning] ${message}`);
+    };
+
     const summary = (): DiagnosticSummary => ({
         errors: [...errors],
         error_count: errorCount,
         omitted_errors: Math.max(0, errorCount - errors.length),
+        warnings: [...warnings],
+        warning_count: warningCount,
+        omitted_warnings: Math.max(0, warningCount - warnings.length),
     });
 
-    return { report, summary };
+    return { report, warn, summary };
 }
 
 export function diagnosticToolResult(summary: DiagnosticSummary) {
-    if (!summary.error_count) return 'ok';
+    if (!summary.error_count && !summary.warning_count) return 'ok';
     return {
         status: 'ok',
-        errors: summary.errors,
+        ...(summary.errors.length ? { errors: summary.errors } : {}),
+        ...(summary.warnings.length ? { warnings: summary.warnings } : {}),
         ...(summary.omitted_errors ? { omitted_errors: summary.omitted_errors } : {}),
+        ...(summary.omitted_warnings ? { omitted_warnings: summary.omitted_warnings } : {}),
     };
 }

@@ -96,7 +96,13 @@ export async function beautifySchematic(path: string, blocks: SchematicBlocks) {
 
     const diagnostics = createDiagnosticCollector();
     try {
-        await applyCircuitAssembly(path, assembly, inputCircuit, diagnostics.report);
+        await applyCircuitAssembly(
+            path,
+            assembly,
+            inputCircuit,
+            diagnostics.report,
+            diagnostics.warn,
+        );
     } catch (error) {
         throw errorWithDiagnostics(error, diagnostics.summary());
     }

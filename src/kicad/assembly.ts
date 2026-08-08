@@ -42,7 +42,7 @@ const PORT_OFFSET_LENGTHS_MM = Array.from(
 );
 type Point = { x: number; y: number };
 // Server layout is authoritative: a sheet placement may translate it, never rotate or scale it.
-type Placement = { offset: Point };
+type Placement = { offset: Point; warning?: string };
 type CircuitAssemblyComponent = CircuitAssembly['components'][number];
 type Rect = { left: number; top: number; right: number; bottom: number };
 type RoutedSegment = { start: Point; end: Point; signal?: string };
@@ -387,6 +387,8 @@ function placementOffset(
         x: snapped(target.x - center.x),
         y: snapped(target.y - center.y),
     };
+    let fallback = initial;
+    let fallbackScore = [Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY];
     const tried = new Set<string>();
     for (let radius = 0; radius <= maxRadius; radius += 1) {
         for (let dx = -radius; dx <= radius; dx += 1) {
@@ -399,6 +401,19 @@ function placementOffset(
                 const key = pointKey(offset);
                 if (tried.has(key)) continue;
                 tried.add(key);
+                const rawCandidate = translated(bounds, offset);
+                const overlapCount = occupied.filter((rect) => intersects(rawCandidate, rect)).length;
+                const overflow = Math.max(0, -rawCandidate.left)
+                    + Math.max(0, -rawCandidate.top)
+                    + Math.max(0, rawCandidate.right - paper.x)
+                    + Math.max(0, rawCandidate.bottom - paper.y);
+                const distance = Math.abs(offset.x - initial.x) + Math.abs(offset.y - initial.y);
+                const score = [overlapCount, overflow, distance];
+                if (score.some((value, index) => value < fallbackScore[index]
+                    && score.slice(0, index).every((item, prefix) => item === fallbackScore[prefix]))) {
+                    fallback = offset;
+                    fallbackScore = score;
+                }
                 const candidate = translated(bounds, offset, 5.08);
                 if (candidate.left < 0 || candidate.top < 0
                     || candidate.right > paper.x || candidate.bottom > paper.y) continue;
@@ -407,11 +422,11 @@ function placementOffset(
         }
     }
 
-    throw new Error(
-        `no free area on schematic sheet: paper=${paper.x}x${paper.y}, `
+    const warning = `no free area on schematic sheet: paper=${paper.x}x${paper.y}, `
         + `assembly=${rounded(bounds.right - bounds.left)}x${rounded(bounds.bottom - bounds.top)}, `
-        + `obstacles=${occupied.length}`,
-    );
+        + `obstacles=${occupied.length}; using best-effort placement at `
+        + `${rounded(fallback.x)},${rounded(fallback.y)}`;
+    return { offset: fallback, warning };
 }
 
 export function emptySheetPlacement(source: string, assembly: CircuitAssembly, target?: Point) {
@@ -834,6 +849,10 @@ export async function applyCircuitAssembly(
         const message = error instanceof Error ? error.message : String(error);
         console.error(`[schematic assembly] ${context ? `${context}: ` : ''}${message}`);
     },
+    warn: DiagnosticReporter = (warning, context) => {
+        const message = warning instanceof Error ? warning.message : String(warning);
+        console.error(`[schematic assembly warning] ${context ? `${context}: ` : ''}${message}`);
+    },
 ) {
     if (!Array.isArray(assembly.components) || !Array.isArray(assembly.edges)) {
         throw new Error('invalid CircuitAssembly response');
@@ -997,6 +1016,7 @@ export async function applyCircuitAssembly(
             retained.filter((item) => !removedServices.has(item)),
             fullPhysicalRebuild ? [] : removed,
         );
+        if (placement.warning) warn(placement.warning, 'schematic placement');
         const serverShapePoints = new Map<string, Point>();
         for (const edge of assembly.edges) {
             for (const section of edge.sections || []) {
