@@ -31,6 +31,10 @@ type RouteResult = {
         warnings: string[];
         short_circuits: number;
         introduced_short_circuits: number;
+        unconnected_items: number;
+        introduced_unconnected_items: number;
+        new_errors: number;
+        new_error_types: string[];
         drc_report_path: string;
     };
 };
@@ -56,8 +60,8 @@ export function routeDrcChanges(baseline: DrcMetrics, candidate: DrcMetrics) {
     const newErrors = candidate.errorViolations.filter((item) => !baselineErrors.has(item.key));
     return {
         newErrors,
-        blockingNewErrors: newErrors.filter((item) => item.type !== 'shorting_items'),
         introducedShortCircuits: Math.max(0, candidate.shorts - baseline.shorts),
+        introducedUnconnected: Math.max(0, candidate.unconnected - baseline.unconnected),
     };
 }
 
@@ -146,7 +150,7 @@ async function runOperation(operation: RouteOperation, options: AutoRouteOptions
                 }))
                 : await inspectPcbCandidate(current.path, candidate);
             const candidateDrc = pcbDrcMetrics(inspected.report);
-            const { newErrors, blockingNewErrors, introducedShortCircuits } = routeDrcChanges(
+            const { newErrors, introducedShortCircuits, introducedUnconnected } = routeDrcChanges(
                 baselineDrc,
                 candidateDrc,
             );
@@ -160,19 +164,6 @@ async function runOperation(operation: RouteOperation, options: AutoRouteOptions
                     writeFile(drcReportPath, JSON.stringify(inspected.report, null, 2)),
                 ]);
             }
-            if (candidateDrc.unconnected > baselineDrc.unconnected) {
-                throw new Error(
-                    `auto route rejected by KiCad DRC: unconnected items increased `
-                    + `from ${baselineDrc.unconnected} to ${candidateDrc.unconnected}`,
-                );
-            }
-            if (blockingNewErrors.length) {
-                const types = [...new Set(blockingNewErrors.map((item) => item.type))];
-                throw new Error(
-                    `auto route rejected by KiCad DRC: ${blockingNewErrors.length} new error(s) `
-                    + `(${types.join(', ')})`,
-                );
-            }
             operation.controller.signal.throwIfAborted();
             await saveCheckpoint(current.path, 'Before local auto route');
             await atomicWritePcb(current.path, current.source, inspected.root);
@@ -180,20 +171,38 @@ async function runOperation(operation: RouteOperation, options: AutoRouteOptions
                 ...counts,
                 shortCircuits: candidateDrc.shorts,
                 introducedShortCircuits,
+                unconnectedItems: candidateDrc.unconnected,
+                introducedUnconnected,
+                newErrors,
                 drcReportPath,
             };
         });
+        const warnings = [
+            ...(applied.shortCircuits > 0
+                ? [`KiCad DRC: ${applied.shortCircuits} short circuit(s)`]
+                : []),
+            ...(applied.introducedUnconnected > 0
+                ? [`KiCad DRC: unconnected items increased by ${applied.introducedUnconnected}`]
+                : []),
+            ...(applied.newErrors.length > 0
+                ? [`KiCad DRC: ${applied.newErrors.length} new error(s)`]
+                : []),
+        ];
         operation.result = {
             status: 'ok',
             traces: routerResult.traces?.length ?? 0,
             segments: applied.segments,
             vias: applied.vias,
             ...(Number.isFinite(routerResult.routabitity) ? { routability: routerResult.routabitity } : {}),
-            ...(applied.shortCircuits > 0 ? {
+            ...(warnings.length > 0 ? {
                 report: {
-                    warnings: [`KiCad DRC: ${applied.shortCircuits} short circuit(s)`],
+                    warnings,
                     short_circuits: applied.shortCircuits,
                     introduced_short_circuits: applied.introducedShortCircuits,
+                    unconnected_items: applied.unconnectedItems,
+                    introduced_unconnected_items: applied.introducedUnconnected,
+                    new_errors: applied.newErrors.length,
+                    new_error_types: [...new Set(applied.newErrors.map((item) => item.type))],
                     drc_report_path: applied.drcReportPath,
                 },
             } : {}),

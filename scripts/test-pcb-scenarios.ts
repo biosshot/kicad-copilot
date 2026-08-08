@@ -39,7 +39,15 @@ async function main() {
         { shorts: 1, unconnected: 0, errorViolations: [{ key: 'shorting_items:a|b', type: 'shorting_items' }] },
     );
     assert.equal(routeDrc.introducedShortCircuits, 1);
-    assert.equal(routeDrc.blockingNewErrors.length, 0, 'short circuits must be reported without rejecting routing');
+    assert.equal(routeDrc.introducedUnconnected, 0);
+    assert.equal(routeDrc.newErrors.length, 1, 'DRC errors must be available for the non-blocking report');
+
+    const generalDrc = routeDrcChanges(
+        { shorts: 0, unconnected: 1, errorViolations: [] },
+        { shorts: 0, unconnected: 3, errorViolations: [{ key: 'clearance:a|b', type: 'clearance' }] },
+    );
+    assert.equal(generalDrc.introducedUnconnected, 2);
+    assert.deepEqual(generalDrc.newErrors, [{ key: 'clearance:a|b', type: 'clearance' }]);
 
     const layoutReport = { status: 'error', dsl: { ok: false } };
     assert.deepEqual(pcbLayoutWithoutPlacementResult('layout-op', {
