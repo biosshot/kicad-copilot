@@ -177,7 +177,7 @@ async function main() {
                 startPoint: { x: 0, y: 0 },
                 endPoint: { x: 0, y: 80 },
             }, { x: 1.27, y: 0 }, { x: 0, y: 20.32 }, {
-                offset: { x: 0, y: 0 }, rotation: 0,
+                offset: { x: 0, y: 0 },
             });
             expect(points.length === 3,
                 `grid correction: expected a short pin stub and server trunk, got ${points.length} points`);
@@ -222,7 +222,7 @@ async function main() {
                 'placement bounds: visible block was excluded');
         });
 
-        await runScenario('assembly placement rotates to fit sheet', async () => {
+        await runScenario('assembly placement never rotates to fit sheet', async () => {
             const component = {
                 ...resistor('R1'),
                 pos: { x: 0, y: 0, center: { x: 250, y: 450 }, width: 500, height: 900 },
@@ -231,12 +231,16 @@ async function main() {
                 metadata: { project_name: 'test', description: 'test' },
                 components: [component], edges: [], blocks: [],
             } as CircuitAssembly;
-            const placement = emptySheetPlacement('(kicad_sch (paper "A4"))', assembly);
-            expect(placement.rotation === 270,
-                `placement rotation: expected 270, got ${placement.rotation}`);
+            let failure = '';
+            try {
+                emptySheetPlacement('(kicad_sch (paper "A4"))', assembly);
+            } catch (error) {
+                failure = error instanceof Error ? error.message : String(error);
+            }
+            expect(/no free area on schematic sheet/i.test(failure),
+                `placement rotation: oversized assembly must fail without rotation, got ${failure}`);
             const custom = emptySheetPlacement('(kicad_sch (paper "User" 500 300))', assembly);
-            expect(custom.rotation === 0,
-                `custom paper: expected unrotated placement, got ${custom.rotation}`);
+            expect(!('rotation' in custom), 'custom paper: global rotation leaked into placement');
         });
 
         await runScenario('tight assembly placement uses KiCad grid', async () => {
@@ -258,8 +262,7 @@ async function main() {
                 assembly,
                 { x: 100, y: 20 },
             );
-            expect(placement.rotation === 0,
-                `tight placement: expected original orientation, got ${placement.rotation}`);
+            expect(!('rotation' in placement), 'tight placement: global rotation leaked into placement');
         });
 
         await runScenario('redundant junction cleanup', async () => {

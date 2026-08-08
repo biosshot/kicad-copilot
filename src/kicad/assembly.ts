@@ -41,7 +41,7 @@ const PORT_OFFSET_LENGTHS_MM = Array.from(
     (_, index) => (index + 1) * 10 * SERVER_UNIT_MM,
 );
 type Point = { x: number; y: number };
-type Placement = { offset: Point; rotation: number };
+type Placement = { offset: Point };
 type CircuitAssemblyComponent = CircuitAssembly['components'][number];
 type Rect = { left: number; top: number; right: number; bottom: number };
 type RoutedSegment = { start: Point; end: Point; signal?: string };
@@ -141,15 +141,6 @@ function renamedPowerSymbol(source: SExpression[], signal: string) {
     };
     replace(cloned);
     return cloned;
-}
-
-function rotatedPoint(point: Point, rotation: number): Point {
-    switch (normalizeRotation(rotation)) {
-        case 90: return { x: -point.y, y: point.x };
-        case 180: return { x: -point.x, y: -point.y };
-        case 270: return { x: point.y, y: -point.x };
-        default: return point;
-    }
 }
 
 function powerPortSymbol(source: SExpression[], signal: string) {
@@ -387,35 +378,30 @@ function placementOffset(
         : { x: paper.x / 2, y: paper.y / 2 };
     const step = GRID_MM;
     const maxRadius = Math.ceil(Math.max(paper.x, paper.y) / step);
-    for (const rotation of [0, 270, 90, 180]) {
-        const orientedBounds = rotatedRect(bounds, rotation);
-        const center = {
-            x: (orientedBounds.left + orientedBounds.right) / 2,
-            y: (orientedBounds.top + orientedBounds.bottom) / 2,
-        };
-        const initial = {
-            x: snapped(target.x - center.x),
-            y: snapped(target.y - center.y),
-        };
-        const tried = new Set<string>();
-        for (let radius = 0; radius <= maxRadius; radius += 1) {
-            for (let dx = -radius; dx <= radius; dx += 1) {
-                for (let dy = -radius; dy <= radius; dy += 1) {
-                    if (radius && Math.abs(dx) !== radius && Math.abs(dy) !== radius) continue;
-                    const offset = {
-                        x: snapped(initial.x + dx * step),
-                        y: snapped(initial.y + dy * step),
-                    };
-                    const key = pointKey(offset);
-                    if (tried.has(key)) continue;
-                    tried.add(key);
-                    const candidate = translated(orientedBounds, offset, 5.08);
-                    if (candidate.left < 0 || candidate.top < 0
-                        || candidate.right > paper.x || candidate.bottom > paper.y) continue;
-                    if (!occupied.some((rect) => intersects(candidate, rect))) {
-                        return { offset, rotation };
-                    }
-                }
+    const center = {
+        x: (bounds.left + bounds.right) / 2,
+        y: (bounds.top + bounds.bottom) / 2,
+    };
+    const initial = {
+        x: snapped(target.x - center.x),
+        y: snapped(target.y - center.y),
+    };
+    const tried = new Set<string>();
+    for (let radius = 0; radius <= maxRadius; radius += 1) {
+        for (let dx = -radius; dx <= radius; dx += 1) {
+            for (let dy = -radius; dy <= radius; dy += 1) {
+                if (radius && Math.abs(dx) !== radius && Math.abs(dy) !== radius) continue;
+                const offset = {
+                    x: snapped(initial.x + dx * step),
+                    y: snapped(initial.y + dy * step),
+                };
+                const key = pointKey(offset);
+                if (tried.has(key)) continue;
+                tried.add(key);
+                const candidate = translated(bounds, offset, 5.08);
+                if (candidate.left < 0 || candidate.top < 0
+                    || candidate.right > paper.x || candidate.bottom > paper.y) continue;
+                if (!occupied.some((rect) => intersects(candidate, rect))) return { offset };
             }
         }
     }
@@ -432,31 +418,10 @@ export function emptySheetPlacement(source: string, assembly: CircuitAssembly, t
     return placementOffset(source, assembly, [], removed);
 }
 
-function rotatedRect(rect: Rect, rotation: number): Rect {
-    const points = [
-        { x: rect.left, y: rect.top },
-        { x: rect.right, y: rect.top },
-        { x: rect.right, y: rect.bottom },
-        { x: rect.left, y: rect.bottom },
-    ].map((point) => rotatedPoint(point, rotation));
-    return {
-        left: Math.min(...points.map((point) => point.x)),
-        right: Math.max(...points.map((point) => point.x)),
-        top: Math.min(...points.map((point) => point.y)),
-        bottom: Math.max(...points.map((point) => point.y)),
-    };
-}
-
 function serverPoint(point: Point, placement: Placement) {
-    // KiCad sheet coordinates are Y-down, just like the assembly server.
-    // Only library-local pin coordinates need the Y conversion in transformedPin().
-    const rotated = rotatedPoint({
-        x: point.x * SERVER_UNIT_MM,
-        y: point.y * SERVER_UNIT_MM,
-    }, placement.rotation);
     return {
-        x: snapped(placement.offset.x + rotated.x),
-        y: snapped(placement.offset.y + rotated.y),
+        x: snapped(placement.offset.x + point.x * SERVER_UNIT_MM),
+        y: snapped(placement.offset.y + point.y * SERVER_UNIT_MM),
     };
 }
 
@@ -1121,7 +1086,7 @@ export async function applyCircuitAssembly(
                     || component.designator.includes('|'))
                     ? shortAnchor || componentAnchor(component, placement)
                     : componentAnchor(component, placement);
-                const rotation = kicadRotation((component.pos.rotate || 0) + placement.rotation);
+                const rotation = kicadRotation(component.pos.rotate || 0);
                 const componentPins = new Map<string, Point>();
                 const componentPinLabelAngles = new Map<string, number>();
                 let kind: PlacedComponent['kind'];
