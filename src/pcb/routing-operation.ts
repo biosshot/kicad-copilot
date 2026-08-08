@@ -27,6 +27,12 @@ type RouteResult = {
     segments: number;
     vias: number;
     routability?: number;
+    report?: {
+        warnings: string[];
+        short_circuits: number;
+        introduced_short_circuits: number;
+        drc_report_path: string;
+    };
 };
 
 type RouteOperation = {
@@ -42,6 +48,18 @@ type RouteOperation = {
 };
 
 const operations = new Map<string, RouteOperation>();
+
+type DrcMetrics = ReturnType<typeof pcbDrcMetrics>;
+
+export function routeDrcChanges(baseline: DrcMetrics, candidate: DrcMetrics) {
+    const baselineErrors = new Set(baseline.errorViolations.map((item) => item.key));
+    const newErrors = candidate.errorViolations.filter((item) => !baselineErrors.has(item.key));
+    return {
+        newErrors,
+        blockingNewErrors: newErrors.filter((item) => item.type !== 'shorting_items'),
+        introducedShortCircuits: Math.max(0, candidate.shorts - baseline.shorts),
+    };
+}
 
 function publicStatus(operation: RouteOperation) {
     if (operation.status === 'completed') return operation.result;
@@ -128,24 +146,19 @@ async function runOperation(operation: RouteOperation, options: AutoRouteOptions
                 }))
                 : await inspectPcbCandidate(current.path, candidate);
             const candidateDrc = pcbDrcMetrics(inspected.report);
-            const baselineErrors = new Set(baselineDrc.errorViolations.map((item) => item.key));
-            const newErrors = candidateDrc.errorViolations.filter((item) => !baselineErrors.has(item.key));
+            const { newErrors, blockingNewErrors, introducedShortCircuits } = routeDrcChanges(
+                baselineDrc,
+                candidateDrc,
+            );
+            const candidateArtifactPath = join(artifactDirectory, `${operation.id}-candidate.kicad_pcb`);
+            const drcReportPath = join(artifactDirectory, `${operation.id}-drc.json`);
             if (candidateDrc.shorts > 0
                 || candidateDrc.unconnected > baselineDrc.unconnected
                 || newErrors.length > 0) {
                 await Promise.all([
-                    writeFile(
-                        join(artifactDirectory, `${operation.id}-rejected.kicad_pcb`),
-                        serializePcb(inspected.root),
-                    ),
-                    writeFile(
-                        join(artifactDirectory, `${operation.id}-rejected-drc.json`),
-                        JSON.stringify(inspected.report, null, 2),
-                    ),
+                    writeFile(candidateArtifactPath, serializePcb(inspected.root)),
+                    writeFile(drcReportPath, JSON.stringify(inspected.report, null, 2)),
                 ]);
-            }
-            if (candidateDrc.shorts > 0) {
-                throw new Error(`auto route rejected by KiCad DRC: ${candidateDrc.shorts} short circuit(s)`);
             }
             if (candidateDrc.unconnected > baselineDrc.unconnected) {
                 throw new Error(
@@ -153,17 +166,22 @@ async function runOperation(operation: RouteOperation, options: AutoRouteOptions
                     + `from ${baselineDrc.unconnected} to ${candidateDrc.unconnected}`,
                 );
             }
-            if (newErrors.length) {
-                const types = [...new Set(newErrors.map((item) => item.type))];
+            if (blockingNewErrors.length) {
+                const types = [...new Set(blockingNewErrors.map((item) => item.type))];
                 throw new Error(
-                    `auto route rejected by KiCad DRC: ${newErrors.length} new error(s) `
+                    `auto route rejected by KiCad DRC: ${blockingNewErrors.length} new error(s) `
                     + `(${types.join(', ')})`,
                 );
             }
             operation.controller.signal.throwIfAborted();
             await saveCheckpoint(current.path, 'Before local auto route');
             await atomicWritePcb(current.path, current.source, inspected.root);
-            return counts;
+            return {
+                ...counts,
+                shortCircuits: candidateDrc.shorts,
+                introducedShortCircuits,
+                drcReportPath,
+            };
         });
         operation.result = {
             status: 'ok',
@@ -171,6 +189,14 @@ async function runOperation(operation: RouteOperation, options: AutoRouteOptions
             segments: applied.segments,
             vias: applied.vias,
             ...(Number.isFinite(routerResult.routabitity) ? { routability: routerResult.routabitity } : {}),
+            ...(applied.shortCircuits > 0 ? {
+                report: {
+                    warnings: [`KiCad DRC: ${applied.shortCircuits} short circuit(s)`],
+                    short_circuits: applied.shortCircuits,
+                    introduced_short_circuits: applied.introducedShortCircuits,
+                    drc_report_path: applied.drcReportPath,
+                },
+            } : {}),
         };
         operation.progress = 1;
         operation.stage = 'completed';

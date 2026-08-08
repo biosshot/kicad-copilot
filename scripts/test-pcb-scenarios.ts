@@ -13,6 +13,7 @@ import { pcbTemplate } from '../src/kicad/pcb-template';
 import { atom, findChild, isSExpressionList, parseSExpression, printSExpression, SExpression, token } from '../src/kicad/sexpr/ast';
 import { importPcbChanges } from '../src/pcb/import';
 import { pcbLayoutWithoutPlacementResult } from '../src/pcb/layout-operation';
+import { routeDrcChanges } from '../src/pcb/routing-operation';
 import { buildRouterInput } from '../src/pcb/router-adapter';
 import { netClassFor, readPcbRoutingRules } from '../src/pcb/router-rules';
 import { runProcessChecked } from '../src/utils/process';
@@ -33,6 +34,13 @@ async function copperLayerNames(path: string) {
 }
 
 async function main() {
+    const routeDrc = routeDrcChanges(
+        { shorts: 0, unconnected: 0, errorViolations: [] },
+        { shorts: 1, unconnected: 0, errorViolations: [{ key: 'shorting_items:a|b', type: 'shorting_items' }] },
+    );
+    assert.equal(routeDrc.introducedShortCircuits, 1);
+    assert.equal(routeDrc.blockingNewErrors.length, 0, 'short circuits must be reported without rejecting routing');
+
     const layoutReport = { status: 'error', dsl: { ok: false } };
     assert.deepEqual(pcbLayoutWithoutPlacementResult('layout-op', {
         content: 'status: error\n\nDSL:\nok: false\nerrors:\n- invalid DSL',

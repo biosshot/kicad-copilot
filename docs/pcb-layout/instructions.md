@@ -83,6 +83,7 @@ Use `compactness: "high"` only when board area is genuinely constrained.
 - It preserves existing tracks and vias. Call `clear_pcb_routing` first for a full reroute.
 - GND is ignored by default and handled by managed full-board pours and stitching vias.
 - If the result is running, call `wait_auto_route({ operation_id })`; use `cancel_auto_route` for obsolete work.
+- KiCad DRC short circuits are returned in the routing `report` as warnings and do not prevent applying the result.
 - Never move components while routing is running. A changed PCB is rejected before application.
 - `pour_pcb_layers` rebuilds only MCP-managed zones and stitching vias. Manual zones are preserved.
 - Routing success is not final sign-off: inspect the board and run `kicad-cli pcb drc` after routing.
