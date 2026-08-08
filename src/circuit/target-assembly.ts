@@ -18,22 +18,27 @@ export function targetCircuitAssembly(
         .map((component) => component.designator)
         .filter((designator) => !targetDesignators.has(designator)));
     const isForeign = (designator: string) => foreignDesignators.has(baseDesignator(designator));
-    const edgeIsForeign = (edge: CircuitAssembly['edges'][number]) => {
-        const shapes = [
-            ...edge.sources,
-            ...edge.targets,
-            ...edge.sections.flatMap((section) => [section.incomingShape, section.outgoingShape]),
-        ];
-        return shapes.some((shape) => {
-            const designator = shapeDesignator(shape);
-            return designator ? isForeign(designator) : false;
-        });
+    const shapeIsForeign = (shape: string | undefined) => {
+        const designator = shapeDesignator(shape);
+        return designator ? isForeign(designator) : false;
     };
+    const edges = assembly.edges.flatMap((edge) => {
+        const sections = edge.sections.filter((section) => (
+            !shapeIsForeign(section.incomingShape) && !shapeIsForeign(section.outgoingShape)
+        ));
+        if (!sections.length) return [];
+        return [{
+            ...edge,
+            sources: edge.sources.filter((shape) => !shapeIsForeign(shape)),
+            targets: edge.targets.filter((shape) => !shapeIsForeign(shape)),
+            sections,
+        }];
+    });
 
     return {
         ...assembly,
         components: assembly.components.filter((component) => !isForeign(component.designator)),
-        edges: assembly.edges.filter((edge) => !edgeIsForeign(edge)),
+        edges,
         added_net: assembly.added_net?.filter((item) => !isForeign(item.designator)),
         rm_net: assembly.rm_net?.filter((item) => !isForeign(item.designator)),
         rm_components: assembly.rm_components?.filter((designator) => !isForeign(designator)),

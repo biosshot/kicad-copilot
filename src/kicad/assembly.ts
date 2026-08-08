@@ -4,6 +4,7 @@ import { ConvertedComponent, convertComponent } from '../components/converter';
 import { getPowerSymbol } from '../components/kicad-library';
 import { projectFootprintId, writeProjectLibraries } from '../components/project-library';
 import { CircuitAssembly, ExplainCircuit } from '../types/circuit';
+import { DiagnosticReporter } from '../utils/diagnostics';
 import {
     atom,
     findChild,
@@ -819,7 +820,11 @@ function nextPortReference(source: string) {
     return () => `#PORT${String(value++).padStart(4, '0')}`;
 }
 
-function preparedRealAssets(assembly: CircuitAssembly, input: ExplainCircuit) {
+async function preparedRealAssets(
+    assembly: CircuitAssembly,
+    input: ExplainCircuit,
+    report: DiagnosticReporter,
+) {
     const uuids = [...new Set([
         ...assembly.components
             .filter((component) => component.part_uuid
@@ -830,8 +835,18 @@ function preparedRealAssets(assembly: CircuitAssembly, input: ExplainCircuit) {
             .map((component) => component.part_uuid!),
         ...input.components.flatMap((component) => component.part_uuid ? [component.part_uuid] : []),
     ])];
-    return Promise.all(uuids.map(async (partUuid) => [partUuid, await convertComponent(partUuid)] as const))
-        .then((entries) => new Map(entries));
+    const entries = await Promise.all(uuids.map(async (partUuid) => {
+        try {
+            return [partUuid, await convertComponent(partUuid)] as const;
+        } catch (error) {
+            const designators = [...assembly.components, ...input.components]
+                .filter((component) => component.part_uuid === partUuid)
+                .map((component) => component.designator);
+            report(error, `component conversion failed (${designators.join(', ') || partUuid})`);
+            return undefined;
+        }
+    }));
+    return new Map(entries.filter((entry): entry is readonly [string, ConvertedComponent] => Boolean(entry)));
 }
 
 function inputSignal(input: ExplainCircuit, designator: string, pinNumber: string | number) {
@@ -845,17 +860,39 @@ export async function applyCircuitAssembly(
     path: string,
     assembly: CircuitAssembly,
     input: ExplainCircuit,
+    report: DiagnosticReporter = (error, context) => {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`[schematic assembly] ${context ? `${context}: ` : ''}${message}`);
+    },
 ) {
     if (!Array.isArray(assembly.components) || !Array.isArray(assembly.edges)) {
         throw new Error('invalid CircuitAssembly response');
     }
 
-    const realAssets = await preparedRealAssets(assembly, input);
+    const realAssets = await preparedRealAssets(assembly, input, report);
+    const fallbackSignals = assembly.components.flatMap((component) => component.pins
+        .map((pin) => pin.signal_name.trim())
+        .filter((signal) => signal && signal.toUpperCase() !== 'NC'));
     const needsGround = assembly.components.some((component) => component.part_uuid === 'GND')
-        || assembly.added_net?.some((net) => net.net === 'GND');
+        || assembly.added_net?.some((net) => net.net === 'GND')
+        || fallbackSignals.some((signal) => signal.toUpperCase() === 'GND');
+    const needsPort = assembly.components.some((component) => component.part_uuid === 'VCC'
+        || component.value === 'unknown_shortsym'
+        || component.designator.includes('|'))
+        || Boolean(assembly.added_net?.some((net) => net.net !== 'GND'))
+        || fallbackSignals.some((signal) => signal.toUpperCase() !== 'GND');
+    const loadPowerSymbol = async (name: string, needed: boolean) => {
+        if (!needed) return undefined;
+        try {
+            return await getPowerSymbol(name);
+        } catch (error) {
+            report(error, `${name} service symbol unavailable`);
+            return undefined;
+        }
+    };
     const [groundSource, portSource] = await Promise.all([
-        needsGround ? getPowerSymbol('GND') : undefined,
-        getPowerSymbol('VCC'),
+        loadPowerSymbol('GND', Boolean(needsGround)),
+        loadPowerSymbol('VCC', needsPort),
     ]);
 
     return mutateSchematic(path, async (source) => {
@@ -868,11 +905,24 @@ export async function applyCircuitAssembly(
             ...(assembly.rm_components || []),
             ...(assembly.replace_components || []),
         ].map(baseDesignator));
+        const unavailableRealDesignators = new Set(assembly.components
+            .filter((component) => component.part_uuid !== 'GND'
+                && component.part_uuid !== 'VCC'
+                && component.value !== 'unknown_shortsym'
+                && !component.designator.includes('|')
+                && (!component.part_uuid || !realAssets.has(component.part_uuid)))
+            .map((component) => baseDesignator(component.designator)));
+        for (const designator of unavailableRealDesignators) removalDesignators.delete(designator);
         if (assembly.replace_components?.length) {
             console.error(`In-place replacement fallback: ${assembly.replace_components.join(', ')}`);
         }
         const removed = allExisting.filter((item) => removalDesignators.has(item.reference));
         const retained = allExisting.filter((item) => !removalDesignators.has(item.reference));
+        for (const designator of removalDesignators) {
+            if (!allExisting.some((item) => item.reference === designator)) {
+                report(`component not found: ${designator}`, 'component removal skipped');
+            }
+        }
         const retainedReal = retained.filter((item) => !item.service);
         const fullPhysicalRebuild = removed.length > 0 && retainedReal.length === 0;
         const edits: SourceEdit[] = removed.map(({ range }) => ({
@@ -915,9 +965,19 @@ export async function applyCircuitAssembly(
         const disconnectPoints = new Set(removed.flatMap((item) => [...item.pins.values()].map(pointKey)));
         for (const net of assembly.rm_net || []) {
             const signal = inputSignal(input, net.designator, net.pin_number);
-            if (signal && signal !== net.net) continue;
+            if (signal && signal !== net.net) {
+                report(
+                    `expected ${net.net}, found ${signal}`,
+                    `net removal skipped (${net.designator}.${net.pin_number})`,
+                );
+                continue;
+            }
             const point = existingPinPoints.get(`${baseDesignator(net.designator)}_pin_${net.pin_number}`);
             if (point) disconnectPoints.add(pointKey(point));
+            else report(
+                `pin not found: ${baseDesignator(net.designator)}_pin_${net.pin_number}`,
+                'net removal skipped',
+            );
         }
         const retainedPinPoints = retainedReal
             .flatMap((item) => [...item.pins.values()])
@@ -998,15 +1058,19 @@ export async function applyCircuitAssembly(
             if (component.part_uuid) representativeDesignators.set(component.part_uuid, component.designator);
         }
         for (const [partUuid, asset] of realAssets) {
-            const normalized = normalizedComponentSymbol(
-                asset.symbol,
-                representativeDesignators.get(partUuid) || 'U',
-                'kicad-copilot',
-                `${asset.product_code}_`,
-            );
-            const embedded = embeddedLibrarySymbol(normalized, 'kicad-copilot', version);
-            embeddedAssets.set(partUuid, embedded);
-            definitions.set(embedded.id, embedded);
+            try {
+                const normalized = normalizedComponentSymbol(
+                    asset.symbol,
+                    representativeDesignators.get(partUuid) || 'U',
+                    'kicad-copilot',
+                    `${asset.product_code}_`,
+                );
+                const embedded = embeddedLibrarySymbol(normalized, 'kicad-copilot', version);
+                embeddedAssets.set(partUuid, embedded);
+                definitions.set(embedded.id, embedded);
+            } catch (error) {
+                report(error, `symbol preparation failed (${representativeDesignators.get(partUuid) || partUuid})`);
+            }
         }
         const objects: string[] = [];
         const placed: PlacedComponent[] = [];
@@ -1029,6 +1093,7 @@ export async function applyCircuitAssembly(
 
         const portDefinitions = new Map<string, EmbeddedSymbol>();
         const portEmbedded = (signal: string, power: boolean) => {
+            if (!portSource) throw new Error('VCC service symbol unavailable');
             const key = `${power ? 'power' : 'signal'}:${signal}`;
             const existing = portDefinitions.get(key);
             if (existing) return existing;
@@ -1043,127 +1108,133 @@ export async function applyCircuitAssembly(
         };
         const paper = pageSize(source);
         for (const component of assembly.components) {
-            const exact = component.designator;
-            const primaryPin = component.pins[0]
-                ? `${exact}_pin_${component.pins[0].pin_number}`
-                : undefined;
-            const shortAnchor = primaryPin ? serverShapePoints.get(primaryPin) : undefined;
-            let anchor = (component.part_uuid === 'GND'
-                || component.part_uuid === 'VCC'
-                || component.value === 'unknown_shortsym'
-                || component.designator.includes('|'))
-                ? shortAnchor || componentAnchor(component, placement)
-                : componentAnchor(component, placement);
-            const rotation = kicadRotation((component.pos.rotate || 0) + placement.rotation);
-            const componentPins = new Map<string, Point>();
-            const componentPinLabelAngles = new Map<string, number>();
-            let kind: PlacedComponent['kind'];
+            const objectCount = objects.length;
+            try {
+                const exact = component.designator;
+                const primaryPin = component.pins[0]
+                    ? `${exact}_pin_${component.pins[0].pin_number}`
+                    : undefined;
+                const shortAnchor = primaryPin ? serverShapePoints.get(primaryPin) : undefined;
+                const anchor = (component.part_uuid === 'GND'
+                    || component.part_uuid === 'VCC'
+                    || component.value === 'unknown_shortsym'
+                    || component.designator.includes('|'))
+                    ? shortAnchor || componentAnchor(component, placement)
+                    : componentAnchor(component, placement);
+                const rotation = kicadRotation((component.pos.rotate || 0) + placement.rotation);
+                const componentPins = new Map<string, Point>();
+                const componentPinLabelAngles = new Map<string, number>();
+                let kind: PlacedComponent['kind'];
 
-            if (component.part_uuid === 'GND') {
-                if (!groundEmbedded) throw new Error('GND symbol not prepared');
-                kind = 'gnd';
-                const reference = powerReference();
-                objects.push(symbolInstance({
-                    embedded: groundEmbedded,
-                    component,
-                    anchor,
-                    projectName,
-                    documentUuid,
-                    reference,
-                    value: 'GND',
-                    power: 'ground',
-                    rotation,
-                }));
-                for (const pin of uniquePins(groundEmbedded.pins).values()) {
-                    componentPins.set(pin.number, transformedPin(pin, anchor, rotation, false));
-                    componentPinLabelAngles.set(
-                        pin.number,
-                        transformedPinLabelAngle(pin, rotation, false),
-                    );
+                if (component.part_uuid === 'GND') {
+                    if (!groundEmbedded) throw new Error('GND symbol not prepared');
+                    kind = 'gnd';
+                    const reference = powerReference();
+                    objects.push(symbolInstance({
+                        embedded: groundEmbedded,
+                        component,
+                        anchor,
+                        projectName,
+                        documentUuid,
+                        reference,
+                        value: 'GND',
+                        power: 'ground',
+                        rotation,
+                    }));
+                    for (const pin of uniquePins(groundEmbedded.pins).values()) {
+                        componentPins.set(pin.number, transformedPin(pin, anchor, rotation, false));
+                        componentPinLabelAngles.set(
+                            pin.number,
+                            transformedPinLabelAngle(pin, rotation, false),
+                        );
+                    }
+                } else if (component.part_uuid === 'VCC'
+                    || component.value === 'unknown_shortsym'
+                    || component.designator.includes('|')) {
+                    kind = 'port';
+                    const signal = component.pins.find((pin) => pin.signal_name.trim())?.signal_name.trim();
+                    if (!signal) throw new Error(`port signal missing: ${component.designator}`);
+                    const power = component.part_uuid === 'VCC' || isPowerSignal(signal);
+                    const embedded = portEmbedded(signal, power);
+                    const reference = power ? powerReference() : portReference();
+                    objects.push(symbolInstance({
+                        embedded,
+                        component,
+                        anchor,
+                        projectName,
+                        documentUuid,
+                        reference,
+                        value: signal,
+                        power: 'port',
+                        rotation,
+                    }));
+                    for (const pin of component.pins) {
+                        componentPins.set(String(pin.pin_number), anchor);
+                    }
+                } else {
+                    kind = 'real';
+                    if (!component.part_uuid) throw new Error(`part_uuid missing: ${component.designator}`);
+                    const converted = realAssets.get(component.part_uuid) as ConvertedComponent | undefined;
+                    const embedded = embeddedAssets.get(component.part_uuid);
+                    if (!converted || !embedded) throw new Error(`component conversion missing: ${component.designator}`);
+                    objects.push(symbolInstance({
+                        embedded,
+                        component,
+                        anchor,
+                        projectName,
+                        documentUuid,
+                        rotation,
+                    }));
+                    const requestedPins = new Set(component.pins.map((pin) => String(pin.pin_number)));
+                    for (const pin of uniquePins(embedded.pins).values()) {
+                        if (!requestedPins.has(pin.number)) continue;
+                        componentPins.set(
+                            pin.number,
+                            transformedPin(pin, anchor, rotation, Boolean(component.pos.mirror)),
+                        );
+                        componentPinLabelAngles.set(
+                            pin.number,
+                            transformedPinLabelAngle(pin, rotation, Boolean(component.pos.mirror)),
+                        );
+                    }
                 }
-            } else if (component.part_uuid === 'VCC'
-                || component.value === 'unknown_shortsym'
-                || component.designator.includes('|')) {
-                kind = 'port';
-                const signal = component.pins.find((pin) => pin.signal_name.trim())?.signal_name.trim();
-                if (!signal) throw new Error(`port signal missing: ${component.designator}`);
-                const power = component.part_uuid === 'VCC' || isPowerSignal(signal);
-                const embedded = portEmbedded(signal, power);
-                const reference = power ? powerReference() : portReference();
-                objects.push(symbolInstance({
-                    embedded,
-                    component,
+
+                const placedComponent = {
+                    source: component,
                     anchor,
-                    projectName,
-                    documentUuid,
-                    reference,
-                    value: signal,
-                    power: 'port',
-                    rotation,
-                }));
+                    pins: componentPins,
+                    kind,
+                };
+                placed.push(placedComponent);
+                const base = baseDesignator(exact);
+                ownerAnchors.set(exact, anchor);
+                ownerAnchors.set(base, anchor);
+                ownerPins.set(exact, [...componentPins.values()]);
+                if (!ownerPins.has(base)) ownerPins.set(base, [...componentPins.values()]);
+                for (const [pin, point] of componentPins) {
+                    const exactShape = `${exact}_pin_${pin}`;
+                    const baseShape = `${base}_pin_${pin}`;
+                    edgePins.set(exactShape, point);
+                    pinOwners.set(exactShape, anchor);
+                    const labelAngle = componentPinLabelAngles.get(pin);
+                    if (labelAngle !== undefined) pinLabelAngles.set(exactShape, labelAngle);
+                    if (!edgePins.has(baseShape)) edgePins.set(baseShape, point);
+                    if (!pinOwners.has(baseShape)) pinOwners.set(baseShape, anchor);
+                    if (labelAngle !== undefined && !pinLabelAngles.has(baseShape)) {
+                        pinLabelAngles.set(baseShape, labelAngle);
+                    }
+                }
                 for (const pin of component.pins) {
-                    componentPins.set(String(pin.pin_number), anchor);
+                    const signal = pin.signal_name.trim();
+                    if (!signal) continue;
+                    edgeSignals.set(`${exact}_pin_${pin.pin_number}`, signal);
+                    if (!edgeSignals.has(`${base}_pin_${pin.pin_number}`)) {
+                        edgeSignals.set(`${base}_pin_${pin.pin_number}`, signal);
+                    }
                 }
-            } else {
-                kind = 'real';
-                if (!component.part_uuid) throw new Error(`part_uuid missing: ${component.designator}`);
-                const converted = realAssets.get(component.part_uuid) as ConvertedComponent | undefined;
-                const embedded = embeddedAssets.get(component.part_uuid);
-                if (!converted || !embedded) throw new Error(`component conversion missing: ${component.designator}`);
-                objects.push(symbolInstance({
-                    embedded,
-                    component,
-                    anchor,
-                    projectName,
-                    documentUuid,
-                    rotation,
-                }));
-                const requestedPins = new Set(component.pins.map((pin) => String(pin.pin_number)));
-                for (const pin of uniquePins(embedded.pins).values()) {
-                    if (!requestedPins.has(pin.number)) continue;
-                    componentPins.set(
-                        pin.number,
-                        transformedPin(pin, anchor, rotation, Boolean(component.pos.mirror)),
-                    );
-                    componentPinLabelAngles.set(
-                        pin.number,
-                        transformedPinLabelAngle(pin, rotation, Boolean(component.pos.mirror)),
-                    );
-                }
-            }
-
-            const placedComponent = {
-                source: component,
-                anchor,
-                pins: componentPins,
-                kind,
-            };
-            placed.push(placedComponent);
-            const base = baseDesignator(exact);
-            ownerAnchors.set(exact, anchor);
-            ownerAnchors.set(base, anchor);
-            ownerPins.set(exact, [...componentPins.values()]);
-            if (!ownerPins.has(base)) ownerPins.set(base, [...componentPins.values()]);
-            for (const [pin, point] of componentPins) {
-                const exactShape = `${exact}_pin_${pin}`;
-                const baseShape = `${base}_pin_${pin}`;
-                edgePins.set(exactShape, point);
-                pinOwners.set(exactShape, anchor);
-                const labelAngle = componentPinLabelAngles.get(pin);
-                if (labelAngle !== undefined) pinLabelAngles.set(exactShape, labelAngle);
-                if (!edgePins.has(baseShape)) edgePins.set(baseShape, point);
-                if (!pinOwners.has(baseShape)) pinOwners.set(baseShape, anchor);
-                if (labelAngle !== undefined && !pinLabelAngles.has(baseShape)) {
-                    pinLabelAngles.set(baseShape, labelAngle);
-                }
-            }
-            for (const pin of component.pins) {
-                const signal = pin.signal_name.trim();
-                if (!signal) continue;
-                edgeSignals.set(`${exact}_pin_${pin.pin_number}`, signal);
-                if (!edgeSignals.has(`${base}_pin_${pin.pin_number}`)) {
-                    edgeSignals.set(`${base}_pin_${pin.pin_number}`, signal);
-                }
+            } catch (error) {
+                objects.length = objectCount;
+                report(error, `component skipped (${component.designator})`);
             }
         }
 
@@ -1191,36 +1262,50 @@ export async function applyCircuitAssembly(
         const routedEdges = [...assembly.edges].sort((left, right) =>
             signalPriority(signalForEdge(left)) - signalPriority(signalForEdge(right)));
         for (const edge of routedEdges) {
+            let edgeApplied = false;
             for (const section of edge.sections || []) {
-                const start = section.incomingShape
+                const serverStart = serverPoint(section.startPoint, placement);
+                const serverEnd = serverPoint(section.endPoint, placement);
+                const resolvedStart = section.incomingShape
                     ? edgePins.get(section.incomingShape)
-                    : serverPoint(section.startPoint, placement);
-                const end = section.outgoingShape
+                    : undefined;
+                const resolvedEnd = section.outgoingShape
                     ? edgePins.get(section.outgoingShape)
-                    : serverPoint(section.endPoint, placement);
-                if (section.incomingShape && !start) throw new Error(`pin not found: ${section.incomingShape}`);
-                if (section.outgoingShape && !end) throw new Error(`pin not found: ${section.outgoingShape}`);
-                if (!start || !end) throw new Error(`edge endpoint not found: ${section.id}`);
-                if (section.incomingShape) usedShapes.add(section.incomingShape);
-                if (section.outgoingShape) usedShapes.add(section.outgoingShape);
+                    : undefined;
+                if (section.incomingShape && !resolvedStart) {
+                    report(`pin not found: ${section.incomingShape}`, `edge ${section.id}`);
+                }
+                if (section.outgoingShape && !resolvedEnd) {
+                    report(`pin not found: ${section.outgoingShape}`, `edge ${section.id}`);
+                }
+                const start = resolvedStart || serverStart;
+                const end = resolvedEnd || serverEnd;
 
                 const sectionSignals = new Set([
                     section.incomingShape ? edgeSignals.get(section.incomingShape) : undefined,
                     section.outgoingShape ? edgeSignals.get(section.outgoingShape) : undefined,
                 ].filter((signal): signal is string => Boolean(signal)));
                 if (sectionSignals.size > 1) {
-                    throw new Error(`conflicting edge signals: ${section.id}`);
+                    report(`conflicting edge signals: ${[...sectionSignals].join(', ')}`, `edge ${section.id} skipped`);
+                    continue;
                 }
                 const signal = sectionSignals.size === 1 ? [...sectionSignals][0] : undefined;
-                const points = routedSectionPoints(section, start, end, placement);
-                for (let index = 1; index < points.length; index += 1) {
-                    const segment = { start: points[index - 1], end: points[index], signal };
-                    if (pointKey(segment.start) === pointKey(segment.end)) continue;
-                    generatedSegments.push(segment);
+                try {
+                    const points = routedSectionPoints(section, start, end, placement);
+                    for (let index = 1; index < points.length; index += 1) {
+                        const segment = { start: points[index - 1], end: points[index], signal };
+                        if (pointKey(segment.start) === pointKey(segment.end)) continue;
+                        generatedSegments.push(segment);
+                    }
+                    if (section.incomingShape) usedShapes.add(section.incomingShape);
+                    if (section.outgoingShape) usedShapes.add(section.outgoingShape);
+                    edgeApplied = true;
+                } catch (error) {
+                    report(error, `edge ${section.id} skipped`);
                 }
             }
             const junctionPoints = (edge as typeof edge & { junctionPoints?: Point[] }).junctionPoints;
-            for (const point of junctionPoints || []) {
+            for (const point of edgeApplied ? junctionPoints || [] : []) {
                 requestedJunctions.push(serverPoint(point, placement));
             }
         }
@@ -1272,11 +1357,15 @@ export async function applyCircuitAssembly(
             const shape = `${base}_pin_${pinNumber}`;
             const exactShape = `${designator}_pin_${pinNumber}`;
             const resolvedShape = edgePins.has(exactShape) ? exactShape : shape;
-            if (!edgePins.has(resolvedShape)) throw new Error(`pin not found: ${shape}`);
+            if (!edgePins.has(resolvedShape)) {
+                report(`pin not found: ${shape}`, `connection skipped (${designator}.${pinNumber}, ${signal})`);
+                return false;
+            }
             const key = `${shape}\u0000${signal}`;
-            if (connectionKeys.has(key)) return;
+            if (connectionKeys.has(key)) return true;
             connectionKeys.add(key);
             pendingConnections.push({ designator, pinNumber, signal });
+            return true;
         };
         const addNamedConnection = (
             designator: string,
@@ -1290,7 +1379,6 @@ export async function applyCircuitAssembly(
             const resolvedShape = edgePins.has(exactShape) ? exactShape : shape;
             const pin = edgePins.get(resolvedShape);
             if (!pin) throw new Error(`pin not found: ${shape}`);
-            removeNoConnectAt(pin);
             const owner = pinOwners.get(resolvedShape) || ownerAnchors.get(base) || pin;
             const ownerPinPoints = ownerPins.get(designator) || ownerPins.get(base) || [];
             const primaryAngle = pinLabelAngles.get(resolvedShape) ?? outwardLabelAngle(pin, owner);
@@ -1373,6 +1461,13 @@ export async function applyCircuitAssembly(
             if (!selected) {
                 throw new Error(`no free connection path: ${designator}.${pinNumber} (${signal})`);
             }
+            if (selected.port && signal === 'GND' && !groundEmbedded) {
+                throw new Error('GND symbol not prepared');
+            }
+            if (selected.port && signal !== 'GND' && !portSource) {
+                throw new Error('VCC service symbol unavailable');
+            }
+            removeNoConnectAt(pin);
             for (const segment of selected.segments) {
                 objects.push(wireSegment(segment.start, segment.end));
                 routingObstacles.push(segment);
@@ -1384,7 +1479,6 @@ export async function applyCircuitAssembly(
                 return;
             }
             if (signal === 'GND') {
-                if (!groundEmbedded) throw new Error('GND symbol not prepared');
                 const service: CircuitAssemblyComponent = {
                     designator: powerReference(),
                     value: 'GND',
@@ -1402,7 +1496,7 @@ export async function applyCircuitAssembly(
                     },
                 };
                 objects.push(symbolInstance({
-                    embedded: groundEmbedded,
+                    embedded: groundEmbedded!,
                     component: service,
                     anchor: selected.terminal,
                     projectName,
@@ -1446,7 +1540,11 @@ export async function applyCircuitAssembly(
             const oldSignal = inputSignal(input, item.designator, item.pin_number);
             if (oldSignal === item.net) continue;
             if (oldSignal && oldSignal.trim().toUpperCase() !== 'NC' && oldSignal !== item.net) {
-                throw new Error(`pin already connected to ${oldSignal}: ${item.designator}.${item.pin_number}`);
+                report(
+                    `pin already connected to ${oldSignal}`,
+                    `connection skipped (${item.designator}.${item.pin_number}, ${item.net})`,
+                );
+                continue;
             }
             queueNamedConnection(item.designator, item.pin_number, item.net);
         }
@@ -1458,7 +1556,10 @@ export async function applyCircuitAssembly(
                 const baseShape = `${baseDesignator(item.source.designator)}_pin_${pin.pin_number}`;
                 if (usedShapes.has(exactShape) || usedShapes.has(baseShape)) continue;
                 const point = item.pins.get(String(pin.pin_number));
-                if (!point) throw new Error(`pin not found: ${baseShape}`);
+                if (!point) {
+                    report(`pin not found: ${baseShape}`, `unused pin skipped (${item.source.designator})`);
+                    continue;
+                }
                 if (pin.signal_name.trim().toUpperCase() === 'NC') objects.push(noConnect(point));
                 else if (pin.signal_name.trim()) {
                     queueNamedConnection(item.source.designator, pin.pin_number, pin.signal_name.trim());
@@ -1483,12 +1584,19 @@ export async function applyCircuitAssembly(
         }
         for (const connection of pendingConnections) {
             const useLabel = (connectionCounts.get(baseDesignator(connection.designator)) || 0) >= 5;
-            addNamedConnection(
-                connection.designator,
-                connection.pinNumber,
-                connection.signal,
-                useLabel,
-            );
+            try {
+                addNamedConnection(
+                    connection.designator,
+                    connection.pinNumber,
+                    connection.signal,
+                    useLabel,
+                );
+            } catch (error) {
+                report(
+                    error,
+                    `connection skipped (${connection.designator}.${connection.pinNumber}, ${connection.signal})`,
+                );
+            }
         }
 
         if (assembly.assembly_options?.draw_blocks) {

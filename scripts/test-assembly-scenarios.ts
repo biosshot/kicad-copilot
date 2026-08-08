@@ -6,6 +6,7 @@ import { dirname, join } from 'node:path';
 import { beautifySchematic } from '../src/circuit/beautify';
 import { targetCircuitAssembly } from '../src/circuit/target-assembly';
 import {
+    applyCircuitAssembly,
     emptySheetPlacement,
     portDirectionAngles,
     portOffsetCandidates,
@@ -28,6 +29,11 @@ import {
 } from '../src/kicad/wire-removal';
 import { CircuitAssembly, CircuitMod, CircuitModStruct, ExplainCircuit } from '../src/types/circuit';
 import { runProcessChecked } from '../src/utils/process';
+import {
+    createDiagnosticCollector,
+    diagnosticToolResult,
+    MAX_TOOL_DIAGNOSTICS,
+} from '../src/utils/diagnostics';
 
 const RESISTOR_A = 'fa459f1466df4014badd43e0b80fd058';
 const RESISTOR_B = '37d3a2df709e430798d37c76a1425062';
@@ -282,11 +288,17 @@ async function main() {
                 ],
                 reused_blocks: [],
                 edges: [{
-                    sources: ['R1_pin_1'], targets: ['R2_pin_1'], container: 'test',
-                    sections: [{
-                        id: 'foreign-edge', startPoint: { x: 0, y: 0 }, endPoint: { x: 20, y: 0 },
-                        incomingShape: 'R1_pin_1', outgoingShape: 'R2_pin_1',
-                    }],
+                    sources: ['R1_pin_1'], targets: ['R1_pin_2', 'R2_pin_1'], container: 'test',
+                    sections: [
+                        {
+                            id: 'local-edge', startPoint: { x: 0, y: 0 }, endPoint: { x: 10, y: 0 },
+                            incomingShape: 'R1_pin_1', outgoingShape: 'R1_pin_2',
+                        },
+                        {
+                            id: 'foreign-edge', startPoint: { x: 0, y: 0 }, endPoint: { x: 20, y: 0 },
+                            incomingShape: 'R1_pin_1', outgoingShape: 'R2_pin_1',
+                        },
+                    ],
                 }],
                 blocks: [],
                 added_net: [
@@ -298,14 +310,28 @@ async function main() {
             }, { components: [local] }, { components: [local, foreign] });
             expect(assembly.components.every((component) => component.designator !== 'R2'),
                 'cross-sheet isolation: foreign component remains');
-            expect(assembly.edges.length === 0,
-                'cross-sheet isolation: foreign edge remains');
+            expect(assembly.edges.length === 1
+                && assembly.edges[0].sections.length === 1
+                && assembly.edges[0].sections[0].id === 'local-edge',
+            'cross-sheet isolation: local edge was removed with foreign section');
             expect(assembly.added_net?.length === 1 && assembly.added_net[0].designator === 'R1',
                 'cross-sheet isolation: added_net was not scoped to target');
             expect(assembly.rm_net?.length === 0,
                 'cross-sheet isolation: foreign rm_net remains');
             expect(assembly.rm_components?.length === 0,
                 'cross-sheet isolation: foreign removal remains');
+        });
+
+        await runScenario('LLM diagnostic limit', async () => {
+            const diagnostics = createDiagnosticCollector(MAX_TOOL_DIAGNOSTICS, () => undefined);
+            for (let index = 0; index < 40; index += 1) diagnostics.report(`error ${index + 1}`);
+            const summary = diagnostics.summary();
+            const toolResult = diagnosticToolResult(summary);
+            expect(summary.errors.length === 36, `diagnostics: expected 36 errors, got ${summary.errors.length}`);
+            expect(summary.error_count === 40 && summary.omitted_errors === 4,
+                `diagnostics: invalid totals ${JSON.stringify(summary)}`);
+            expect(typeof toolResult === 'object' && toolResult.errors.length === 36,
+                'diagnostics: tool result exceeds the LLM limit');
         });
 
         await runScenario('wire removal to junction', async () => {
@@ -384,6 +410,50 @@ async function main() {
         });
 
         const blank = await createSchematic(join(root, 'blank'));
+        await runScenario('best-effort missing edge pin', async () => {
+            const path = await copySchematic(blank, join(root, 'best-effort-edge'));
+            const source = resistor('R90');
+            const invalid = resistor('R91');
+            const assembly: CircuitAssembly = {
+                metadata: { project_name: 'test', description: 'best effort' },
+                components: [
+                    {
+                        ...source,
+                        pos: { x: 0, y: 0, center: { x: 5, y: 5 }, width: 10, height: 10, rotate: 0 },
+                    },
+                    {
+                        ...invalid,
+                        part_uuid: null,
+                        pos: { x: 20, y: 0, center: { x: 5, y: 5 }, width: 10, height: 10, rotate: 0 },
+                    },
+                ],
+                reused_blocks: [],
+                edges: [{
+                    sources: ['R90_pin_99'],
+                    targets: ['R90_pin_1'],
+                    container: 'test',
+                    sections: [{
+                        id: 'missing-local-pin',
+                        startPoint: { x: 0, y: 5 },
+                        endPoint: { x: 10, y: 5 },
+                        incomingShape: 'R90_pin_99',
+                        outgoingShape: 'R90_pin_1',
+                    }],
+                }],
+                blocks: [],
+                added_net: [{ designator: 'R90', pin_number: '99', net: 'MISSING_PIN' }],
+            };
+            const diagnostics = createDiagnosticCollector();
+            const status = await applyCircuitAssembly(path, assembly, { components: [] }, diagnostics.report);
+            expect(status === 'ok', `best effort edge: unexpected status ${status}`);
+            expect(diagnostics.summary().errors.some((error) => error.includes('R90_pin_99')),
+                'best effort edge: missing pin was not reported');
+            expect(diagnostics.summary().errors.some((error) => error.includes('R91')),
+                'best effort component: failed component was not reported');
+            expectComponent(await getSchematic(path), 'R90', { partUuid: RESISTOR_A });
+            expect(!component(await getSchematic(path), 'R91'),
+                'best effort component: invalid component was unexpectedly placed');
+        });
         const fixture = await copySchematic(blank, join(root, 'fixture'));
         await extractCircuit(fixture, modification({
             add_components: [resistor('R1'), resistor('R2')],

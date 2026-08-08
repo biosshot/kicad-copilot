@@ -2,6 +2,7 @@ import { restoreCheckpoint, saveCheckpoint } from '../checkpoints/store';
 import { applyCircuitAssembly } from '../kicad/assembly';
 import { getSchematic, getSchematicContext } from '../kicad/schematic-reader';
 import { CircuitAssembly, CircuitMod, ExplainCircuit } from '../types/circuit';
+import { createDiagnosticCollector, errorWithDiagnostics } from '../utils/diagnostics';
 import { postJson } from '../utils/server';
 import { targetCircuitAssembly } from './target-assembly';
 
@@ -77,23 +78,32 @@ export async function extractCircuit(
     const record = typeof response === 'object' && response !== null
         ? response as Record<string, unknown>
         : undefined;
+    const diagnostics = createDiagnosticCollector();
     const assembly = targetCircuitAssembly(
         (record?.circuit || response) as CircuitAssembly,
         inputCircuit,
         projectCircuit,
     );
     await options.onAssembly?.(assembly);
-    const applyResult = await applyCircuitAssembly(path, assembly, inputCircuit);
+    let applyResult: Awaited<ReturnType<typeof applyCircuitAssembly>>;
+    try {
+        applyResult = await applyCircuitAssembly(path, assembly, inputCircuit, diagnostics.report);
+    } catch (error) {
+        throw errorWithDiagnostics(error, diagnostics.summary());
+    }
     if (applyResult === 'unchanged') {
-        throw new Error('circuit assembly did not change the schematic');
+        throw errorWithDiagnostics(
+            new Error('circuit assembly did not change the schematic'),
+            diagnostics.summary(),
+        );
     }
     const result = await getSchematic(path);
     try {
         validateRequestedNets(circuit, result);
     } catch (error) {
         await restoreCheckpoint(path, checkpointId);
-        throw error;
+        throw errorWithDiagnostics(error, diagnostics.summary());
     }
 
-    return { checkpointId, result, assembly };
+    return { checkpointId, result, assembly, diagnostics: diagnostics.summary() };
 }

@@ -2,6 +2,7 @@ import { saveCheckpoint } from '../checkpoints/store';
 import { applyCircuitAssembly } from '../kicad/assembly';
 import { getSchematic, getSchematicContext } from '../kicad/schematic-reader';
 import { CircuitAssembly, CircuitMod, ExplainCircuit } from '../types/circuit';
+import { createDiagnosticCollector, errorWithDiagnostics } from '../utils/diagnostics';
 import { postJson } from '../utils/server';
 import { targetCircuitAssembly } from './target-assembly';
 
@@ -93,7 +94,12 @@ export async function beautifySchematic(path: string, blocks: SchematicBlocks) {
             .filter((designator) => !selected.has(baseDesignator(designator)));
     }
 
-    await applyCircuitAssembly(path, assembly, inputCircuit);
+    const diagnostics = createDiagnosticCollector();
+    try {
+        await applyCircuitAssembly(path, assembly, inputCircuit, diagnostics.report);
+    } catch (error) {
+        throw errorWithDiagnostics(error, diagnostics.summary());
+    }
     const result = await getSchematic(path);
-    return { checkpointId, result, assembly };
+    return { checkpointId, result, assembly, diagnostics: diagnostics.summary() };
 }

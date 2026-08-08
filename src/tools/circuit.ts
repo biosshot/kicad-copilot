@@ -4,6 +4,7 @@ import { beautifySchematic } from '../circuit/beautify';
 import { extractCircuit } from '../circuit/extract';
 import { CircuitModStruct } from '../types/circuit';
 import { SKILL_DOC_PATH } from '../utils/dirs';
+import { diagnosticToolResult } from '../utils/diagnostics';
 import { enqueueMutation } from '../utils/mutation-queue';
 import { postJson } from '../utils/server';
 import { runTool, textResult } from '../utils/tool-result';
@@ -48,7 +49,7 @@ export function registerCircuitTools(server: McpServer) {
         'beautify_schematic',
         {
             title: 'Beautify Schematic',
-            description: `Reassemble selected KiCad components into named functional blocks while preserving their electrical connections. For circuit workflow docs, read: ${SKILL_DOC_PATH}`,
+            description: `Reassemble selected KiCad components into named functional blocks while preserving their electrical connections. Recoverable item errors are returned (max 36). For circuit workflow docs, read: ${SKILL_DOC_PATH}`,
             inputSchema: z.object({
                 path: z.string().min(1).describe('Existing target .kicad_sch path.'),
                 blocks: z.record(
@@ -58,8 +59,8 @@ export function registerCircuitTools(server: McpServer) {
             }),
         },
         async ({ path, blocks }) => runTool(() => enqueueMutation(async () => {
-            await beautifySchematic(path, blocks);
-            return 'ok';
+            const { diagnostics } = await beautifySchematic(path, blocks);
+            return diagnosticToolResult(diagnostics);
         })),
     );
 
@@ -67,14 +68,14 @@ export function registerCircuitTools(server: McpServer) {
         'extract_circuit',
         {
             title: 'Extract Circuit',
-            description: `Apply circuit changes to a KiCad .kicad_sch file. Every added component must include part_uuid. For circuit modification docs, read: ${SKILL_DOC_PATH}`,
+            description: `Apply circuit changes to a KiCad .kicad_sch file. Every added component must include part_uuid. Recoverable item errors are returned (max 36). For circuit modification docs, read: ${SKILL_DOC_PATH}`,
             inputSchema: CircuitModStruct().extend({
                 path: z.string().min(1).describe('Existing target .kicad_sch path.'),
             }),
         },
         async ({ path, ...circuit }) => runTool(() => enqueueMutation(async () => {
-            await extractCircuit(path, circuit);
-            return 'ok';
+            const { diagnostics } = await extractCircuit(path, circuit);
+            return diagnosticToolResult(diagnostics);
         })),
     );
 }
