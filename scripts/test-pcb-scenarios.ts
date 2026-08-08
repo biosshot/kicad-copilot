@@ -10,7 +10,7 @@ import { footprintAt, footprintIsGenerated, footprintLayer, footprintReference, 
 import { footprintGeometryIsNormalized, normalizeEasyEdaFootprintGeometry } from '../src/kicad/footprint-normalization';
 import { atomicWritePcb, parsePcbSource } from '../src/kicad/pcb-writer';
 import { pcbTemplate } from '../src/kicad/pcb-template';
-import { atom, findChild, isSExpressionList, parseSExpression, printSExpression, SExpression, token } from '../src/kicad/sexpr/ast';
+import { atom, findChild, isSExpressionList, listHead, parseSExpression, printSExpression, SExpression, token } from '../src/kicad/sexpr/ast';
 import { importPcbChanges } from '../src/pcb/import';
 import { pcbLayoutWithoutPlacementResult } from '../src/pcb/layout-operation';
 import { routeDrcChanges } from '../src/pcb/routing-operation';
@@ -209,6 +209,13 @@ async function main() {
         assert.ok(pcbFootprints(board.root)
             .filter((footprint) => !footprintIsGenerated(footprint))
             .every(footprintGeometryIsNormalized), 'imported EasyEDA footprints must use normalized geometry');
+        assert.ok(pcbFootprints(board.root)
+            .filter((footprint) => !footprintIsGenerated(footprint))
+            .every((footprint) => {
+                const value = footprint.find((item) => isSExpressionList(item)
+                    && listHead(item) === 'property' && atom(item[1]) === 'Value') as SExpression[] | undefined;
+                return value && atom(findChild(value, 'hide')?.[1]) === 'yes';
+            }), 'footprint Value properties must stay hidden on the PCB');
         const refs = pcbFootprints(board.root).map(footprintReference).filter((value): value is string => Boolean(value));
         assert.ok(refs.length >= 2, 'import must retain schematic footprints');
         applyBoardAssemble(board.root, board.version, {

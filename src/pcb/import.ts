@@ -48,6 +48,8 @@ function setProperty(node: SExpression[], name: string, value: string, hidden = 
         && listHead(item) === 'property' && atom(item[1]) === name) as SExpression[] | undefined;
     if (existing) {
         existing[2] = token(value, true);
+        removeChildren(existing, 'hide');
+        if (hidden) existing.push([token('hide'), token('yes')]);
         return;
     }
     node.push([
@@ -136,7 +138,7 @@ function updateFootprintMetadata(
     version: number,
 ) {
     setProperty(footprint, 'Reference', component.designator, false);
-    setProperty(footprint, 'Value', component.value, false);
+    setProperty(footprint, 'Value', component.value);
     setProperty(footprint, 'EasyEDA part_uuid', component.part_uuid || '');
     setProperty(footprint, 'EasyEDA footprint_uuid', component.footprint_uuid || '');
     setProperty(footprint, 'Block Name', component.block_name || '');
