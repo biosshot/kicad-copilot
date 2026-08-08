@@ -6,7 +6,6 @@ import { dirname, join } from 'node:path';
 import { beautifySchematic } from '../src/circuit/beautify';
 import { targetCircuitAssembly } from '../src/circuit/target-assembly';
 import {
-    clearPortAnchor,
     emptySheetPlacement,
     portDirectionAngles,
     portOffsetCandidates,
@@ -100,6 +99,21 @@ function placedObjectUuids(source: string) {
     return output;
 }
 
+function serviceAnchorSignature(source: string) {
+    return findLists(source, 'symbol')
+        .filter((range) => (
+            range.text.includes('(lib_id ')
+            && /\(property\s+"Reference"\s+"#(?:PWR|PORT)/.test(range.text)
+        ))
+        .map((range) => {
+            const value = range.text.match(/\(property\s+"Value"\s+"([^"]*)"/)?.[1] || '';
+            const at = range.text.match(/\(lib_id\s+"[^"]+"\)\s+\(at\s+([-\d.]+)\s+([-\d.]+)/);
+            expect(at, `service anchor missing: ${value}`);
+            return `${value}\u0000${at[1]}\u0000${at[2]}`;
+        })
+        .sort();
+}
+
 function expectSignal(circuit: ExplainCircuit, designator: string, pin: string, signal: string) {
     const actual = expectComponent(circuit, designator);
     const actualPin = actual.pins.find((item) => String(item.pin_number) === pin);
@@ -175,21 +189,6 @@ async function main() {
             const horizontalOffsets = portOffsetCandidates(0);
             expect(horizontalOffsets[0] === -2.54 && horizontalOffsets[1] === 2.54,
                 `port offset: expected perpendicular offsets, got ${horizontalOffsets.slice(0, 2)}`);
-        });
-
-        await runScenario('port anchor avoids adjacent pins', async () => {
-            const target = { x: 100.33, y: 50.8 };
-            const adjusted = clearPortAnchor(
-                target,
-                target,
-                { x: 90.17, y: 50.8 },
-                [target, { x: 100.33, y: 53.34 }],
-                { x: 297, y: 210 },
-            );
-            expect(adjusted.x > target.x,
-                `port clearance: expected an outward stub, got ${JSON.stringify(adjusted)}`);
-            expect(Math.abs(adjusted.y - target.y) < 1e-6,
-                'port clearance: port moved across adjacent pins');
         });
 
         await runScenario('placement bounds use rendered geometry', async () => {
@@ -493,6 +492,9 @@ async function main() {
                 'power port: T-shaped marker is missing');
             expect(!powerDefinition?.text.includes('(xy -0.762 1.27)'),
                 'power port: old arrow marker remains');
+            const initialServiceAnchors = serviceAnchorSignature(initialSource);
+            expect(initialServiceAnchors.length > 0,
+                'beautify topology: initial assembly has no service symbols');
             const initialErc = await ercReport(path);
             expect(!/\[(lib_symbol_issues|footprint_link_issues)\]/.test(initialErc),
                 'project library: ERC still reports missing symbol or footprint libraries');
@@ -505,6 +507,11 @@ async function main() {
             const leftovers = [...oldObjects].filter((uuid) => currentObjects.has(uuid));
             expect(leftovers.length === 0,
                 `beautify topology: ${leftovers.length} old physical objects remain`);
+            expect(
+                JSON.stringify(serviceAnchorSignature(beautifiedSource))
+                    === JSON.stringify(initialServiceAnchors),
+                'beautify topology: server service symbols moved during rebuild',
+            );
 
             const realSymbols = findLists(beautifiedSource, 'symbol').filter((range) => (
                 range.text.includes('(lib_id "kicad-copilot:')
@@ -526,6 +533,11 @@ async function main() {
             expectComponent(repeated.result, 'R10', { blockName: 'Divider' });
             expectComponent(repeated.result, 'R11', { blockName: 'Divider' });
             const repeatedSource = await readFile(path, 'utf8');
+            expect(
+                JSON.stringify(serviceAnchorSignature(repeatedSource))
+                    === JSON.stringify(initialServiceAnchors),
+                'beautify topology: service symbols drift after repeated rebuild',
+            );
             expect(redundantJunctionRanges(repeatedSource).length === 0,
                 'beautify topology: redundant junctions remain');
         });

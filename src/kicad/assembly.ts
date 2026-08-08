@@ -30,7 +30,6 @@ import {
 
 const SERVER_UNIT_MM = 0.254;
 const GRID_MM = 1.27;
-const PORT_PIN_CLEARANCE_MM = GRID_MM * 3;
 const CONNECTION_LENGTHS_MM = [
     20, 30,
     ...Array.from({ length: 39 }, (_, index) => 40 + index * 20),
@@ -766,43 +765,6 @@ function outwardLabelAngle(pin: Point, owner: Point) {
     }
 }
 
-export function clearPortAnchor(
-    anchor: Point,
-    connectedPin: Point,
-    owner: Point,
-    pins: Point[],
-    paper: Point,
-) {
-    const collides = (point: Point) => pins.some((pin) => (
-        Math.abs(point.x - pin.x) < PORT_PIN_CLEARANCE_MM
-        && Math.abs(point.y - pin.y) < PORT_PIN_CLEARANCE_MM
-    ));
-    if (!collides(anchor)) return anchor;
-
-    const delta = {
-        x: anchor.x - connectedPin.x,
-        y: anchor.y - connectedPin.y,
-    };
-    const direction = Math.abs(delta.x) > 1e-6 || Math.abs(delta.y) > 1e-6
-        ? (Math.abs(delta.x) >= Math.abs(delta.y)
-            ? { x: Math.sign(delta.x), y: 0 }
-            : { x: 0, y: Math.sign(delta.y) })
-        : directionVector(outwardLabelAngle(connectedPin, owner));
-
-    for (const length of CONNECTION_LENGTHS_MM) {
-        const candidate = {
-            x: snapped(connectedPin.x + direction.x * length),
-            y: snapped(connectedPin.y + direction.y * length),
-        };
-        if (candidate.x < PORT_PIN_CLEARANCE_MM || candidate.y < PORT_PIN_CLEARANCE_MM
-            || candidate.x > paper.x - PORT_PIN_CLEARANCE_MM
-            || candidate.y > paper.y - PORT_PIN_CLEARANCE_MM) continue;
-        if (!collides(candidate)) return candidate;
-    }
-
-    return anchor;
-}
-
 function canonicalDirectionAngle(angle: number) {
     return normalizeRotation(Math.round(normalizeRotation(angle) / 90) * 90);
 }
@@ -1080,36 +1042,6 @@ export async function applyCircuitAssembly(
             return embedded;
         };
         const paper = pageSize(source);
-        const connectedRealPin = (serviceShape: string, anchor: Point) => {
-            const shapes = new Set<string>();
-            for (const edge of assembly.edges) {
-                if (!(edge.sections || []).some((section) => (
-                    section.incomingShape === serviceShape || section.outgoingShape === serviceShape
-                ))) continue;
-                for (const section of edge.sections || []) {
-                    if (section.incomingShape && section.incomingShape !== serviceShape) {
-                        shapes.add(section.incomingShape);
-                    }
-                    if (section.outgoingShape && section.outgoingShape !== serviceShape) {
-                        shapes.add(section.outgoingShape);
-                    }
-                }
-            }
-            return [...shapes]
-                .map((shape) => ({
-                    shape,
-                    point: edgePins.get(shape),
-                    owner: pinOwners.get(shape),
-                }))
-                .filter((item): item is { shape: string; point: Point; owner: Point } => (
-                    Boolean(item.point && item.owner)
-                ))
-                .sort((left, right) => (
-                    Math.hypot(left.point.x - anchor.x, left.point.y - anchor.y)
-                    - Math.hypot(right.point.x - anchor.x, right.point.y - anchor.y)
-                ))[0];
-        };
-
         for (const component of assembly.components) {
             const exact = component.designator;
             const primaryPin = component.pins[0]
@@ -1122,18 +1054,6 @@ export async function applyCircuitAssembly(
                 || component.designator.includes('|'))
                 ? shortAnchor || componentAnchor(component, placement)
                 : componentAnchor(component, placement);
-            if (primaryPin && serviceComponent(component)) {
-                const connected = connectedRealPin(primaryPin, anchor);
-                if (connected) {
-                    anchor = clearPortAnchor(
-                        anchor,
-                        connected.point,
-                        connected.owner,
-                        [...edgePins.values()],
-                        paper,
-                    );
-                }
-            }
             const rotation = kicadRotation((component.pos.rotate || 0) + placement.rotation);
             const componentPins = new Map<string, Point>();
             const componentPinLabelAngles = new Map<string, number>();
