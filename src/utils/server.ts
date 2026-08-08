@@ -1,4 +1,4 @@
-const DEFAULT_SERVER_URL = 'https://circuit.tech.ru.net';
+const DEFAULT_SERVER_URL = 'https://circuit.tech.ru.net' // 'http://localhost:5120/';
 const SERVER_AUTHORIZATION = 'Basic Y2lyY3VpdDp4eU9BTE5INHBmb05HNjB2VmtBNTg0MTg=';
 
 export type AsyncOperationResponse<T = unknown> = {
