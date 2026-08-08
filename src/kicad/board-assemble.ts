@@ -18,7 +18,10 @@ import {
     pcbFootprints,
     propertyValue,
 } from './pcb-reader';
-import { normalizeEasyEdaFootprintGeometry } from './footprint-normalization';
+import {
+    footprintGeometryIsNormalized,
+    normalizeEasyEdaFootprintGeometry,
+} from './footprint-normalization';
 
 const CLEAN_HEADS = new Set([
     'segment', 'arc', 'via', 'zone',
@@ -49,10 +52,35 @@ function kicadPoint(point: { x: number; y: number }) {
 
 function kicadComponentRotation(
     placement: NonNullable<BoardAssemble['components']>[number],
+    normalizedEasyEdaGeometry: boolean,
 ) {
-    return normalizeRotation(placement.layer === 'bottom'
-        ? -placement.rotate
+    // BoardAssemble uses EasyEDA angles. For normalized geometry, top maps to B - 180;
+    // the mirrored bottom transform maps to -B. Native KiCad geometry keeps its legacy fallback.
+    if (placement.layer === 'bottom') return normalizeRotation(-placement.rotate);
+    return normalizeRotation(normalizedEasyEdaGeometry
+        ? placement.rotate - 180
         : 180 - placement.rotate);
+}
+
+const ABSOLUTE_ANGLE_HEADS = new Set(['pad', 'property', 'fp_text', 'fp_text_box']);
+
+function rotateAbsoluteChildAngles(footprint: SExpression[], delta: number) {
+    const normalizedDelta = normalizeRotation(delta);
+    if (normalizedDelta === 0) return;
+    for (const child of footprint) {
+        if (!isSExpressionList(child) || !ABSOLUTE_ANGLE_HEADS.has(listHead(child) || '')) continue;
+        const at = findChild(child, 'at');
+        if (!at) continue;
+        const x = atom(at[1]);
+        const y = atom(at[2]);
+        const rawAngle = atom(at[3]);
+        const parsedAngle = Number(rawAngle ?? 0);
+        const angle = Number.isFinite(parsedAngle) ? parsedAngle : 0;
+        if (x === undefined || y === undefined) continue;
+        const nextAngle = token(String(normalizeRotation(angle + normalizedDelta)));
+        if (rawAngle === undefined || !Number.isFinite(parsedAngle)) at.splice(3, 0, nextAngle);
+        else at[3] = nextAngle;
+    }
 }
 
 function paperCenter(root: SExpression[]) {
@@ -137,7 +165,8 @@ function localTextPosition(
     x: number,
     y: number,
 ) {
-    const radians = -footprintRotation * Math.PI / 180;
+    // KiCad applies top rotations with the opposite screen-space sign; bottom is mirrored as well.
+    const radians = (side === 'bottom' ? -footprintRotation : footprintRotation) * Math.PI / 180;
     const dx = x - footprintX;
     const dy = y - footprintY;
     const localX = dx * Math.cos(radians) - dy * Math.sin(radians);
@@ -196,12 +225,15 @@ function moveComponents(root: SExpression[], assemble: BoardAssemble, offset: { 
             continue;
         }
         normalizeEasyEdaFootprintGeometry(footprint);
+        const normalizedEasyEdaGeometry = footprintGeometryIsNormalized(footprint);
+        const previousRotation = footprintAt(footprint).rotate;
         const targetLayer = placement.layer === 'top' ? 'F.Cu' : 'B.Cu';
         setFootprintSide(footprint, targetLayer);
         const point = kicadPoint(placement);
         const x = point.x + offset.x;
         const y = point.y + offset.y;
-        const rotation = kicadComponentRotation(placement);
+        const rotation = kicadComponentRotation(placement, normalizedEasyEdaGeometry);
+        rotateAbsoluteChildAngles(footprint, rotation - previousRotation);
         setChild(footprint, 'at', [
             token(String(x)), token(String(y)), token(String(rotation)),
         ]);

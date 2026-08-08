@@ -76,6 +76,75 @@ async function main() {
     assert.equal(printSExpression(standardGeometry), originalStandardGeometry,
         'non-project footprints must not be normalized');
 
+    const rotatedBoard = parseSExpression(`(kicad_pcb
+        (version 20250114)
+        (footprint "kicad-copilot:rotation-test"
+            (layer "F.Cu")
+            (at 10 20 30)
+            (property "Reference" "U1" (at 0 -2 30))
+            (property "EasyEDA part_uuid" "part" (at 0 0 30))
+            (pad "1" smd rect (at 1 0 30) (size 2 1) (layers "F.Cu" "F.Paste" "F.Mask"))
+        )
+    )`);
+    applyBoardAssemble(rotatedBoard, 20250114, {
+        components: [{ designator: 'U1', x: 5, y: 6, rotate: 270, layer: 'top' }],
+    });
+    const rotatedFootprint = pcbFootprints(rotatedBoard)[0];
+    assert.deepEqual(footprintAt(rotatedFootprint), { x: 5, y: -6, rotate: 90 },
+        'top footprint rotation must match the server preview after KiCad Y-axis conversion');
+    assert.deepEqual(findChild(listChildren(rotatedFootprint, 'pad')[0], 'at')?.slice(1).map(atom),
+        ['-1', '0', '270'], 'pad orientation must follow the footprint rotation');
+    const firstRotationResult = printSExpression(rotatedBoard);
+    applyBoardAssemble(rotatedBoard, 20250114, {
+        components: [{ designator: 'U1', x: 5, y: 6, rotate: 270, layer: 'top' }],
+    });
+    assert.equal(printSExpression(rotatedBoard), firstRotationResult,
+        'reapplying the same placement must not rotate footprint children again');
+
+    for (const item of [
+        { preview: 0, assemble: 180, kicad: 0, pad: 180 },
+        { preview: 90, assemble: 90, kicad: 270, pad: 90 },
+        { preview: 180, assemble: 0, kicad: 180, pad: 0 },
+        { preview: 270, assemble: 270, kicad: 90, pad: 270 },
+    ]) {
+        const cardinalBoard = parseSExpression(`(kicad_pcb
+            (version 20250114)
+            (footprint "kicad-copilot:cardinal-test"
+                (layer "F.Cu")
+                (at 0 0 0)
+                (property "Reference" "U1" (at 0 -2 0))
+                (property "EasyEDA part_uuid" "part" (at 0 0 0))
+                (pad "1" smd rect (at 1 0 0) (size 2 1) (layers "F.Cu" "F.Paste" "F.Mask"))
+            )
+        )`);
+        applyBoardAssemble(cardinalBoard, 20250114, {
+            components: [{ designator: 'U1', x: 0, y: 0, rotate: item.assemble, layer: 'top' }],
+        });
+        const cardinalFootprint = pcbFootprints(cardinalBoard)[0];
+        assert.equal(footprintAt(cardinalFootprint).rotate, item.kicad,
+            `server preview rotation ${item.preview} must map to KiCad ${item.kicad}`);
+        assert.equal(Number(atom(findChild(listChildren(cardinalFootprint, 'pad')[0], 'at')?.[3])), item.pad,
+            `pad must follow server preview rotation ${item.preview}`);
+    }
+
+    const nativeBoard = parseSExpression(`(kicad_pcb
+        (version 20250114)
+        (footprint "Package_Test:rotation-test"
+            (layer "F.Cu")
+            (at 10 20 30)
+            (property "Reference" "U2" (at 0 -2 30))
+            (pad "1" smd rect (at 1 0 30) (size 2 1) (layers "F.Cu" "F.Paste" "F.Mask"))
+        )
+    )`);
+    applyBoardAssemble(nativeBoard, 20250114, {
+        components: [{ designator: 'U2', x: 5, y: 6, rotate: 270, layer: 'top' }],
+    });
+    const nativeFootprint = pcbFootprints(nativeBoard)[0];
+    assert.deepEqual(footprintAt(nativeFootprint), { x: 5, y: -6, rotate: 270 },
+        'native KiCad footprint rotation must retain its original geometry convention');
+    assert.deepEqual(findChild(listChildren(nativeFootprint, 'pad')[0], 'at')?.slice(1).map(atom),
+        ['1', '0', '270'], 'native KiCad pad orientation must follow the footprint rotation');
+
     parsePcbSource(pcbTemplate(9));
     parsePcbSource(pcbTemplate(10));
     const directory = await mkdtemp(join(tmpdir(), 'kicad-copilot-pcb-'));
@@ -146,7 +215,7 @@ async function main() {
         const top = pcbFootprints(assembled.root).find((item) => footprintReference(item) === refs[0])!;
         const bottom = pcbFootprints(assembled.root).find((item) => footprintReference(item) === refs[1])!;
         const hole = pcbFootprints(assembled.root).find((item) => footprintReference(item) === '#HOLE_1')!;
-        assert.deepEqual(footprintAt(top), { x: 143.5, y: 101, rotate: 150 });
+        assert.deepEqual(footprintAt(top), { x: 143.5, y: 101, rotate: 210 });
         assert.deepEqual(footprintAt(bottom), { x: 153.5, y: 111, rotate: 90 });
         assert.equal(footprintLayer(bottom), 'B.Cu');
         const topReference = top.find((item) => isSExpressionList(item)
