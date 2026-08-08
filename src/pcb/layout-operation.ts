@@ -18,6 +18,7 @@ import {
     clearActiveLayout,
     readActiveLayout,
     saveDataUrl,
+    savePreviewImageFiles,
     storeLayout,
     writeActiveLayout,
 } from './layout-cache';
@@ -118,10 +119,11 @@ async function finishOperation(active: ActivePcbLayout, operation: AsyncOperatio
         return pcbLayoutWithoutPlacementResult(active.operation_id, response);
     }
     const layoutId = randomUUID();
-    const [previewPath, debugPath] = await Promise.all([
-        saveDataUrl(response.preview_image_url, layoutId),
+    const [preview, debugPath] = await Promise.all([
+        savePreviewImageFiles(response.preview_image_url, layoutId),
         saveDebugArtifact(response, layoutId),
     ]);
+    const { previewPath, previewSvgPath } = preview;
     const status = resultStatus(response);
     await storeLayout({
         layout_id: layoutId,
@@ -133,6 +135,7 @@ async function finishOperation(active: ActivePcbLayout, operation: AsyncOperatio
         status,
         message: response.content || response.error,
         preview_path: previewPath,
+        preview_svg_path: previewSvgPath,
         debug_path: debugPath,
         created_at: Date.now(),
     });
@@ -142,6 +145,7 @@ async function finishOperation(active: ActivePcbLayout, operation: AsyncOperatio
         layout_id: layoutId,
         ...(status === 'failed_with_layout' && response.content ? { message: response.content } : {}),
         ...(previewPath ? { preview_path: previewPath } : {}),
+        ...(previewSvgPath ? { preview_svg_path: previewSvgPath } : {}),
         ...(debugPath ? { debug_path: debugPath } : {}),
     };
 }

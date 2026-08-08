@@ -16,7 +16,7 @@ Read `dsl.ts` for placement syntax and `instructions.md` for placement and local
 - `clear_pcb_routing({ path })` removes tracks, track arcs, and vias but preserves footprints, zones, and outline.
 - `pour_pcb_layers({ path, net, layers })` rebuilds managed full-board zones and optional stitching vias.
 
-`preview_path` is the primary review image. `debug_path` is an optional local SVG for a visibly bad block, family, or module.
+`preview_path` is the primary PNG review image. `preview_svg_path` is the same preview as SVG. `debug_path` is an optional local SVG for a visibly bad block, family, or module.
 
 ## Required Approval Flow
 
@@ -43,6 +43,7 @@ Typical completed result:
 {
   "status": "ok",
   "layout_id": "...",
-  "preview_path": "C:\\Users\\...\\pcb-layout\\....svg"
+  "preview_path": "C:\\Users\\...\\pcb-layout\\....png",
+  "preview_svg_path": "C:\\Users\\...\\pcb-layout\\....svg"
 }
 ```

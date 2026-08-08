@@ -71,7 +71,7 @@ export function registerPcbTools(server: McpServer) {
         'make_pcb_layout',
         {
             title: 'Make PCB Layout',
-            description: `Create placement without changing the PCB. PCB instructions: ${PCB_DOC_PATH}`,
+            description: `Create placement without changing the PCB and return PNG/SVG preview paths. PCB instructions: ${PCB_DOC_PATH}`,
             inputSchema: z.object({
                 path: z.string().min(1).describe('Target .kicad_pcb path.'),
                 file: z.string().min(1).describe('JavaScript PCB layout DSL file path.'),
@@ -85,7 +85,7 @@ export function registerPcbTools(server: McpServer) {
         'wait_pcb_layout',
         {
             title: 'Wait PCB Layout',
-            description: 'Wait for an active make_pcb_layout operation.',
+            description: 'Wait for an active make_pcb_layout operation and return its PNG/SVG preview paths.',
             inputSchema: z.object({
                 operation_id: z.string().min(1),
                 wait_ms: z.number().min(30_000).max(180_000).default(60_000),

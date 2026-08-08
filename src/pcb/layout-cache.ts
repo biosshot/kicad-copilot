@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import sharp from 'sharp';
 import { BoardAssemble, BoardAssembleSchema } from '../types/board-assemble';
 import { CACHE_DIR } from '../utils/dirs';
 
@@ -19,6 +20,7 @@ export type StoredPcbLayout = Omit<ActivePcbLayout, 'operation_id' | 'started_at
     status: 'ok' | 'failed_with_layout';
     message?: string;
     preview_path?: string;
+    preview_svg_path?: string;
     debug_path?: string;
     created_at: number;
 };
@@ -79,4 +81,30 @@ export async function saveDataUrl(value: string | undefined, name: string) {
     await mkdir(directory, { recursive: true });
     await writeFile(path, bytes);
     return path;
+}
+
+export async function savePreviewImageFiles(value: string | undefined, name: string) {
+    if (!value) return {};
+
+    const match = /^data:([^;,]+)?(;base64)?,(.*)$/s.exec(value);
+    const mimeType = match?.[1];
+    const bytes = match
+        ? match[2] ? Buffer.from(match[3], 'base64') : Buffer.from(decodeURIComponent(match[3]), 'utf8')
+        : Buffer.from(value, value.trimStart().startsWith('<svg') ? 'utf8' : 'base64');
+    const isSvg = mimeType === 'image/svg+xml'
+        || bytes.subarray(0, 512).toString('utf8').trimStart().startsWith('<svg');
+
+    await mkdir(directory, { recursive: true });
+
+    const previewSvgPath = isSvg ? join(directory, `${name}.svg`) : undefined;
+    const previewPath = join(directory, `${name}.png`);
+    await Promise.all([
+        ...(previewSvgPath ? [writeFile(previewSvgPath, bytes)] : []),
+        sharp(bytes).png().toFile(previewPath),
+    ]);
+
+    return {
+        previewPath,
+        previewSvgPath,
+    };
 }
