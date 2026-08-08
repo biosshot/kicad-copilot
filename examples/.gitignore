@@ -1,0 +1,5 @@
+# KiCad editor state and local recovery data
+*.kicad_prl
+*.lck
+*-backups/
+.history/

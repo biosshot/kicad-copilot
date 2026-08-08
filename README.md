@@ -2,6 +2,8 @@
 
 AI-powered MCP server for KiCad. Create and modify schematics from natural language, search real components, work with hierarchical projects, generate PCB placement, route boards locally, and create simple copper pours directly through an AI agent.
 
+KiCad Copilot is the KiCad counterpart to [EasyEDA Copilot](https://github.com/biosshot/easyeda-copilot). It provides the same core circuit-generation and PCB automation capabilities—and goes further with file-oriented hierarchical projects, recoverable checkpoints, native `kicad-cli` integration, and fully local PCB routing.
+
 <p align="center">
   <a href="https://github.com/biosshot/kicad-copilot/releases/latest">
     <img src="https://img.shields.io/github/v/release/biosshot/kicad-copilot?label=release" alt="Latest release">
@@ -33,6 +35,41 @@ KiCad Copilot gives AI agents a high-level, file-oriented interface to KiCad:
 - **Use native KiCad tooling**: discover `kicad-cli` for ERC, DRC, previews, exports, manufacturing files, and other native operations.
 
 KiCad Copilot works directly with saved `.kicad_pro`, `.kicad_sch`, and `.kicad_pcb` files. It does not require KiCad IPC or a plugin installed inside KiCad.
+
+## Examples
+
+These projects were generated and iterated through KiCad Copilot. The complete KiCad source files are available in the [`examples`](examples) directory.
+
+### ATmega328P development board
+
+A hierarchical ATmega328P design with the MCU core, clock, reset, decoupling, USB-UART power, Nano-compatible headers, and debug connections split across functional sheets.
+
+<p align="center">
+  <img src="docs/media/examples/atmega328p-dev-schematic.png" alt="ATmega328P development board schematic generated with KiCad Copilot" width="100%">
+</p>
+
+[Download the ATmega328P project](examples/atmega328p_dev.zip)
+
+### Geiger high-voltage supply
+
+A larger multi-sheet design covering power input, 3.3 V regulation, the high-voltage generator, flyback stage, feedback, detector, controller, and user interface.
+
+<p align="center">
+  <img src="docs/media/examples/geiger-hv-schematic.png" alt="Geiger high-voltage supply schematic generated with KiCad Copilot" width="100%">
+</p>
+
+[Download the Geiger high-voltage project](examples/geiger_hv.zip)
+
+### RP2350 development board
+
+A hierarchical RP2350 design with power, clock, flash, USB/debug, GPIO headers, and an AI-generated PCB placement. The example includes the placement DSL and an editable KiCad board.
+
+<p align="center">
+  <img src="docs/media/examples/rp2350-schematic.png" alt="RP2350 development board schematic generated with KiCad Copilot" width="56%">
+  <img src="docs/media/examples/rp2350-pcb.png" alt="RP2350 PCB placement generated with KiCad Copilot" width="42%">
+</p>
+
+[Download the RP2350 project](examples/rp2350_debug.zip)
 
 ## Installation
 
