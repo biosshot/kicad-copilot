@@ -46,9 +46,16 @@ These projects were generated and iterated through KiCad Copilot. The complete K
 
 A hierarchical ATmega328P design with the MCU core, clock, reset, decoupling, USB-UART power, Nano-compatible headers, and debug connections split across functional sheets.
 
-<p align="center">
-  <img src="docs/media/examples/atmega328p-dev-schematic.png" alt="ATmega328P development board schematic generated with KiCad Copilot" width="100%">
-</p>
+<table>
+  <tr>
+    <td align="center" width="50%"><a href="docs/media/examples/atmega328p/overview.png"><img src="docs/media/examples/atmega328p/overview.png" alt="ATmega328P project overview" width="100%"></a><br><sub>Project overview</sub></td>
+    <td align="center" width="50%"><a href="docs/media/examples/atmega328p/usb-uart-power.png"><img src="docs/media/examples/atmega328p/usb-uart-power.png" alt="ATmega328P USB-UART and power sheet" width="100%"></a><br><sub>USB-UART and power</sub></td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="docs/media/examples/atmega328p/mcu-core.png"><img src="docs/media/examples/atmega328p/mcu-core.png" alt="ATmega328P MCU core sheet" width="100%"></a><br><sub>MCU core</sub></td>
+    <td align="center" width="50%"><a href="docs/media/examples/atmega328p/nano-headers-debug.png"><img src="docs/media/examples/atmega328p/nano-headers-debug.png" alt="ATmega328P Nano headers and debug sheet" width="100%"></a><br><sub>Nano headers and debug</sub></td>
+  </tr>
+</table>
 
 [Download the ATmega328P project](examples/atmega328p_dev.zip)
 
@@ -56,9 +63,27 @@ A hierarchical ATmega328P design with the MCU core, clock, reset, decoupling, US
 
 A larger multi-sheet design covering power input, 3.3 V regulation, the high-voltage generator, flyback stage, feedback, detector, controller, and user interface.
 
-<p align="center">
-  <img src="docs/media/examples/geiger-hv-schematic.png" alt="Geiger high-voltage supply schematic generated with KiCad Copilot" width="100%">
-</p>
+<table>
+  <tr>
+    <td align="center" width="50%"><a href="docs/media/examples/geiger-hv/overview.png"><img src="docs/media/examples/geiger-hv/overview.png" alt="Geiger HV project overview" width="100%"></a><br><sub>Project overview</sub></td>
+    <td align="center" width="50%"><a href="docs/media/examples/geiger-hv/power.png"><img src="docs/media/examples/geiger-hv/power.png" alt="Geiger HV power input sheet" width="100%"></a><br><sub>Power input</sub></td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="docs/media/examples/geiger-hv/high-voltage.png"><img src="docs/media/examples/geiger-hv/high-voltage.png" alt="Geiger high-voltage generator sheet" width="100%"></a><br><sub>High-voltage generator</sub></td>
+    <td align="center" width="50%"><a href="docs/media/examples/geiger-hv/detector.png"><img src="docs/media/examples/geiger-hv/detector.png" alt="Geiger detector sheet" width="100%"></a><br><sub>Detector</sub></td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="docs/media/examples/geiger-hv/controller-ui.png"><img src="docs/media/examples/geiger-hv/controller-ui.png" alt="Geiger controller UI sheet" width="100%"></a><br><sub>Controller UI</sub></td>
+    <td align="center" width="50%"><a href="docs/media/examples/geiger-hv/power-3v3.png"><img src="docs/media/examples/geiger-hv/power-3v3.png" alt="Geiger 3.3 V power sheet" width="100%"></a><br><sub>3.3 V power</sub></td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="docs/media/examples/geiger-hv/hv-flyback.png"><img src="docs/media/examples/geiger-hv/hv-flyback.png" alt="Geiger HV flyback sheet" width="100%"></a><br><sub>HV flyback</sub></td>
+    <td align="center" width="50%"><a href="docs/media/examples/geiger-hv/hv-feedback.png"><img src="docs/media/examples/geiger-hv/hv-feedback.png" alt="Geiger HV feedback sheet" width="100%"></a><br><sub>HV feedback</sub></td>
+  </tr>
+  <tr>
+    <td align="center" colspan="2"><a href="docs/media/examples/geiger-hv/user-interface.png"><img src="docs/media/examples/geiger-hv/user-interface.png" alt="Geiger user interface sheet" width="50%"></a><br><sub>User interface</sub></td>
+  </tr>
+</table>
 
 [Download the Geiger high-voltage project](examples/geiger_hv.zip)
 
@@ -66,9 +91,24 @@ A larger multi-sheet design covering power input, 3.3 V regulation, the high-vol
 
 A hierarchical RP2350 design with power, clock, flash, USB/debug, GPIO headers, and an AI-generated PCB placement. The example includes the placement DSL and an editable KiCad board.
 
+<table>
+  <tr>
+    <td align="center" width="50%"><a href="docs/media/examples/rp2350/overview.png"><img src="docs/media/examples/rp2350/overview.png" alt="RP2350 project overview" width="100%"></a><br><sub>Project overview</sub></td>
+    <td align="center" width="50%"><a href="docs/media/examples/rp2350/power.png"><img src="docs/media/examples/rp2350/power.png" alt="RP2350 power sheet" width="100%"></a><br><sub>Power</sub></td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="docs/media/examples/rp2350/rp2350-clock.png"><img src="docs/media/examples/rp2350/rp2350-clock.png" alt="RP2350 and clock sheet" width="100%"></a><br><sub>RP2350 and clock</sub></td>
+    <td align="center" width="50%"><a href="docs/media/examples/rp2350/flash.png"><img src="docs/media/examples/rp2350/flash.png" alt="RP2350 flash sheet" width="100%"></a><br><sub>Flash</sub></td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="docs/media/examples/rp2350/usb-debug.png"><img src="docs/media/examples/rp2350/usb-debug.png" alt="RP2350 USB and debug sheet" width="100%"></a><br><sub>USB and debug</sub></td>
+    <td align="center" width="50%"><a href="docs/media/examples/rp2350/gpio-headers.png"><img src="docs/media/examples/rp2350/gpio-headers.png" alt="RP2350 GPIO headers sheet" width="100%"></a><br><sub>GPIO headers</sub></td>
+  </tr>
+</table>
+
 <p align="center">
-  <img src="docs/media/examples/rp2350-schematic.png" alt="RP2350 development board schematic generated with KiCad Copilot" width="56%">
-  <img src="docs/media/examples/rp2350-pcb.png" alt="RP2350 PCB placement generated with KiCad Copilot" width="42%">
+  <img src="docs/media/examples/rp2350-pcb.png" alt="3D render of the RP2350 PCB placement generated with KiCad Copilot" width="90%">
+  <br><sub>KiCad 3D render of the generated PCB placement</sub>
 </p>
 
 [Download the RP2350 project](examples/rp2350_debug.zip)
