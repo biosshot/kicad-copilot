@@ -187,6 +187,20 @@ async function main() {
                 'grid correction: server route endpoint changed');
         });
 
+        await runScenario('wire compensation follows EasyEDA bend choice', async () => {
+            const points = routedSectionPoints({
+                id: 'easyeda-bend-choice',
+                startPoint: { x: 0, y: 0 },
+                endPoint: { x: 40, y: 10 },
+            }, { x: 0, y: 0 }, { x: 10.16, y: 2.54 }, {
+                offset: { x: 0, y: 0 },
+            });
+            expect(points.length === 3,
+                `wire compensation: expected one bend, got ${points.length - 2}`);
+            expect(points[1].x === 0 && points[1].y === 2.54,
+                `wire compensation: expected EasyEDA vertical-first bend, got ${JSON.stringify(points[1])}`);
+        });
+
         await runScenario('port direction order', async () => {
             expect(portDirectionAngles().join(',') === '90,270,0,180',
                 'port directions: expected up, down, right, left');
@@ -416,6 +430,8 @@ async function main() {
         await runScenario('best-effort missing edge pin', async () => {
             const path = await copySchematic(blank, join(root, 'best-effort-edge'));
             const source = resistor('R90');
+            source.pins[0].signal_name = 'EDGE_A';
+            source.pins[1].signal_name = 'EDGE_B';
             const invalid = resistor('R91');
             const assembly: CircuitAssembly = {
                 metadata: { project_name: 'test', description: 'best effort' },
@@ -433,15 +449,24 @@ async function main() {
                 reused_blocks: [],
                 edges: [{
                     sources: ['R90_pin_99'],
-                    targets: ['R90_pin_1'],
+                    targets: ['R90_pin_1', 'R90_pin_2'],
                     container: 'test',
-                    sections: [{
-                        id: 'missing-local-pin',
-                        startPoint: { x: 0, y: 5 },
-                        endPoint: { x: 10, y: 5 },
-                        incomingShape: 'R90_pin_99',
-                        outgoingShape: 'R90_pin_1',
-                    }],
+                    sections: [
+                        {
+                            id: 'missing-local-pin',
+                            startPoint: { x: 0, y: 5 },
+                            endPoint: { x: 10, y: 5 },
+                            incomingShape: 'R90_pin_99',
+                            outgoingShape: 'R90_pin_1',
+                        },
+                        {
+                            id: 'conflicting-signals',
+                            startPoint: { x: 10, y: 5 },
+                            endPoint: { x: 20, y: 5 },
+                            incomingShape: 'R90_pin_1',
+                            outgoingShape: 'R90_pin_2',
+                        },
+                    ],
                 }],
                 blocks: [],
                 added_net: [{ designator: 'R90', pin_number: '99', net: 'MISSING_PIN' }],
@@ -453,9 +478,14 @@ async function main() {
                 'best effort edge: missing pin was not reported');
             expect(diagnostics.summary().errors.some((error) => error.includes('R91')),
                 'best effort component: failed component was not reported');
+            expect(diagnostics.summary().errors.some((error) => error.includes('uses its first endpoint signal')),
+                'best effort edge: conflicting server edge was not reported');
             expectComponent(await getSchematic(path), 'R90', { partUuid: RESISTOR_A });
             expect(!component(await getSchematic(path), 'R91'),
                 'best effort component: invalid component was unexpectedly placed');
+            const assembledSource = await readFile(path, 'utf8');
+            expect(!assembledSource.includes('(lib_id "kicad-copilot:EDGE_B")'),
+                'best-effort edge: conflicting server edge was replaced with a client port');
         });
         const fixture = await copySchematic(blank, join(root, 'fixture'));
         await extractCircuit(fixture, modification({
@@ -476,6 +506,31 @@ async function main() {
         expect((await readFile(join(dirname(fixture), 'fp-lib-table'), 'utf8')).includes('kicad-copilot'),
             'project library: footprint table entry missing');
         await readFile(join(dirname(fixture), 'kicad-copilot.pretty', 'C98220_R0603.kicad_mod'));
+
+        await runScenario('replacement failure follows EasyEDA remove-and-place fallback', async () => {
+            const path = await copySchematic(fixture, join(root, 'replacement-failure'));
+            const input = await getSchematic(path);
+            const invalid = resistor('R2');
+            const assembly: CircuitAssembly = {
+                metadata: { project_name: 'test', description: 'replacement fallback' },
+                components: [{
+                    ...invalid,
+                    part_uuid: null,
+                    pos: { x: 0, y: 0, center: { x: 5, y: 5 }, width: 10, height: 10, rotate: 0 },
+                }],
+                reused_blocks: [],
+                edges: [],
+                blocks: [],
+                rm_components: ['R2'],
+                replace_components: ['R2'],
+            };
+            const diagnostics = createDiagnosticCollector();
+            await applyCircuitAssembly(path, assembly, input, diagnostics.report);
+            expect(!component(await getSchematic(path), 'R2'),
+                'replacement fallback: old component survived a failed normal placement');
+            expect(diagnostics.summary().errors.some((error) => error.includes('R2')),
+                'replacement fallback: failed normal placement was not reported');
+        });
 
         await runScenario('checkpoint pagination', async () => {
             await saveCheckpoint(fixture, 'Pagination test 1');

@@ -41,6 +41,7 @@ const PORT_OFFSET_LENGTHS_MM = Array.from(
     (_, index) => (index + 1) * 10 * SERVER_UNIT_MM,
 );
 type Point = { x: number; y: number };
+// Server layout is authoritative: a sheet placement may translate it, never rotate or scale it.
 type Placement = { offset: Point };
 type CircuitAssemblyComponent = CircuitAssembly['components'][number];
 type Rect = { left: number; top: number; right: number; bottom: number };
@@ -527,7 +528,11 @@ function orthogonalPoints(points: Point[]) {
             continue;
         }
         if (previous.x !== point.x && previous.y !== point.y) {
-            output.push({ x: point.x, y: previous.y });
+            const dx = Math.abs(previous.x - point.x);
+            const dy = Math.abs(previous.y - point.y);
+            output.push(dx < dy
+                ? { x: point.x, y: previous.y }
+                : { x: previous.x, y: point.y });
         }
         if (pointKey(output.at(-1)!) !== pointKey(point)) output.push(point);
     }
@@ -870,14 +875,6 @@ export async function applyCircuitAssembly(
             ...(assembly.rm_components || []),
             ...(assembly.replace_components || []),
         ].map(baseDesignator));
-        const unavailableRealDesignators = new Set(assembly.components
-            .filter((component) => component.part_uuid !== 'GND'
-                && component.part_uuid !== 'VCC'
-                && component.value !== 'unknown_shortsym'
-                && !component.designator.includes('|')
-                && (!component.part_uuid || !realAssets.has(component.part_uuid)))
-            .map((component) => baseDesignator(component.designator)));
-        for (const designator of unavailableRealDesignators) removalDesignators.delete(designator);
         if (assembly.replace_components?.length) {
             console.error(`In-place replacement fallback: ${assembly.replace_components.join(', ')}`);
         }
@@ -933,9 +930,8 @@ export async function applyCircuitAssembly(
             if (signal && signal !== net.net) {
                 report(
                     `expected ${net.net}, found ${signal}`,
-                    `net removal skipped (${net.designator}.${net.pin_number})`,
+                    `net removal signal mismatch (${net.designator}.${net.pin_number})`,
                 );
-                continue;
             }
             const point = existingPinPoints.get(`${baseDesignator(net.designator)}_pin_${net.pin_number}`);
             if (point) disconnectPoints.add(pointKey(point));
@@ -1206,27 +1202,7 @@ export async function applyCircuitAssembly(
         const usedShapes = new Set<string>();
         const generatedSegments: RoutedSegment[] = [];
         const requestedJunctions: Point[] = [];
-        const signalForEdge = (edge: CircuitAssembly['edges'][number]) => {
-            for (const section of edge.sections || []) {
-                const signal = (section.incomingShape && edgeSignals.get(section.incomingShape))
-                    || (section.outgoingShape && edgeSignals.get(section.outgoingShape));
-                if (signal) return signal;
-            }
-            return '';
-        };
-        const signalCounts = new Map<string, number>();
         for (const edge of assembly.edges) {
-            const signal = signalForEdge(edge);
-            signalCounts.set(signal, (signalCounts.get(signal) || 0) + 1);
-        }
-        const signalPriority = (signal: string) => {
-            if (signal === 'GND') return 0;
-            if (/^(\+|VCC|VDD)/i.test(signal)) return 1;
-            return 10 - (signalCounts.get(signal) || 0);
-        };
-        const routedEdges = [...assembly.edges].sort((left, right) =>
-            signalPriority(signalForEdge(left)) - signalPriority(signalForEdge(right)));
-        for (const edge of routedEdges) {
             let edgeApplied = false;
             for (const section of edge.sections || []) {
                 const serverStart = serverPoint(section.startPoint, placement);
@@ -1251,10 +1227,14 @@ export async function applyCircuitAssembly(
                     section.outgoingShape ? edgeSignals.get(section.outgoingShape) : undefined,
                 ].filter((signal): signal is string => Boolean(signal)));
                 if (sectionSignals.size > 1) {
-                    report(`conflicting edge signals: ${[...sectionSignals].join(', ')}`, `edge ${section.id} skipped`);
-                    continue;
+                    // EasyEDA still draws the server edge and reports the inconsistent metadata.
+                    report(
+                        `conflicting edge signals: ${[...sectionSignals].join(', ')}`,
+                        `edge ${section.id} uses its first endpoint signal`,
+                    );
                 }
-                const signal = sectionSignals.size === 1 ? [...sectionSignals][0] : undefined;
+                const signal = (section.incomingShape && edgeSignals.get(section.incomingShape))
+                    || (section.outgoingShape && edgeSignals.get(section.outgoingShape));
                 try {
                     const points = routedSectionPoints(section, start, end, placement);
                     for (let index = 1; index < points.length; index += 1) {
@@ -1507,9 +1487,8 @@ export async function applyCircuitAssembly(
             if (oldSignal && oldSignal.trim().toUpperCase() !== 'NC' && oldSignal !== item.net) {
                 report(
                     `pin already connected to ${oldSignal}`,
-                    `connection skipped (${item.designator}.${item.pin_number}, ${item.net})`,
+                    `connection signal mismatch (${item.designator}.${item.pin_number}, ${item.net})`,
                 );
-                continue;
             }
             queueNamedConnection(item.designator, item.pin_number, item.net);
         }
