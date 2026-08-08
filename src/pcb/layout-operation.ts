@@ -33,6 +33,18 @@ type MakePcbLayoutResponse = {
     error?: string;
 };
 
+export function pcbLayoutWithoutPlacementResult(
+    operationId: string,
+    response: MakePcbLayoutResponse | undefined,
+) {
+    return {
+        status: 'error' as const,
+        operation_id: operationId,
+        message: response?.content || response?.error || 'PCB layout operation completed without result.',
+        ...(response?.toolReport !== undefined ? { report: response.toolReport } : {}),
+    };
+}
+
 function record(value: unknown): Record<string, unknown> | undefined {
     return typeof value === 'object' && value !== null && !Array.isArray(value)
         ? value as Record<string, unknown>
@@ -103,7 +115,7 @@ async function finishOperation(active: ActivePcbLayout, operation: AsyncOperatio
     const response = operation.result;
     if (!response?.pcb) {
         await clearActiveLayout(active.operation_id);
-        throw new Error(response?.error || 'PCB layout completed without placement');
+        return pcbLayoutWithoutPlacementResult(active.operation_id, response);
     }
     const layoutId = randomUUID();
     const [previewPath, debugPath] = await Promise.all([

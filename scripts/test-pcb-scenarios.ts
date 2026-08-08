@@ -12,6 +12,7 @@ import { atomicWritePcb, parsePcbSource } from '../src/kicad/pcb-writer';
 import { pcbTemplate } from '../src/kicad/pcb-template';
 import { atom, findChild, isSExpressionList, parseSExpression, printSExpression, SExpression, token } from '../src/kicad/sexpr/ast';
 import { importPcbChanges } from '../src/pcb/import';
+import { pcbLayoutWithoutPlacementResult } from '../src/pcb/layout-operation';
 import { buildRouterInput } from '../src/pcb/router-adapter';
 import { netClassFor, readPcbRoutingRules } from '../src/pcb/router-rules';
 import { runProcessChecked } from '../src/utils/process';
@@ -32,6 +33,22 @@ async function copperLayerNames(path: string) {
 }
 
 async function main() {
+    const layoutReport = { status: 'error', dsl: { ok: false } };
+    assert.deepEqual(pcbLayoutWithoutPlacementResult('layout-op', {
+        content: 'status: error\n\nDSL:\nok: false\nerrors:\n- invalid DSL',
+        toolReport: layoutReport,
+    }), {
+        status: 'error',
+        operation_id: 'layout-op',
+        message: 'status: error\n\nDSL:\nok: false\nerrors:\n- invalid DSL',
+        report: layoutReport,
+    });
+    assert.deepEqual(pcbLayoutWithoutPlacementResult('empty-op', undefined), {
+        status: 'error',
+        operation_id: 'empty-op',
+        message: 'PCB layout operation completed without result.',
+    });
+
     const geometry = parseSExpression(`(footprint "kicad-copilot:part"
         (at 10 20 30)
         (property "EasyEDA part_uuid" "part" (at 1 2 15))
