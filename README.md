@@ -4,6 +4,8 @@ AI-powered MCP server for KiCad. Create and modify schematics from natural langu
 
 KiCad Copilot is the KiCad counterpart to [EasyEDA Copilot](https://github.com/biosshot/easyeda-copilot). It provides the same core circuit-generation and PCB automation capabilities—and goes further with file-oriented hierarchical projects, recoverable checkpoints, native `kicad-cli` integration, and fully local PCB routing.
 
+> **Recommended companion:** [kicad-happy](https://github.com/aklofas/kicad-happy) complements KiCad Copilot with independent design review, datasheet-backed analysis, SPICE simulation, EMC pre-compliance, BOM sourcing, and manufacturing checks. Use KiCad Copilot to build and modify the design, then use kicad-happy to analyze and review it.
+
 <p align="center">
   <a href="https://github.com/biosshot/kicad-copilot/releases/latest">
     <img src="https://img.shields.io/github/v/release/biosshot/kicad-copilot?label=release" alt="Latest release">
