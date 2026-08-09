@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -21,6 +22,15 @@ jobs:
           package-manager-cache: false
       - run: npm ci
       - name: Verify tag and package versions
+        if: github.event_name == 'push'
         run: node -e "const fs=require('fs');const p=require('./package.json');const s=require('./server.json');const tag=process.env.GITHUB_REF_NAME.slice(1);if(p.version!==tag||s.version!==tag||s.packages[0].version!==tag)throw new Error('version mismatch')"
       - run: npm run check
       - run: npm publish --provenance --access public
+        if: github.event_name == 'push'
+      - name: Install MCP Registry publisher
+        run: |
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+      - name: Authenticate to MCP Registry
+        run: ./mcp-publisher login github-oidc
+      - name: Publish to MCP Registry
+        run: ./mcp-publisher publish
