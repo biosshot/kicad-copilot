@@ -115,7 +115,7 @@ async function main() {
     assert.deepEqual(footprintAt(rotatedFootprint), { x: 5, y: -6, rotate: 90 },
         'top footprint rotation must match the server preview after KiCad Y-axis conversion');
     assert.deepEqual(findChild(listChildren(rotatedFootprint, 'pad')[0], 'at')?.slice(1).map(atom),
-        ['-1', '0', '270'], 'pad orientation must follow the footprint rotation');
+        ['-1', '0', '210'], 'placement must preserve the normalized local pad geometry');
     const firstRotationResult = printSExpression(rotatedBoard);
     applyBoardAssemble(rotatedBoard, 20250114, {
         components: [{ designator: 'U1', x: 5, y: 6, rotate: 270, layer: 'top' }],
@@ -124,10 +124,10 @@ async function main() {
         'reapplying the same placement must not rotate footprint children again');
 
     for (const item of [
-        { preview: 0, assemble: 180, kicad: 0, pad: 180 },
-        { preview: 90, assemble: 90, kicad: 270, pad: 90 },
-        { preview: 180, assemble: 0, kicad: 180, pad: 0 },
-        { preview: 270, assemble: 270, kicad: 90, pad: 270 },
+        { preview: 0, assemble: 180, kicad: 0 },
+        { preview: 90, assemble: 90, kicad: 270 },
+        { preview: 180, assemble: 0, kicad: 180 },
+        { preview: 270, assemble: 270, kicad: 90 },
     ]) {
         const cardinalBoard = parseSExpression(`(kicad_pcb
             (version 20250114)
@@ -145,8 +145,9 @@ async function main() {
         const cardinalFootprint = pcbFootprints(cardinalBoard)[0];
         assert.equal(footprintAt(cardinalFootprint).rotate, item.kicad,
             `server preview rotation ${item.preview} must map to KiCad ${item.kicad}`);
-        assert.equal(Number(atom(findChild(listChildren(cardinalFootprint, 'pad')[0], 'at')?.[3])), item.pad,
-            `pad must follow server preview rotation ${item.preview}`);
+        assert.deepEqual(findChild(listChildren(cardinalFootprint, 'pad')[0], 'at')?.slice(1).map(atom),
+            ['-1', '0', '180'],
+            `server preview rotation ${item.preview} must not change local pad geometry`);
     }
 
     const nativeBoard = parseSExpression(`(kicad_pcb
@@ -165,7 +166,7 @@ async function main() {
     assert.deepEqual(footprintAt(nativeFootprint), { x: 5, y: -6, rotate: 270 },
         'native KiCad footprint rotation must retain its original geometry convention');
     assert.deepEqual(findChild(listChildren(nativeFootprint, 'pad')[0], 'at')?.slice(1).map(atom),
-        ['1', '0', '270'], 'native KiCad pad orientation must follow the footprint rotation');
+        ['1', '0', '30'], 'native KiCad placement must preserve local pad geometry');
 
     parsePcbSource(pcbTemplate(9));
     parsePcbSource(pcbTemplate(10));
