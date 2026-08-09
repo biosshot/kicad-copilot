@@ -24,5 +24,3 @@ jobs:
         run: node -e "const fs=require('fs');const p=require('./package.json');const s=require('./server.json');const tag=process.env.GITHUB_REF_NAME.slice(1);if(p.version!==tag||s.version!==tag||s.packages[0].version!==tag)throw new Error('version mismatch')"
       - run: npm run check
       - run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
