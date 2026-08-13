@@ -72,7 +72,7 @@ function patterns(value: unknown) {
     });
 }
 
-function parseRoutingRules(source: string): PcbRoutingRules {
+export function parsePcbRoutingRules(source: string): PcbRoutingRules {
     const root = object(JSON.parse(source));
     const netSettings = object(root.net_settings);
     const designSettings = object(object(root.board).design_settings);
@@ -108,8 +108,8 @@ export async function findPcbProjectPath(pcbPath: string) {
 
 export async function readPcbRoutingRules(pcbPath: string) {
     const path = await findPcbProjectPath(pcbPath);
-    if (!path) return parseRoutingRules('{}');
-    return parseRoutingRules(await readFile(path, 'utf8'));
+    if (!path) return parsePcbRoutingRules('{}');
+    return parsePcbRoutingRules(await readFile(path, 'utf8'));
 }
 
 function patternRegex(pattern: string) {
