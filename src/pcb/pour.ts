@@ -4,7 +4,7 @@ import { childText, listChildren, padNet, pcbFootprints, readPcb } from '../kica
 import { refillAndInspectPcbCandidate } from '../kicad/pcb-validation';
 import { atomicWritePcb } from '../kicad/pcb-writer';
 import { atom, findChild, isSExpressionList, listHead, SExpression, token } from '../kicad/sexpr/ast';
-import { boardOutline, routerLayerId } from './router-adapter';
+import { boardOutline, copperLayerId } from './board-geometry';
 
 type Point = { x: number; y: number };
 
@@ -137,7 +137,7 @@ export function applySimplePour(root: SExpression[], version: number, options: P
     if (!options.layers.length) throw new Error('pour layers cannot be empty');
     if (!knownNets(root).has(options.net)) throw new Error(`PCB net not found: ${options.net}`);
     for (const layer of options.layers) {
-        if (routerLayerId(layer) === undefined) throw new Error(`unsupported copper layer: ${layer}`);
+        if (copperLayerId(layer) === undefined) throw new Error(`unsupported copper layer: ${layer}`);
     }
     removeManagedItems(root, options.net);
     const outline = boardOutline(root);

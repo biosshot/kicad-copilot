@@ -10,7 +10,7 @@ Read `dsl.ts` for placement syntax and `instructions.md` for placement and local
 - `wait_pcb_layout({ operation_id })` is needed only when `make_pcb_layout` returns `status: "running"` after its synchronous wait.
 - `cancel_pcb_layout({ operation_id })` stops an obsolete pending placement.
 - `assemble_pcb_layout({ path, layout_id })` applies a previously completed final placement to the target PCB file.
-- `auto_route_pcb({ path })` locally routes remaining connections and directly applies the completed result.
+- `auto_route_pcb({ path, file })` runs the routing DSL through `@easyeda-copilot/router` (KRT default), performs native refill/DRC, and applies the candidate.
 - `wait_auto_route({ operation_id })` waits for a long local routing operation.
 - `cancel_auto_route({ operation_id })` stops a running local routing operation before application.
 - `clear_pcb_routing({ path })` removes tracks, track arcs, and vias but preserves footprints, zones, and outline.
@@ -30,7 +30,7 @@ Read `dsl.ts` for placement syntax and `instructions.md` for placement and local
 8. Fix hard errors only. Warnings are not a requirement to reach an ideal score; change one only if it visibly harms an explicit requirement.
 9. Open the final `preview_path` and request final placement approval.
 10. Assemble the intended PCB file using `layout_id`.
-11. Call `auto_route_pcb`. For a complete reroute, call `clear_pcb_routing` first.
+11. Read `../pcb-routing/dsl.d.ts`, write one routing DSL file, and call `auto_route_pcb({ path, file })`. For a complete reroute, call `clear_pcb_routing` first.
 12. Wait when needed, then inspect the routed board and run final DRC with `kicad-cli` as documented in `../kicad-cli.md`.
 
 ## Result Handling

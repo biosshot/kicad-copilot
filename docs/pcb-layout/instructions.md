@@ -18,7 +18,7 @@
 5. After confirmation, remove preview filters and write the complete block/module/component layout.
 6. Run full placement, inspect `preview_path`, and fix fatal errors only.
 7. Show the final placement to the user for approval. Assemble only after that approval.
-8. Use `auto_route_pcb` only after the final placement is approved and assembled.
+8. Read `../pcb-routing/instructions.md` and its `dsl.d.ts`, then use `auto_route_pcb({ path, file })` only after the final placement is approved and assembled.
 9. Inspect the routed PCB and run final DRC with `kicad-cli`; see `../kicad-cli.md`.
 
 `set_pcb_stack_layers` preserves the outer copper layers and creates or removes standard `InN.Cu` layers. Decreasing is rejected when a removed layer is referenced. Boards with an explicit physical stackup must be changed in KiCad because this tool does not manage dielectric or material settings.
@@ -79,11 +79,9 @@ Use `compactness: "high"` only when board area is genuinely constrained.
 
 ## Local Routing
 
-- `auto_route_pcb` runs the bundled local WASM router and immediately applies completed tracks/vias.
-- It preserves existing tracks and vias. Call `clear_pcb_routing` first for a full reroute.
-- GND is ignored by default and handled by managed full-board pours and stitching vias.
+- `auto_route_pcb({ path, file })` passes the routing DSL to `@easyeda-copilot/router`; KRT is the default backend.
+- The router owns power polygons, special differential/equal-length routing, remaining routing, and optional GND plane/stitching declared in the DSL.
+- Existing copper is fixed. Call `clear_pcb_routing` first for a full reroute.
 - If the result is running, call `wait_auto_route({ operation_id })`; use `cancel_auto_route` for obsolete work.
-- Post-route KiCad DRC is diagnostic only: shorts, added airwires, and new errors are returned in `report` without preventing application.
-- Never move components while routing is running. A changed PCB is rejected before application.
-- `pour_pcb_layers` rebuilds only MCP-managed zones and stitching vias. Manual zones are preserved.
+- KiCad refills zones and runs native DRC before the candidate is applied. Diagnostics do not crash the workflow.
 - Routing success is not final sign-off: inspect the board and run `kicad-cli pcb drc` after routing.

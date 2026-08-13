@@ -5,7 +5,8 @@ import { getPcbComponentSizes } from '../../pcb/component-sizes';
 import { importPcbChanges } from '../../pcb/import';
 import { cancelPcbLayout, makePcbLayout, waitPcbLayout } from '../../pcb/layout-operation';
 import { pourPcbLayers } from '../../pcb/pour';
-import { autoRoutePcb, cancelAutoRoute, clearPcbRouting, waitAutoRoute } from '../../pcb/routing-operation';
+import { clearPcbRouting } from '../../pcb/clear-routing';
+import { autoRoutePcb, cancelAutoRoute, waitAutoRoute } from '../../routing/routing-operation';
 import { setPcbStackLayers } from '../../kicad/pcb-stack';
 import { DOCS_DIR } from '../../utils/dirs';
 import { enqueueMutation } from '../../utils/mutation-queue';
@@ -123,26 +124,20 @@ export function registerPcbTools(server: McpServer) {
         'auto_route_pcb',
         {
             title: 'Auto Route PCB',
-            description: `Route a KiCad PCB with the bundled local WASM router and apply it atomically. PCB instructions: ${PCB_DOC_PATH}`,
+            description: `Run the routing DSL through @easyeda-copilot/router (KRT by default), verify natively, and apply atomically. PCB instructions: ${PCB_DOC_PATH}`,
             inputSchema: z.object({
                 path: z.string().min(1).describe('Target .kicad_pcb path.'),
-                ignore_nets: z.array(z.string().min(1)).default(['GND']),
-                route_layers: z.array(z.string().min(1)).min(1).default(['F.Cu', 'B.Cu']),
-                routing_effect_priority: z.enum(['SPEED_FIRST', 'COMPLETION_FIRST']).default('COMPLETION_FIRST'),
+                file: z.string().min(1).describe('JavaScript routing DSL file path.'),
                 timeout_sec: z.number().int().min(10).max(1800).default(600),
-                pour_gnd: z.boolean().default(true),
-                stitch_gnd: z.boolean().default(true),
                 wait_ms: z.number().int().min(1_000).max(180_000).default(60_000),
             }),
         },
-        async (input) => runTool(() => autoRoutePcb(input.path, {
-            ignoreNets: input.ignore_nets,
-            routeLayers: input.route_layers,
-            routingEffectPriority: input.routing_effect_priority,
-            timeoutSec: input.timeout_sec,
-            pourGnd: input.pour_gnd,
-            stitchGnd: input.stitch_gnd,
-        }, input.wait_ms)),
+        async (input) => runTool(() => autoRoutePcb(
+            input.path,
+            input.file,
+            { timeoutSec: input.timeout_sec },
+            input.wait_ms,
+        )),
     );
 
     server.registerTool(

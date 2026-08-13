@@ -13,8 +13,7 @@ import { pcbTemplate } from '../src/kicad/pcb-template';
 import { atom, findChild, isSExpressionList, listHead, parseSExpression, printSExpression, SExpression, token } from '../src/kicad/sexpr/ast';
 import { importPcbChanges } from '../src/pcb/import';
 import { pcbLayoutWithoutPlacementResult } from '../src/pcb/layout-operation';
-import { routeDrcChanges } from '../src/pcb/routing-operation';
-import { buildRouterInput } from '../src/pcb/router-adapter';
+import { boardOutline } from '../src/pcb/board-geometry';
 import { netClassFor, readPcbRoutingRules } from '../src/pcb/router-rules';
 import { runProcessChecked } from '../src/utils/process';
 
@@ -39,21 +38,6 @@ async function main() {
         { path: 'installed-kicad-9', version: '9.0.7', major: 9 },
         { path: 'installed-kicad-10', version: '10.0.1', major: 10 },
     ])?.path, 'installed-kicad-10', 'CLI discovery must skip KiCad 8 and prefer KiCad 10');
-
-    const routeDrc = routeDrcChanges(
-        { shorts: 0, unconnected: 0, errorViolations: [] },
-        { shorts: 1, unconnected: 0, errorViolations: [{ key: 'shorting_items:a|b', type: 'shorting_items' }] },
-    );
-    assert.equal(routeDrc.introducedShortCircuits, 1);
-    assert.equal(routeDrc.introducedUnconnected, 0);
-    assert.equal(routeDrc.newErrors.length, 1, 'DRC errors must be available for the non-blocking report');
-
-    const generalDrc = routeDrcChanges(
-        { shorts: 0, unconnected: 1, errorViolations: [] },
-        { shorts: 0, unconnected: 3, errorViolations: [{ key: 'clearance:a|b', type: 'clearance' }] },
-    );
-    assert.equal(generalDrc.introducedUnconnected, 2);
-    assert.deepEqual(generalDrc.newErrors, [{ key: 'clearance:a|b', type: 'clearance' }]);
 
     const layoutReport = { status: 'error', dsl: { ok: false } };
     assert.deepEqual(pcbLayoutWithoutPlacementResult('layout-op', {
@@ -273,10 +257,10 @@ async function main() {
         assert.ok(printSExpression(bottomReference).includes('(justify mirror)'),
             'back reference text must be mirrored');
         assert.deepEqual(footprintAt(hole), { x: 148.5, y: 95, rotate: 0 });
-        const preliminaryRouter = buildRouterInput(assembled.root, {
-            routeLayers: ['F.Cu', 'B.Cu'], ignoreNets: ['GND'], speedFirst: true,
-        });
-        const classifiedNet = preliminaryRouter.routedNets[0];
+        const outline = boardOutline(assembled.root);
+        assert.ok(outline.points.length >= 3, 'routing import requires a closed board outline');
+        assert.equal(outline.holes.length, 1, 'routing import must preserve Edge.Cuts holes');
+        const classifiedNet = 'VCC';
         assert.ok(classifiedNet, 'router rules test requires at least one routable net');
         await writeFile(join(directory, 'stm32_debug.kicad_pro'), JSON.stringify({
             board: { design_settings: { rules: {
@@ -307,24 +291,8 @@ async function main() {
         const designRules = await readPcbRoutingRules(targetPcb);
         assert.equal(netClassFor(designRules, classifiedNet), 'Fine');
         assert.equal(netClassFor(designRules, 'UART_RX'), 'Fine');
-        const router = buildRouterInput(assembled.root, {
-            routeLayers: ['F.Cu', 'B.Cu'], ignoreNets: ['GND'], speedFirst: true, designRules,
-        });
-        const classifiedRouterNet = router.input.nets.find((item) => item.net === classifiedNet)!;
-        const ruleId = classifiedRouterNet.safeClearance as string;
-        const safeRule = (router.input.rules.safeClearances as Record<string, Array<Record<string, number>>>)[ruleId][0];
-        assert.equal(safeRule.trackToTrack, 0.18, 'netclass clearance must respect the board minimum');
-        assert.equal(safeRule.trackToBoardOutline, 0.5, 'router must use copper edge clearance');
-        const trackRule = (router.input.rules.trackWidths as Record<string, Array<{ trackWidth: number[] }>>)[ruleId][0];
-        assert.deepEqual(trackRule.trackWidth.slice(0, 2), [0.2, 0.2],
-            'netclass track width must respect the board minimum');
-        assert.deepEqual((router.input.rules.viaSizes as Record<string, number[]>)[`via_${ruleId}`], [0.55, 0.25],
-            'via size must respect diameter, drill and annular-width minimums');
-        const routerTop = router.input.components[refs[0]] as { footprint: string; rotation: number };
-        const routerBottom = router.input.components[refs[1]] as { footprint: string; rotation: number };
-        assert.equal(routerTop.rotation, footprintAt(top).rotate, 'router rotation must match KiCad rotation');
-        assert.equal(routerBottom.rotation, footprintAt(bottom).rotate, 'router rotation must match KiCad rotation');
-        assert.ok(Array.isArray((router.input.footprints[routerTop.footprint] as { bbox?: unknown }).bbox));
+        assert.equal(designRules.minimumTrackWidth, 0.2);
+        assert.equal(designRules.minimumViaAnnularWidth, 0.15);
         assert.ok(pcbFootprints(assembled.root).some((item) => item.some((child) => Array.isArray(child) && child[0] && !Array.isArray(child[0]) && child[0].value === 'property')));
         await verifyWithCli(targetPcb);
         await writeFile(join(directory, 'result.txt'), `ok ${refs.length}\n`);

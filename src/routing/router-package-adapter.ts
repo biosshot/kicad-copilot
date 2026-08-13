@@ -36,7 +36,7 @@ import {
     token,
     type SExpression,
 } from '../kicad/sexpr/ast';
-import { boardOutline } from '../pcb/router-adapter';
+import { boardOutline } from '../pcb/board-geometry';
 import {
     findPcbProjectPath,
     netClassFor,
@@ -338,8 +338,14 @@ export async function importKiCadRoutingBoard(
                 const net = padNet(pad);
                 if (net) nets.add(net);
                 const localRotation = numberAt(local, 3);
+                const nativePadId = childText(pad, 'uuid') ?? childText(pad, 'tstamp');
                 pads.push({
-                    id: childText(pad, 'uuid') ?? childText(pad, 'tstamp') ?? `${designator}:${padIndex}`,
+                    // KiCad legitimately reuses a pad UUID/tstamp for duplicated physical
+                    // shapes of one logical contact. RoutingBoard ids identify physical
+                    // shapes, while `number` retains the shared electrical identity.
+                    id: nativePadId
+                        ? `${nativePadId}:${componentIndex}:${padIndex}`
+                        : `${designator}:${componentIndex}:${padIndex}`,
                     component: designator,
                     number: padNumber(pad) ?? String(padIndex + 1),
                     ...(net ? { net } : {}),
@@ -394,19 +400,24 @@ function netForm(root: SExpression[], version: number, name: string) {
     return [token('net'), token(atom(existing[1]) ?? '0')] as SExpression[];
 }
 
-function removeEditableCopper(root: SExpression[], existingCopper: 'fixed' | 'editable') {
-    if (existingCopper !== 'editable') return 0;
+function removeEditableCopper(
+    root: SExpression[],
+    existingCopper: 'fixed' | 'editable',
+    replaceAll = false,
+) {
+    if (existingCopper !== 'editable' && !replaceAll) return 0;
     let removed = 0;
     for (let index = root.length - 1; index >= 0; index -= 1) {
         const node = root[index];
-        if (!isSExpressionList(node) || !['segment', 'arc', 'via', 'zone'].includes(listHead(node) ?? '') || locked(node)) continue;
+        if (!isSExpressionList(node) || !['segment', 'arc', 'via', 'zone'].includes(listHead(node) ?? '')) continue;
+        if (!replaceAll && locked(node)) continue;
         root.splice(index, 1);
         removed += 1;
     }
     return removed;
 }
 
-function appendTrack(root: SExpression[], version: number, track: RoutedTrack) {
+function appendTrack(root: SExpression[], version: number, track: RoutedTrack, lock = false) {
     for (let index = 0; index < track.points.length - 1; index += 1) {
         const start = track.points[index];
         const end = track.points[index + 1];
@@ -417,13 +428,14 @@ function appendTrack(root: SExpression[], version: number, track: RoutedTrack) {
             [token('end'), token(String(end.x)), token(String(end.y))],
             [token('width'), token(String(track.widthMm))],
             [token('layer'), token(track.layer, true)],
+            ...(lock ? [[token('locked'), token('yes')] as SExpression[]] : []),
             netForm(root, version, track.net),
             [token('uuid'), token(randomUUID(), true)],
         ]);
     }
 }
 
-function appendVia(root: SExpression[], version: number, via: RoutedVia) {
+function appendVia(root: SExpression[], version: number, via: RoutedVia, lock = false) {
     root.push([
         token('via'),
         ...(via.type === 'micro' ? [[token('micro')]] : []),
@@ -431,6 +443,7 @@ function appendVia(root: SExpression[], version: number, via: RoutedVia) {
         [token('size'), token(String(via.diameterMm))],
         [token('drill'), token(String(via.drillMm))],
         [token('layers'), token(via.fromLayer, true), token(via.toLayer, true)],
+        ...(lock ? [[token('locked'), token('yes')] as SExpression[]] : []),
         netForm(root, version, via.net),
         [token('uuid'), token(randomUUID(), true)],
     ]);
@@ -467,14 +480,33 @@ function appendZone(root: SExpression[], version: number, zone: RoutedZone, laye
     ]);
 }
 
-function applyCopper(root: SExpression[], version: number, copper: RoutingCopper) {
-    for (const track of copper.tracks) appendTrack(root, version, track);
-    for (const via of copper.vias) appendVia(root, version, via);
+function applyCopper(root: SExpression[], version: number, copper: RoutingCopper, lock = false) {
+    for (const track of copper.tracks) appendTrack(root, version, track, lock);
+    for (const via of copper.vias) appendVia(root, version, via, lock);
     for (const [index, zone] of copper.zones.entries()) for (const layer of zone.layers) appendZone(root, version, zone, layer, index);
 }
 
 function cloneRoot(root: SExpression[]) {
     return structuredClone(root);
+}
+
+/** Materialize the package input/result as a native KiCad candidate. */
+export async function materializeKiCadRoutingCandidate(
+    context: KiCadRoutingContext,
+    copper: RoutingCopper,
+    rules: RoutingRules,
+    outputPath: string,
+    options: Readonly<{ refillZones?: boolean; replaceAllCopper?: boolean; lockTracksAndVias?: boolean }> = {},
+) {
+    const target = resolve(outputPath);
+    if (target === context.document.path) throw new TypeError('routing transport cannot overwrite its source board');
+    const root = cloneRoot(context.document.root);
+    removeEditableCopper(root, context.existingCopper, options.replaceAllCopper === true);
+    applyCopper(root, context.document.version, copper, options.lockTracksAndVias === true);
+    await writeProjectRules(context.document.path, target, rules);
+    const normalized = await inspectPcbCandidate(target, root, options.refillZones === true);
+    await atomicCreate(target, serializePcb(normalized.root));
+    return { outputPath: target, root: normalized.root, report: normalized.report };
 }
 
 function projectJsonPath(boardPath: string) {

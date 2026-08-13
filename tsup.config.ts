@@ -1,5 +1,4 @@
 import { createRequire } from 'node:module';
-import { copyFile, mkdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { defineConfig } from 'tsup';
 
@@ -17,6 +16,7 @@ export default defineConfig({
         'test-pcb-live': 'scripts/test-pcb-live.ts',
         'test-routing-live': 'scripts/test-routing-live.ts',
         'test-router-package-adapter': 'scripts/test-router-package-adapter.ts',
+        'test-krt-board-transport': 'scripts/test-krt-board-transport.ts',
         'router-package-adapter': 'src/routing/router-package-adapter.ts',
     },
     format: ['esm'],
@@ -24,17 +24,6 @@ export default defineConfig({
     dts: false,
     sourcemap: false,
     noExternal: ['@modelcontextprotocol/sdk', '@easyeda-copilot/router'],
-    async onSuccess() {
-        const target = join('dist', 'autorouter');
-        await mkdir(target, { recursive: true });
-        await Promise.all([
-            copyFile(join('autorouter', 'pcbRouterWorker.js'), join(target, 'pcbRouterWorker.js')),
-            copyFile(
-                join('autorouter', 'PCBRouter-YFDILLBW-YFDILLBW.wasm'),
-                join(target, 'PCBRouter-YFDILLBW-YFDILLBW.wasm'),
-            ),
-        ]);
-    },
     esbuildPlugins: [
         {
             name: 'mcp-sdk-extensionless-imports',
