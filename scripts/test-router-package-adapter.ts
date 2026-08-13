@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import type { RoutingResult } from '@easyeda-copilot/router';
+import { run, type RoutingResult } from '@easyeda-copilot/router';
 import { listChildren, readPcb } from '../src/kicad/pcb-reader';
 import { sourceHash } from '../src/kicad/pcb-writer';
 import {
@@ -68,18 +68,27 @@ try {
     ));
     assert.equal(listChildren(reroutedBoard.root, 'via').length, editable.board.copper.editable.vias.length);
 
+    const dslRules = await run({
+        board: safe.board,
+        dsl: `signalNet("USB_CC1", { trackWidthMm: 0.22 }); applyDrcRules()`,
+    });
+    assert.equal(dslRules.status, 'complete', JSON.stringify(dslRules.diagnostics));
+    assert.equal(dslRules.operation, 'apply-drc');
+    assert.equal(dslRules.rules.applyRequested, true);
+    assert.equal(dslRules.copper, undefined);
+    assert.equal(
+        dslRules.rules.effective.nets.find(item => item.net === 'USB_CC1')?.values.preferredTrackWidthMm,
+        0.22,
+    );
     const rulesOutput = join(temporary, 'rules.kicad_pcb');
-    const appliedRules = await applyKiCadRoutingResult(safe.context, {
-        ...noOp,
-        operation: 'apply-drc',
-        rules: { effective: safe.board.rules, applyRequested: true, overriddenFields: [] },
-        copper: undefined,
-    }, rulesOutput, { nativeVerify: false });
+    const appliedRules = await applyKiCadRoutingResult(safe.context, dslRules, rulesOutput, { nativeVerify: false });
     assert.equal(appliedRules.diagnostics.filter(item => item.severity === 'error').length, 0);
     const project = JSON.parse(await readFile(rulesOutput.replace(/\.kicad_pcb$/, '.kicad_pro'), 'utf8'));
     assert.ok(project.net_settings.classes.every((item: { name: string }) => item.name.startsWith('Router_')));
     const dru = await readFile(rulesOutput.replace(/\.kicad_pcb$/, '.kicad_dru'), 'utf8');
     assert.match(dru, /copilot-router 1:/);
+    assert.match(dru, /USB_CC1/);
+    assert.match(dru, /0\.22mm/);
     assert.doesNotMatch(dru, /USB port A1 pair clearance/);
 
     assert.equal(sourceHash(await readFile(sourcePath)), sourceHash(sourceBefore), 'source PCB changed');
