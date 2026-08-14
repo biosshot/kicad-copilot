@@ -3,11 +3,11 @@ import { clearPcbRouting } from '../src/pcb/clear-routing';
 import { autoRoutePcb, waitAutoRoute } from '../src/routing/routing-operation';
 import { pourPcbLayers } from '../src/pcb/pour';
 
-const [mode, path, dslFile] = process.argv.slice(2);
+const [mode, path, dslFile, timeoutArg] = process.argv.slice(2);
 
 async function main() {
     if (!path || !['route', 'pour', 'clear'].includes(mode || '')) {
-        throw new Error('Usage: node dist/test-routing-live.js route|pour|clear path/to/board.kicad_pcb path/to/routing.js');
+        throw new Error('Usage: node dist/test-routing-live.js route|pour|clear path/to/board.kicad_pcb path/to/routing.js [timeout-sec]');
     }
     const target = resolve(path);
     if (mode === 'pour') {
@@ -17,11 +17,16 @@ async function main() {
         return;
     }
     if (mode === 'clear') {
-        console.log(await clearPcbRouting(target));
+        const onlyNets = dslFile
+            ? dslFile.split(',').map(net => net.trim()).filter(Boolean)
+            : undefined;
+        console.log(await clearPcbRouting(target, onlyNets?.length ? { onlyNets } : {}));
         return;
     }
     if (!dslFile) throw new Error('Routing DSL file is required.');
-    let result = await autoRoutePcb(target, resolve(dslFile), { timeoutSec: 600 }, 180_000);
+    const timeoutSec = timeoutArg === undefined ? 600 : Number(timeoutArg);
+    if (!Number.isFinite(timeoutSec) || timeoutSec <= 0) throw new Error(`Invalid timeout: ${timeoutArg}`);
+    let result = await autoRoutePcb(target, resolve(dslFile), { timeoutSec }, 180_000);
     while (result && typeof result === 'object' && 'operation_id' in result) {
         result = await waitAutoRoute(String(result.operation_id), 180_000);
     }
