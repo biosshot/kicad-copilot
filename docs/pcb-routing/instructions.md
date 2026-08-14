@@ -37,6 +37,8 @@ plane({
 runAll()
 ```
 
-Set `COPILOT_ROUTER_KRT_DIR` to a KiCadRoutingTools checkout containing
-`py_router/route.py` and `py_router/route_diff.py`. Set
-`COPILOT_ROUTER_PYTHON` only when `python` is not the desired interpreter.
+No KRT installation is required. On first routing use, `copilot-router`
+downloads the pinned official KRT release, verifies its SHA-256, prepares the
+platform module and Python dependencies in the user cache, then reuses it
+offline. `COPILOT_ROUTER_KRT_DIR` and `COPILOT_ROUTER_PYTHON` are optional
+development or air-gapped overrides, not user setup steps.
