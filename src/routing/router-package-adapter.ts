@@ -264,18 +264,28 @@ function importedCopper(root: SExpression[]) {
     return { tracks, vias, zones };
 }
 
+const DEFAULT_FAB_TRACK_WIDTH_MM = 0.127;
+const DEFAULT_FAB_VIA_DIAMETER_MM = 0.6;
+const DEFAULT_FAB_VIA_DRILL_MM = 0.3;
+
+function explicitOrDefault(value: number, fallback: number) {
+    return value > 0 ? value : fallback;
+}
+
 function ruleValues(rule: PcbRoutingRules['classes'][number], source: PcbRoutingRules): RoutingRuleValues {
-    const minTrack = Math.max(source.minimumTrackWidth, rule.trackWidth);
-    const minDrill = Math.max(source.minimumViaDrill, rule.viaDrill);
-    const minDiameter = Math.max(source.minimumViaDiameter, rule.viaDiameter, minDrill + source.minimumViaAnnularWidth * 2);
+    const minTrack = explicitOrDefault(source.minimumTrackWidth, DEFAULT_FAB_TRACK_WIDTH_MM);
+    const preferredTrack = Math.max(minTrack, rule.trackWidth);
+    const minDrill = explicitOrDefault(source.minimumViaDrill, DEFAULT_FAB_VIA_DRILL_MM);
+    const declaredMinDiameter = explicitOrDefault(source.minimumViaDiameter, DEFAULT_FAB_VIA_DIAMETER_MM);
+    const minDiameter = Math.max(declaredMinDiameter, minDrill + source.minimumViaAnnularWidth * 2);
     return {
         clearanceMm: Math.max(source.minimumClearance, rule.clearance),
         edgeClearanceMm: Math.max(source.copperEdgeClearance, source.minimumClearance, rule.clearance),
         minTrackWidthMm: minTrack,
-        preferredTrackWidthMm: minTrack,
+        preferredTrackWidthMm: preferredTrack,
         via: {
-            minDiameterMm: minDiameter, preferredDiameterMm: minDiameter,
-            minDrillMm: minDrill, preferredDrillMm: minDrill,
+            minDiameterMm: minDiameter, preferredDiameterMm: Math.max(minDiameter, rule.viaDiameter),
+            minDrillMm: minDrill, preferredDrillMm: Math.max(minDrill, rule.viaDrill),
         },
         differential: {
             trackWidthMm: Math.max(source.minimumTrackWidth, rule.diffPairWidth),
@@ -514,6 +524,22 @@ function projectJsonPath(boardPath: string) {
 }
 
 function setEffectiveRules(project: Record<string, unknown>, rules: RoutingRules) {
+    const board = (project.board && typeof project.board === 'object')
+        ? project.board as Record<string, unknown>
+        : (project.board = {}) as Record<string, unknown>;
+    const designSettings = (board.design_settings && typeof board.design_settings === 'object')
+        ? board.design_settings as Record<string, unknown>
+        : (board.design_settings = {}) as Record<string, unknown>;
+    const globalRules = (designSettings.rules && typeof designSettings.rules === 'object')
+        ? designSettings.rules as Record<string, unknown>
+        : (designSettings.rules = {}) as Record<string, unknown>;
+    const values = [rules.default, ...rules.nets.map(entry => entry.values)];
+    globalRules.min_track_width = Math.min(...values.map(value => value.minTrackWidthMm));
+    globalRules.min_clearance = Math.min(...values.map(value => value.clearanceMm));
+    globalRules.min_copper_edge_clearance = Math.min(...values.map(value => value.edgeClearanceMm));
+    globalRules.min_via_diameter = Math.min(...values.map(value => value.via.minDiameterMm));
+    globalRules.min_through_hole_diameter = Math.min(...values.map(value => value.via.minDrillMm));
+
     const netSettings = (project.net_settings && typeof project.net_settings === 'object')
         ? project.net_settings as Record<string, unknown>
         : (project.net_settings = {}) as Record<string, unknown>;
@@ -659,16 +685,15 @@ export async function applyKiCadRoutingResult(
             removeEditableCopper(root, context.existingCopper);
             applyCopper(root, context.document.version, result.copper);
         }
-        if (result.rules.applyRequested) await writeProjectRules(context.document.path, target, result.rules.effective);
-        else {
-            const sourceProject = await findPcbProjectPath(context.document.path);
-            if (sourceProject) {
-                await copyFile(sourceProject, projectJsonPath(target));
-                await copyFile(
-                    sourceProject.replace(/\.kicad_pro$/i, '.kicad_dru'),
-                    projectJsonPath(target).replace(/\.kicad_pro$/i, '.kicad_dru'),
-                ).catch(() => undefined);
-            }
+        const sourceProject = await findPcbProjectPath(context.document.path);
+        if (result.rules.applyRequested || (options.nativeVerify !== false && sourceProject)) {
+            await writeProjectRules(context.document.path, target, result.rules.effective);
+        } else if (sourceProject) {
+            await copyFile(sourceProject, projectJsonPath(target));
+            await copyFile(
+                sourceProject.replace(/\.kicad_pro$/i, '.kicad_dru'),
+                projectJsonPath(target).replace(/\.kicad_pro$/i, '.kicad_dru'),
+            ).catch(() => undefined);
         }
         let finalRoot = root;
         let report: unknown;

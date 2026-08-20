@@ -10,6 +10,15 @@ import {
     importKiCadRoutingBoard,
 } from '../src/routing/router-package-adapter';
 
+const zeroFabFixture = await importKiCadRoutingBoard(resolve('tests/fixtures/cap-chain.kicad_pcb'));
+assert.ok(zeroFabFixture.board, JSON.stringify(zeroFabFixture.diagnostics));
+assert.equal(zeroFabFixture.board.rules.default.minTrackWidthMm, 0.127);
+assert.equal(zeroFabFixture.board.rules.default.preferredTrackWidthMm, 0.25);
+assert.equal(zeroFabFixture.board.rules.default.via.minDiameterMm, 0.6);
+assert.equal(zeroFabFixture.board.rules.default.via.preferredDiameterMm, 0.6);
+assert.equal(zeroFabFixture.board.rules.default.via.minDrillMm, 0.3);
+assert.equal(zeroFabFixture.board.rules.default.via.preferredDrillMm, 0.3);
+
 const sourcePath = resolve(process.env.POWERBANK_PCB
     ?? 'D:\\MyProject\\kicad\\Powerbank\\Powerbank.kicad_pcb');
 const sourceBefore = await readFile(sourcePath);
