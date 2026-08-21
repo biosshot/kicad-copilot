@@ -1,6 +1,6 @@
-import { getSchematic } from '../kicad/schematic-reader';
 import { postJson } from '../utils/server';
 import { associatedSchematicPath } from './paths';
+import { createPcbLayoutInput } from './layout-input';
 
 type SizeResponse = { content?: string; error?: string };
 
@@ -10,9 +10,9 @@ export async function getPcbComponentSizes(
     includeAll?: boolean | null,
 ) {
     const schematicPath = await associatedSchematicPath(pcbPath);
-    const circuit = await getSchematic(schematicPath);
+    const input = await createPcbLayoutInput(pcbPath, schematicPath);
     const response = await postJson('/v1/mcp-tools/get-pcb-component-sizes', {
-        circuit,
+        ...input,
         designators,
         includeAll,
     }) as SizeResponse;

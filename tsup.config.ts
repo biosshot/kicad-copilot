@@ -13,6 +13,7 @@ export default defineConfig({
         'test-assembly-scenarios': 'scripts/test-assembly-scenarios.ts',
         'test-extract-regressions': 'scripts/test-extract-regressions.ts',
         'test-pcb-scenarios': 'scripts/test-pcb-scenarios.ts',
+        'test-footprint-spec': 'scripts/test-footprint-spec.ts',
         'test-pcb-live': 'scripts/test-pcb-live.ts',
         'test-routing-live': 'scripts/test-routing-live.ts',
         'test-router-package-adapter': 'scripts/test-router-package-adapter.ts',

@@ -2,8 +2,6 @@ import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { BoardAssemble } from '../types/board-assemble';
 import { fileHash } from '../kicad/pcb-writer';
-import { footprintIsBoardOnly, footprintPath, footprintReference, pcbFootprints, readPcb } from '../kicad/pcb-reader';
-import { getPcbSchematic } from '../kicad/schematic-reader';
 import {
     AsyncOperationResponse,
     asyncProgress,
@@ -13,6 +11,7 @@ import {
     waitForAsyncTask,
 } from '../utils/server';
 import { associatedSchematicPath } from './paths';
+import { createPcbLayoutInput } from './layout-input';
 import {
     ActivePcbLayout,
     clearActiveLayout,
@@ -50,35 +49,6 @@ function record(value: unknown): Record<string, unknown> | undefined {
     return typeof value === 'object' && value !== null && !Array.isArray(value)
         ? value as Record<string, unknown>
         : undefined;
-}
-
-async function assertSynchronized(pcbPath: string, schematicPath: string) {
-    const [pcb, schematic] = await Promise.all([readPcb(pcbPath), getPcbSchematic(schematicPath)]);
-    const expected = schematic.components.filter((component) => component.on_board && component.footprint_name);
-    const actual = new Map(pcbFootprints(pcb.root)
-        .filter((footprint) => !footprintIsBoardOnly(footprint))
-        .flatMap((footprint) => {
-            const reference = footprintReference(footprint);
-            return reference ? [[reference.toUpperCase(), footprint] as const] : [];
-        }));
-    const missing = expected.filter((component) => !actual.has(component.designator.toUpperCase()));
-    const expectedRefs = new Set(expected.map((component) => component.designator.toUpperCase()));
-    const removed = [...actual].filter(([reference, footprint]) => footprintPath(footprint) && !expectedRefs.has(reference));
-    if (missing.length || removed.length) {
-        throw new Error(`PCB is not synchronized; run import_pcb_changes (${[
-            ...missing.map((item) => `missing ${item.designator}`),
-            ...removed.map(([reference]) => `removed ${reference}`),
-        ].slice(0, 12).join(', ')})`);
-    }
-    const incompatible = expected.filter((component) => {
-        const part = component.part_uuid || '';
-        const footprint = component.footprint_uuid || '';
-        return !/^[a-f0-9]{32}$/i.test(part) && !/^[a-f0-9]{32}$/i.test(footprint);
-    });
-    if (incompatible.length) {
-        throw new Error(`components have no EasyEDA footprint identity: ${incompatible.map((item) => item.designator).join(', ')}`);
-    }
-    return schematic.circuit;
 }
 
 async function ensureNoActiveOperation() {
@@ -153,13 +123,13 @@ async function finishOperation(active: ActivePcbLayout, operation: AsyncOperatio
 export async function makePcbLayout(pcbPath: string, file: string, waitMs = 60_000) {
     await ensureNoActiveOperation();
     const schematicPath = await associatedSchematicPath(pcbPath);
-    const [code, circuit, pcbHash, schematicHash] = await Promise.all([
+    const [code, input, pcbHash, schematicHash] = await Promise.all([
         readFile(file, 'utf8'),
-        assertSynchronized(pcbPath, schematicPath),
+        createPcbLayoutInput(pcbPath, schematicPath),
         fileHash(pcbPath),
         fileHash(schematicPath),
     ]);
-    const operationId = await startAsyncTask(TASK_PATH, { code, circuit });
+    const operationId = await startAsyncTask(TASK_PATH, { code, ...input });
     const active: ActivePcbLayout = {
         operation_id: operationId,
         pcb_path: pcbPath,
