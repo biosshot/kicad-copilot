@@ -73,6 +73,16 @@ function decodeString(value: string) {
     return value.replace(/\\([\\"])/g, '$1');
 }
 
+export function findScalarValue(source: string, head: string) {
+    const escapedHead = head.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern = new RegExp(
+        `\\(${escapedHead}\\s+(?:"((?:\\\\.|[^"\\\\])*)"|([^\\s()]+))`,
+    );
+    const match = source.match(pattern);
+    if (!match) return undefined;
+    return match[1] === undefined ? match[2] : decodeString(match[1]);
+}
+
 export function findQuotedProperty(source: string, propertyName: string) {
     const escapedName = propertyName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const pattern = new RegExp(`\\(property\\s+"${escapedName}"\\s+"((?:\\\\.|[^"\\\\])*)"`);

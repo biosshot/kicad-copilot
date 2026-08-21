@@ -14,7 +14,13 @@ import {
     printSExpression,
     SExpression,
 } from './sexpr/ast';
-import { findLists, findQuotedProperty, quoteSExpression, SExpressionRange } from './sexpr/scan';
+import {
+    findLists,
+    findQuotedProperty,
+    findScalarValue,
+    quoteSExpression,
+    SExpressionRange,
+} from './sexpr/scan';
 import {
     embeddedLibrarySymbol,
     LibraryPin,
@@ -96,9 +102,9 @@ function targetVersion(source: string) {
 }
 
 function targetUuid(source: string) {
-    const match = source.match(/\(uuid\s+"([^"]+)"\)/);
-    if (!match) throw new Error('invalid KiCad schematic: root uuid not found');
-    return match[1];
+    const uuid = findScalarValue(source, 'uuid');
+    if (!uuid) throw new Error('invalid KiCad schematic: root uuid not found');
+    return uuid;
 }
 
 function atPoint(list: SExpression[] | undefined) {

@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { access, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, extname, parse, relative, resolve } from 'node:path';
 import { getSupportedKicadCli } from './cli';
-import { findLists } from './sexpr/scan';
+import { findLists, findScalarValue } from './sexpr/scan';
 import { projectTemplate, schematicTemplate, sheetSymbol } from './schematic-template';
 import { pcbTemplate } from './pcb-template';
 import { temporarySiblingPath, validateSchematicSource } from './schematic-validation';
@@ -53,9 +53,9 @@ function documentVersion(source: string) {
 }
 
 function documentUuid(source: string) {
-    const match = source.match(/\(uuid\s+"([^"]+)"\)/);
-    if (!match) throw new Error('invalid KiCad schematic: root uuid not found');
-    return match[1];
+    const uuid = findScalarValue(source, 'uuid');
+    if (!uuid) throw new Error('invalid KiCad schematic: root uuid not found');
+    return uuid;
 }
 
 function insertionOffset(source: string) {

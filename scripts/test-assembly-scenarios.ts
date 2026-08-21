@@ -632,6 +632,44 @@ async function main() {
                 'project info: .history schematic was included');
         });
 
+        await runScenario('KiCad-created project accepts a hierarchical page', async () => {
+            const directory = join(root, 'native-kicad-project');
+            const projectPath = join(directory, 'native.kicad_pro');
+            const rootPath = join(directory, 'native.kicad_sch');
+            const childPath = join(directory, 'child.kicad_sch');
+            await mkdir(directory, { recursive: true });
+            await writeFile(projectPath, '{}\n', 'utf8');
+            await writeFile(rootPath, `(kicad_sch
+\t(version 20260306)
+\t(generator "eeschema")
+\t(generator_version "10.0")
+\t(uuid 4790c18b-5150-45f7-8af2-f5917717030e)
+\t(paper "A4")
+\t(lib_symbols)
+\t(sheet_instances
+\t\t(path "/"
+\t\t\t(page "1")
+\t\t)
+\t)
+\t(embedded_fonts no)
+)
+`, 'utf8');
+
+            await createDocument({
+                doc_type: 'schematic_page',
+                path: childPath,
+                parent_path: rootPath,
+            });
+
+            const updatedRoot = await readFile(rootPath, 'utf8');
+            expect(findLists(updatedRoot, 'sheet').length === 1,
+                'native KiCad project: hierarchical sheet was not inserted');
+            expect(updatedRoot.includes('(property "Sheetfile" "child.kicad_sch"'),
+                'native KiCad project: child path was not recorded');
+            expect((await readFile(childPath, 'utf8')).includes('(kicad_sch'),
+                'native KiCad project: child schematic was not created');
+        });
+
         await runScenario('project-wide server circuit context', async () => {
             const directory = join(root, 'project-circuit-context');
             const projectPath = join(directory, 'main.kicad_pro');
