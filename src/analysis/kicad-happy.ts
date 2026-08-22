@@ -354,6 +354,24 @@ export function parseJsonSuffix(output: string) {
     return undefined;
 }
 
+export function parseDatasheetSyncOutput(stdout: string, stderr: string) {
+    const parsed = parseJsonSuffix(stdout);
+    if (parsed) return parsed;
+
+    const upToDate = stderr.match(
+        /All (\d+) datasheets up to date\.(?: (\d+) previous failures \(use --force to retry\)\.)?/,
+    );
+    if (!upToDate) return undefined;
+    const alreadyPresent = Number(upToDate[1]);
+    const failed = Number(upToDate[2] ?? 0);
+    return {
+        downloaded: 0,
+        already_present: alreadyPresent,
+        failed,
+        total_identified_parts: alreadyPresent + failed,
+    };
+}
+
 function appendSyncWarning(raw: JsonRecord, summary: string, fix: string) {
     const findings = Array.isArray(raw.findings) ? raw.findings : [];
     findings.push({
@@ -407,7 +425,7 @@ async function syncDatasheets(
         return undefined;
     }
 
-    const parsed = parseJsonSuffix(processResult.stdout);
+    const parsed = parseDatasheetSyncOutput(processResult.stdout, processResult.stderr);
     if (!parsed || stringValue(parsed.error)) {
         appendSyncWarning(
             raw,

@@ -3,12 +3,21 @@ import {
     analyzePcb,
     analyzeSchematic,
     compactAnalysis,
+    parseDatasheetSyncOutput,
     parseJsonSuffix,
 } from '../src/analysis/kicad-happy';
 
 assert.deepEqual(
     parseJsonSuffix('Downloaded 123 bytes via requests: part.pdf\n{"downloaded":1,"failed":0}\n'),
     { downloaded: 1, failed: 0 },
+);
+assert.deepEqual(
+    parseDatasheetSyncOutput('', 'All 17 datasheets up to date.\n'),
+    { downloaded: 0, already_present: 17, failed: 0, total_identified_parts: 17 },
+);
+assert.deepEqual(
+    parseDatasheetSyncOutput('', 'All 15 datasheets up to date. 2 previous failures (use --force to retry).\n'),
+    { downloaded: 0, already_present: 15, failed: 2, total_identified_parts: 17 },
 );
 
 const syntheticSchematic = {
