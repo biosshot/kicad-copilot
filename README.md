@@ -216,11 +216,14 @@ See [KiCad CLI workflow](docs/kicad-cli.md) for ready-to-use commands.
 
 ## Design analysis
 
-`analyze_schematic` runs the offline schematic checks and embedded audits from kicad-happy;
-full mode includes actionable suggestions but does not download datasheets.
-`analyze_pcb` runs PCB connectivity, placement, routing, DFM, thermal-pad,
-and optional trace-proximity checks. Both tools group repeated issues and omit internal
-rule identifiers, detector metadata, runtime metrics, and large pad lists from the LLM response.
+`analyze_schematic` runs the offline schematic checks and can return focused top-level
+overview, hierarchy, block, connectivity, power, bus, BOM, assembly, and verification data.
+`analyze_pcb` automatically enriches PCB analysis from the associated schematic, runs
+cross-domain checks, and optionally adds thermal, EMC, or trace-proximity analysis. Individual
+boolean flags control each optional report field; compact findings are enabled by default.
+`audit_lifecycle` performs long network-backed lifecycle checks through `wait_analysis`.
+The tools omit internal rule identifiers, runtime metrics, and coordinate-level copper from
+the LLM response.
 
 See [design analysis](docs/analysis.md) for the exact compact result contract and workflow.
 

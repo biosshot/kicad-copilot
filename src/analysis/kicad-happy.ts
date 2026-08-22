@@ -1,10 +1,19 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { basename, dirname, extname, join, resolve } from 'node:path';
 import { prepareManagedRouterAsset } from 'eda-copilot-router/backends/assets';
 import { TEMP_DIR } from '../utils/dirs';
 import { runProcessChecked } from '../utils/process';
 import { getPython } from '../utils/python';
+import {
+    asRecord,
+    projectPcb,
+    projectSchematic,
+    type JsonRecord,
+    type PcbAnalysisOptions,
+    type PcbRelatedReports,
+    type SchematicAnalysisOptions,
+} from './projections';
 
 const KICAD_HAPPY_VERSION = 'v2.2.0';
 const MAX_FINDING_GROUPS = 20;
@@ -20,7 +29,10 @@ import zipfile
 archive = pathlib.Path(sys.argv[1])
 output = pathlib.Path(sys.argv[2]).resolve()
 archive_root = "kicad-happy-2.2.0/"
-skill_prefix = archive_root + "skills/kicad/"
+skill_prefixes = {
+    archive_root + "skills/kicad/": pathlib.PurePosixPath("skills/kicad"),
+    archive_root + "skills/emc/": pathlib.PurePosixPath("skills/emc"),
+}
 
 with zipfile.ZipFile(archive) as source:
     for entry in source.infolist():
@@ -28,9 +40,13 @@ with zipfile.ZipFile(archive) as source:
         if name == archive_root + "LICENSE":
             relative = pathlib.PurePosixPath("LICENSE")
         else:
-            if not name.startswith(skill_prefix):
+            relative = None
+            for skill_prefix, target_prefix in skill_prefixes.items():
+                if name.startswith(skill_prefix):
+                    relative = target_prefix / name[len(skill_prefix):]
+                    break
+            if relative is None:
                 continue
-            relative = pathlib.PurePosixPath("skills/kicad") / name[len(skill_prefix):]
 
         if not relative.parts:
             continue
@@ -79,6 +95,10 @@ const KICAD_HAPPY_RELEASE = {
     markers: [
         'skills/kicad/scripts/analyze_schematic.py',
         'skills/kicad/scripts/analyze_pcb.py',
+        'skills/kicad/scripts/cross_analysis.py',
+        'skills/kicad/scripts/analyze_thermal.py',
+        'skills/kicad/scripts/lifecycle_audit.py',
+        'skills/emc/scripts/analyze_emc.py',
     ],
     prepareDirectory: extractKicadHappy,
 };
@@ -95,12 +115,12 @@ export type AnalysisFinding = {
 export type AnalysisResult = {
     status: 'pass' | 'warn' | 'fail';
     summary: string;
-    findings: AnalysisFinding[];
+    skipped: string[];
+    findings?: AnalysisFinding[];
     report?: string;
-};
+} & JsonRecord;
 
-type AnalysisDomain = 'schematic' | 'pcb';
-type JsonRecord = Record<string, unknown>;
+type AnalysisDomain = 'schematic' | 'pcb' | 'lifecycle';
 
 type FindingCandidate = {
     severity: AnalysisSeverity;
@@ -119,12 +139,6 @@ type FindingGroup = {
 };
 
 let assetPreparation: ReturnType<typeof prepareManagedRouterAsset> | undefined;
-
-function asRecord(value: unknown): JsonRecord | undefined {
-    return value !== null && typeof value === 'object' && !Array.isArray(value)
-        ? value as JsonRecord
-        : undefined;
-}
 
 function stringValue(value: unknown) {
     return typeof value === 'string' ? value.trim() : '';
@@ -283,23 +297,31 @@ function resultSummary(domain: AnalysisDomain, candidates: FindingCandidate[]) {
         warnings ? `${warnings} warning${warnings === 1 ? '' : 's'}` : '',
         suggestions ? `${suggestions} suggestion${suggestions === 1 ? '' : 's'}` : '',
     ].filter(Boolean);
-    return `${domain === 'pcb' ? 'PCB' : 'Schematic'}: ${counts.join(', ')}.`;
+    const label = domain === 'pcb' ? 'PCB' : domain === 'schematic' ? 'Schematic' : 'Lifecycle';
+    return `${label}: ${counts.join(', ')}.`;
 }
 
-export function compactAnalysis(
-    rawValue: unknown,
+function compactReports(
+    rawValues: unknown[],
     domain: AnalysisDomain,
-    options: { includeActionableInfo: boolean; reportPath: string },
+    options: {
+        includeActionableInfo: boolean;
+        includeFindings: boolean;
+        reportPath: string;
+        skipped: string[];
+    },
 ): AnalysisResult {
-    const raw = asRecord(rawValue);
-    if (!raw) throw new Error(`kicad-happy returned an invalid ${domain} report`);
+    const raws = rawValues.map(asRecord).filter((raw): raw is JsonRecord => raw !== undefined);
+    if (!raws.length) throw new Error(`kicad-happy returned an invalid ${domain} report`);
 
-    const rawFindings = Array.isArray(raw.findings)
-        ? raw.findings.map(asRecord).filter((finding): finding is JsonRecord => finding !== undefined)
-        : [];
-    const candidates = rawFindings
-        .map((finding) => findingCandidate(finding, raw, options.includeActionableInfo))
-        .filter((finding): finding is FindingCandidate => finding !== undefined);
+    const candidates = raws.flatMap((raw) => {
+        const rawFindings = Array.isArray(raw.findings)
+            ? raw.findings.map(asRecord).filter((finding): finding is JsonRecord => finding !== undefined)
+            : [];
+        return rawFindings
+            .map((finding) => findingCandidate(finding, raw, options.includeActionableInfo))
+            .filter((finding): finding is FindingCandidate => finding !== undefined);
+    });
     const groups = groupCandidates(candidates).sort((a, b) => {
         const severity = severityRank(a.items[0].severity) - severityRank(b.items[0].severity);
         return severity || b.items.length - a.items.length || a.key.localeCompare(b.key);
@@ -312,13 +334,27 @@ export function compactAnalysis(
     const result: AnalysisResult = {
         status: hasErrors ? 'fail' : candidates.length ? 'warn' : 'pass',
         summary: resultSummary(domain, candidates),
-        findings,
+        skipped: options.skipped,
     };
+    if (options.includeFindings) result.findings = findings;
     const detailsHidden = groups.length > selectedGroups.length
         || groups.some((group) => group.items.length > 1)
-        || compacted.some((item) => item.refsTruncated);
+        || compacted.some((item) => item.refsTruncated)
+        || !options.includeFindings;
     if (detailsHidden) result.report = options.reportPath;
     return result;
+}
+
+export function compactAnalysis(
+    rawValue: unknown,
+    domain: 'schematic' | 'pcb',
+    options: { includeActionableInfo: boolean; reportPath: string },
+): AnalysisResult {
+    return compactReports([rawValue], domain, {
+        ...options,
+        includeFindings: true,
+        skipped: [],
+    });
 }
 
 async function prepareKicadHappy() {
@@ -344,29 +380,31 @@ async function checkedInputPath(inputPath: string) {
     return path;
 }
 
-async function runAnalyzer(
-    domain: AnalysisDomain,
-    inputPath: string,
-    flags: string[],
-    includeActionableInfo: boolean,
-) {
-    const [asset, python, path] = await Promise.all([
-        prepareKicadHappy(),
-        getPython(),
-        checkedInputPath(inputPath),
-    ]);
-    const runDirectory = join(TEMP_DIR, 'analysis', randomUUID());
-    await mkdir(runDirectory, { recursive: true });
-    const reportPath = join(runDirectory, `${domain}.json`);
-    const resultPath = join(runDirectory, 'result.json');
-    const script = join(
-        asset.directory,
-        'skills',
-        'kicad',
-        'scripts',
-        domain === 'schematic' ? 'analyze_schematic.py' : 'analyze_pcb.py',
-    );
+type PreparedRuntime = Awaited<ReturnType<typeof prepareKicadHappy>>;
+type PythonRuntime = Awaited<ReturnType<typeof getPython>>;
 
+async function readReport(reportPath: string) {
+    const source = await readFile(reportPath, 'utf8');
+    try {
+        const raw = asRecord(JSON.parse(source));
+        if (!raw) throw new Error('not an object');
+        return raw;
+    } catch {
+        throw new Error(`kicad-happy returned invalid JSON: ${reportPath}`);
+    }
+}
+
+async function runScript(
+    asset: PreparedRuntime,
+    python: PythonRuntime,
+    runDirectory: string,
+    skill: 'kicad' | 'emc',
+    scriptName: string,
+    args: string[],
+    reportPath: string,
+    timeoutMs = 300_000,
+) {
+    const script = join(asset.directory, 'skills', skill, 'scripts', scriptName);
     await runProcessChecked(
         python.command,
         [
@@ -374,40 +412,207 @@ async function runAnalyzer(
             '-X',
             'utf8',
             script,
-            path,
+            ...args,
             '--output',
             reportPath,
-            '--compact',
-            ...flags,
         ],
-        { cwd: runDirectory, timeoutMs: 300_000 },
+        { cwd: runDirectory, timeoutMs },
     );
+    return readReport(reportPath);
+}
 
-    const readReport = async () => {
-        const source = await readFile(reportPath, 'utf8');
-        try {
-            const raw = asRecord(JSON.parse(source));
-            if (!raw) throw new Error('not an object');
-            return raw;
-        } catch {
-            throw new Error(`kicad-happy returned invalid JSON: ${reportPath}`);
-        }
-    };
-    const raw = await readReport();
-    const result = compactAnalysis(raw, domain, { includeActionableInfo, reportPath });
-    await writeFile(resultPath, `${JSON.stringify(result, null, 2)}\n`, 'utf8');
+async function createRun() {
+    const runDirectory = join(TEMP_DIR, 'analysis', randomUUID());
+    await mkdir(runDirectory, { recursive: true });
+    return runDirectory;
+}
+
+async function writeResult(runDirectory: string, result: AnalysisResult) {
+    await writeFile(join(runDirectory, 'result.json'), `${JSON.stringify(result, null, 2)}\n`, 'utf8');
     return result;
 }
 
-export function analyzeSchematic(path: string, mode: 'quick' | 'full') {
-    const flags = mode === 'quick' ? ['--only-deterministic'] : [];
-    return runAnalyzer('schematic', path, flags, mode === 'full');
+async function automaticSchematicInput(inputPath: string, override?: string) {
+    if (override) return checkedInputPath(override);
+    const extension = extname(inputPath).toLowerCase();
+    if (extension !== '.kicad_pcb') return inputPath;
+    const sibling = join(dirname(inputPath), `${basename(inputPath, extension)}.kicad_sch`);
+    return stat(sibling).then(() => sibling, () => undefined);
 }
 
-export function analyzePcb(path: string, full: boolean, proximity: boolean) {
-    const flags = [
-        ...(full ? ['--full'] : []),
-        ...(proximity ? ['--proximity'] : []),
-    ];
-    return runAnalyzer('pcb', path, flags, full);
+function reportManifest(runDirectory: string, reports: Record<string, string | undefined>) {
+    const path = join(runDirectory, 'reports.json');
+    return writeFile(
+        path,
+        `${JSON.stringify(Object.fromEntries(Object.entries(reports).filter(([, value]) => value)), null, 2)}\n`,
+        'utf8',
+    ).then(() => path);
+}
+
+export async function analyzeSchematic(
+    inputPath: string,
+    options: SchematicAnalysisOptions = {},
+) {
+    const [asset, python, path, runDirectory] = await Promise.all([
+        prepareKicadHappy(),
+        getPython(),
+        checkedInputPath(inputPath),
+        createRun(),
+    ]);
+    const reportPath = join(runDirectory, 'schematic.json');
+    const raw = await runScript(
+        asset,
+        python,
+        runDirectory,
+        'kicad',
+        'analyze_schematic.py',
+        [path, '--compact'],
+        reportPath,
+    );
+    const result = compactReports([raw], 'schematic', {
+        includeActionableInfo: true,
+        includeFindings: options.findings !== false,
+        reportPath,
+        skipped: ['Native KiCad ERC was not run by analyze_schematic.'],
+    });
+    Object.assign(result, projectSchematic(raw, options));
+    return writeResult(runDirectory, result);
+}
+
+export async function analyzePcb(inputPath: string, options: PcbAnalysisOptions = {}) {
+    const [asset, python, path, runDirectory] = await Promise.all([
+        prepareKicadHappy(),
+        getPython(),
+        checkedInputPath(inputPath),
+        createRun(),
+    ]);
+    const requestedThermal = options.thermal === true || options.all === true;
+    const requestedEmc = options.emc === true || options.all === true;
+    const schematicInput = await automaticSchematicInput(path, options.schematic);
+    const schematicPath = join(runDirectory, 'schematic.json');
+    const pcbPath = join(runDirectory, 'pcb.json');
+    const crossPath = join(runDirectory, 'cross.json');
+    const thermalPath = join(runDirectory, 'thermal.json');
+    const emcPath = join(runDirectory, 'emc.json');
+
+    let schematic: JsonRecord | undefined;
+    if (schematicInput) {
+        schematic = await runScript(
+            asset, python, runDirectory, 'kicad', 'analyze_schematic.py',
+            [schematicInput, '--compact'], schematicPath,
+        );
+    }
+
+    const pcbFlags = [path, '--compact', '--full'];
+    if (options.proximity) pcbFlags.push('--proximity');
+    if (schematic) pcbFlags.push('--schematic', schematicPath);
+    const pcb = await runScript(
+        asset, python, runDirectory, 'kicad', 'analyze_pcb.py', pcbFlags, pcbPath,
+    );
+
+    let cross: JsonRecord | undefined;
+    if (schematic) {
+        cross = await runScript(
+            asset, python, runDirectory, 'kicad', 'cross_analysis.py',
+            ['--schematic', schematicPath, '--pcb', pcbPath], crossPath,
+        );
+    }
+
+    const skipped = ['Native KiCad DRC was not run by analyze_pcb.'];
+    if (!schematic) skipped.push('Cross-domain analysis was skipped because no schematic was found.');
+
+    let thermal: JsonRecord | undefined;
+    if (requestedThermal && schematic) {
+        thermal = await runScript(
+            asset, python, runDirectory, 'kicad', 'analyze_thermal.py',
+            ['--schematic', schematicPath, '--pcb', pcbPath], thermalPath,
+        );
+        const reason = String(asRecord(thermal.summary)?.skipped_reason || '').trim();
+        if (reason) skipped.push(`Thermal analysis: ${reason}`);
+    } else if (requestedThermal) {
+        skipped.push('Thermal analysis was skipped because no schematic was found.');
+    }
+
+    let emc: JsonRecord | undefined;
+    if (requestedEmc && schematic) {
+        emc = await runScript(
+            asset, python, runDirectory, 'emc', 'analyze_emc.py',
+            ['--schematic', schematicPath, '--pcb', pcbPath], emcPath,
+        );
+    } else if (requestedEmc) {
+        skipped.push('EMC analysis was skipped because no schematic was found.');
+    }
+
+    const manifestPath = await reportManifest(runDirectory, {
+        schematic: schematic ? schematicPath : undefined,
+        pcb: pcbPath,
+        cross: cross ? crossPath : undefined,
+        thermal: thermal ? thermalPath : undefined,
+        emc: emc ? emcPath : undefined,
+    });
+    const related: PcbRelatedReports = { schematic, cross, thermal, emc };
+    const result = compactReports(
+        [pcb, cross, thermal, emc].filter((raw): raw is JsonRecord => raw !== undefined),
+        'pcb',
+        {
+            includeActionableInfo: true,
+            includeFindings: options.findings !== false,
+            reportPath: manifestPath,
+            skipped,
+        },
+    );
+    Object.assign(result, projectPcb(pcb, related, options));
+    return writeResult(runDirectory, result);
+}
+
+export type LifecycleAuditOptions = {
+    sources?: Array<'lcsc' | 'digikey' | 'mouser' | 'element14'>;
+    temperature?: 'commercial' | 'industrial' | 'extended' | 'automotive' | 'military' | string;
+    suggestAlternatives?: boolean;
+    findings?: boolean;
+};
+
+export async function runLifecycleAudit(inputPath: string, options: LifecycleAuditOptions = {}) {
+    const [asset, python, path, runDirectory] = await Promise.all([
+        prepareKicadHappy(),
+        getPython(),
+        checkedInputPath(inputPath),
+        createRun(),
+    ]);
+    const schematicPath = join(runDirectory, 'schematic.json');
+    const lifecyclePath = join(runDirectory, 'lifecycle.json');
+    await runScript(
+        asset, python, runDirectory, 'kicad', 'analyze_schematic.py',
+        [path, '--compact'], schematicPath,
+    );
+    const flags = [schematicPath];
+    if (options.sources?.length) flags.push('--only', options.sources.join(','));
+    if (options.temperature) flags.push(`--temp-range=${options.temperature}`);
+    if (options.suggestAlternatives) flags.push('--suggest-alternatives');
+    const lifecycle = await runScript(
+        asset, python, runDirectory, 'kicad', 'lifecycle_audit.py',
+        flags, lifecyclePath, 1_800_000,
+    );
+    const skipped: string[] = [];
+    const capabilityNote = String(lifecycle.capability_note || '').trim();
+    if (capabilityNote) skipped.push(capabilityNote);
+    const missingMpn = Number(lifecycle.components_without_mpn || 0);
+    if (missingMpn > 0) skipped.push(`${missingMpn} component(s) were skipped because no MPN was available.`);
+    const result = compactReports([lifecycle], 'lifecycle', {
+        includeActionableInfo: true,
+        includeFindings: options.findings !== false,
+        reportPath: lifecyclePath,
+        skipped,
+    });
+    if (capabilityNote && result.status === 'pass') result.status = 'warn';
+    result.lifecycle = {
+        components_checked: lifecycle.components_checked,
+        components_without_mpn: lifecycle.components_without_mpn,
+        sources_available: lifecycle.sources_available,
+        lifecycle_summary: lifecycle.lifecycle_summary,
+        temperature_summary: lifecycle.temperature_summary,
+        observations: lifecycle.observations,
+        capability_note: lifecycle.capability_note,
+    };
+    return writeResult(runDirectory, result);
 }

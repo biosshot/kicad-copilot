@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { analyzePcb, analyzeSchematic, compactAnalysis } from '../src/analysis/kicad-happy';
+import { auditLifecycle, waitAnalysis } from '../src/analysis/lifecycle-operation';
+import { projectPcb, projectSchematic } from '../src/analysis/projections';
 
 const syntheticSchematic = {
     nets: {
@@ -44,7 +46,8 @@ const schematic = compactAnalysis(syntheticSchematic, 'schematic', {
     reportPath: 'schematic.json',
 });
 assert.equal(schematic.status, 'warn');
-assert.equal(schematic.findings.length, 3);
+assert.deepEqual(schematic.skipped, []);
+assert.equal(schematic.findings?.length, 3);
 assert.ok(!JSON.stringify(schematic).includes('SWCLK'));
 assert.ok(!JSON.stringify(schematic).includes('rule_id'));
 assert.ok(!JSON.stringify(schematic).includes('detector'));
@@ -62,18 +65,67 @@ const pcb = compactAnalysis(syntheticPcb, 'pcb', {
     reportPath: 'pcb.json',
 });
 assert.equal(pcb.status, 'fail');
-assert.equal(pcb.findings.length, 1);
-assert.match(pcb.findings[0].message, /^25 unrouted nets\./);
-assert.equal(pcb.findings[0].refs?.length, 12);
-assert.deepEqual(pcb.findings[0].refs?.slice(0, 3), ['N0', 'N1', 'N2']);
-assert.equal(pcb.findings[0].fix, 'Route the listed nets before detailed PCB review.');
+assert.equal(pcb.findings?.length, 1);
+assert.match(pcb.findings![0].message, /^25 unrouted nets\./);
+assert.equal(pcb.findings![0].refs?.length, 12);
+assert.deepEqual(pcb.findings![0].refs?.slice(0, 3), ['N0', 'N1', 'N2']);
+assert.equal(pcb.findings![0].fix, 'Route the listed nets before detailed PCB review.');
 assert.equal(pcb.report, 'pcb.json');
+
+const schematicProjection = projectSchematic({
+    statistics: { total_components: 12, total_nets: 8 },
+    sheets: ['root', 'power'],
+    power_budget: { rails: [{ name: '+3V3' }] },
+    assembly_complexity: { complexity_score: 24 },
+}, { overview: true, power: true, assembly: true });
+assert.deepEqual(Object.keys(schematicProjection), ['overview', 'power', 'assembly']);
+
+const pcbProjection = projectPcb({
+    statistics: { footprint_count: 12, unrouted_net_count: 2 },
+    findings: [],
+}, {}, { overview: true, all: false });
+assert.deepEqual(Object.keys(pcbProjection), ['overview']);
 
 const fixture = process.env.KICAD_ANALYSIS_FIXTURE;
 if (fixture) {
-    const schematicResult = await analyzeSchematic(fixture, 'full');
-    const pcbResult = await analyzePcb(fixture, true, true);
-    console.log(JSON.stringify({ schematic: schematicResult, pcb: pcbResult }, null, 2));
+    const schematicResult = await analyzeSchematic(fixture, { all: true });
+    const pcbResult = await analyzePcb(fixture, { all: true, proximity: true });
+    const focusedResult = await analyzeSchematic(fixture, { findings: false, power: true });
+    assert.equal(focusedResult.findings, undefined);
+    assert.ok(focusedResult.power);
+    assert.ok(Array.isArray(focusedResult.skipped));
+    console.log(JSON.stringify({
+        schematic: {
+            status: schematicResult.status,
+            bytes: JSON.stringify(schematicResult).length,
+            fields: Object.keys(schematicResult),
+        },
+        pcb: {
+            status: pcbResult.status,
+            bytes: JSON.stringify(pcbResult).length,
+            fields: Object.keys(pcbResult),
+        },
+        focused: {
+            status: focusedResult.status,
+            bytes: JSON.stringify(focusedResult).length,
+            fields: Object.keys(focusedResult),
+        },
+    }, null, 2));
 } else {
     console.log('Analysis normalization tests passed.');
+}
+
+const lifecycleFixture = process.env.KICAD_LIFECYCLE_FIXTURE;
+if (lifecycleFixture) {
+    let lifecycle = await auditLifecycle(lifecycleFixture, { sources: ['lcsc'] }, 1_000);
+    while (lifecycle.status === 'running') {
+        lifecycle = await waitAnalysis(lifecycle.operation_id, 30_000);
+    }
+    console.log(JSON.stringify({
+        lifecycle: {
+            status: lifecycle.status,
+            bytes: JSON.stringify(lifecycle).length,
+            fields: Object.keys(lifecycle),
+        },
+    }, null, 2));
 }
