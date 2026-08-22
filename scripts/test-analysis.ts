@@ -1,45 +1,5 @@
 import assert from 'node:assert/strict';
-import {
-    analyzePcb,
-    analyzeSchematic,
-    compactAnalysis,
-    parseDatasheetSyncOutput,
-    parseJsonSuffix,
-} from '../src/analysis/kicad-happy';
-import { startAnalysisOperation, waitAnalysis } from '../src/analysis/operation';
-
-assert.deepEqual(
-    parseJsonSuffix('Downloaded 123 bytes via requests: part.pdf\n{"downloaded":1,"failed":0}\n'),
-    { downloaded: 1, failed: 0 },
-);
-
-let finishOperation!: (result: ReturnType<typeof compactAnalysis>) => void;
-const operationResult = new Promise<ReturnType<typeof compactAnalysis>>((resolve) => {
-    finishOperation = resolve;
-});
-const running = await startAnalysisOperation(
-    'schematic',
-    async (onStage) => {
-        onStage('syncing_datasheets');
-        return operationResult;
-    },
-    0,
-);
-assert.equal(running.status, 'running');
-assert.equal(running.stage, 'syncing_datasheets');
-finishOperation({ status: 'pass', summary: 'done', findings: [] });
-assert.deepEqual(
-    await waitAnalysis(running.operation_id, 1_000),
-    { status: 'pass', summary: 'done', findings: [] },
-);
-assert.deepEqual(
-    parseDatasheetSyncOutput('', 'All 17 datasheets up to date.\n'),
-    { downloaded: 0, already_present: 17, failed: 0, total_identified_parts: 17 },
-);
-assert.deepEqual(
-    parseDatasheetSyncOutput('', 'All 15 datasheets up to date. 2 previous failures (use --force to retry).\n'),
-    { downloaded: 0, already_present: 15, failed: 2, total_identified_parts: 17 },
-);
+import { analyzePcb, analyzeSchematic, compactAnalysis } from '../src/analysis/kicad-happy';
 
 const syntheticSchematic = {
     nets: {
@@ -61,6 +21,11 @@ const syntheticSchematic = {
             severity: 'warning', detector: 'analyze_usb_compliance', rule_id: 'UC-002',
             category: 'usb', summary: 'No ESD protection on VBUS',
             recommendation: 'Add a TVS diode.', components: ['J1'], nets: ['VBUS'],
+        },
+        {
+            severity: 'warning', detector: 'audit_datasheet_coverage', rule_id: 'DS-002',
+            category: 'verification', summary: 'No datasheets directory found.',
+            recommendation: 'Sync datasheets.', components: ['U1'],
         },
         {
             severity: 'info', detector: 'audit_connector_ground_distribution', rule_id: 'CG-AUD',

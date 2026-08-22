@@ -1,50 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { prepareManagedRouterAsset } from 'eda-copilot-router/backends/assets';
 import { TEMP_DIR } from '../utils/dirs';
-import { runProcess, runProcessChecked } from '../utils/process';
+import { runProcessChecked } from '../utils/process';
 import { getPython } from '../utils/python';
 
 const KICAD_HAPPY_VERSION = 'v2.2.0';
 const MAX_FINDING_GROUPS = 20;
 const MAX_REFS = 12;
 const KICAD_HAPPY_ARCHIVE = 'kicad-happy-v2.2.0.zip';
-
-// kicad-happy v2.2.0 uses Path.rename() for atomic manifest updates. Unlike
-// POSIX rename(), Windows rename() cannot replace an existing destination.
-const RUN_DATASHEET_SYNC = String.raw`
-import pathlib
-import re
-import runpy
-import sys
-
-script = sys.argv[1]
-sys.argv = sys.argv[1:]
-pathlib.Path.rename = pathlib.Path.replace
-
-sys.path.insert(0, str(pathlib.Path(script).parent))
-import fetch_datasheet_lcsc as lcsc
-
-search_lcsc = lcsc.search_lcsc
-
-def search_with_direct_fallback(query):
-    component = search_lcsc(query)
-    if component is not None and lcsc._get_datasheet_url(component):
-        return component
-
-    lcsc_code = query if re.fullmatch(r"C\d+", query, re.IGNORECASE) else ""
-    if not lcsc_code and component is not None:
-        lcsc_code = lcsc._get_lcsc_code(component)
-    if lcsc_code:
-        direct = lcsc.search_lcsc_direct(lcsc_code)
-        if direct is not None and lcsc._get_datasheet_url(direct):
-            return direct
-    return component
-
-lcsc.search_lcsc = search_with_direct_fallback
-runpy.run_path(script, run_name="__main__")
-`;
 
 const EXTRACT_KICAD_HAPPY = String.raw`
 import pathlib
@@ -55,10 +20,7 @@ import zipfile
 archive = pathlib.Path(sys.argv[1])
 output = pathlib.Path(sys.argv[2]).resolve()
 archive_root = "kicad-happy-2.2.0/"
-skill_prefixes = (
-    archive_root + "skills/kicad/",
-    archive_root + "skills/lcsc/",
-)
+skill_prefix = archive_root + "skills/kicad/"
 
 with zipfile.ZipFile(archive) as source:
     for entry in source.infolist():
@@ -66,11 +28,9 @@ with zipfile.ZipFile(archive) as source:
         if name == archive_root + "LICENSE":
             relative = pathlib.PurePosixPath("LICENSE")
         else:
-            matched_prefix = next((prefix for prefix in skill_prefixes if name.startswith(prefix)), None)
-            if matched_prefix is None:
+            if not name.startswith(skill_prefix):
                 continue
-            skill_name = matched_prefix.rstrip("/").rsplit("/", 1)[-1]
-            relative = pathlib.PurePosixPath("skills") / skill_name / name[len(matched_prefix):]
+            relative = pathlib.PurePosixPath("skills/kicad") / name[len(skill_prefix):]
 
         if not relative.parts:
             continue
@@ -119,7 +79,6 @@ const KICAD_HAPPY_RELEASE = {
     markers: [
         'skills/kicad/scripts/analyze_schematic.py',
         'skills/kicad/scripts/analyze_pcb.py',
-        'skills/lcsc/scripts/sync_datasheets_lcsc.py',
     ],
     prepareDirectory: extractKicadHappy,
 };
@@ -142,18 +101,6 @@ export type AnalysisResult = {
 
 type AnalysisDomain = 'schematic' | 'pcb';
 type JsonRecord = Record<string, unknown>;
-
-export type AnalysisExecutionOptions = {
-    onStage?: (stage: string) => void;
-};
-
-type DatasheetSyncSummary = {
-    downloaded: number;
-    alreadyPresent: number;
-    failed: number;
-    verificationWarnings: number;
-    total: number;
-};
 
 type FindingCandidate = {
     severity: AnalysisSeverity;
@@ -198,7 +145,7 @@ function normalizeSeverity(value: unknown): AnalysisSeverity {
 }
 
 function meaningfulRefs(finding: JsonRecord, detector: string, ruleId: string) {
-    if (detector === 'audit_datasheet_coverage') return [];
+    if (detector === 'audit_datasheet_coverage' && ruleId !== 'DS-003') return [];
     const candidates = detector === 'analyze_connectivity' && ruleId === 'RT-001'
         ? stringArray(finding.nets)
         : [...stringArray(finding.components), ...stringArray(finding.nets)];
@@ -243,6 +190,7 @@ function findingCandidate(
     const recommendation = stringValue(finding.recommendation);
     const detector = stringValue(finding.detector);
     const ruleId = stringValue(finding.rule_id);
+    if (detector === 'audit_datasheet_coverage' && ruleId === 'DS-002') return undefined;
     if (severity === 'info') {
         if (!includeActionableInfo || !recommendation) return undefined;
         if (detector === 'audit_lifecycle_skipped') return undefined;
@@ -304,7 +252,9 @@ function compactGroup(group: FindingGroup) {
     } else if (first.detector === 'audit_rail_sources' && first.ruleId === 'RS-001') {
         firstFix = 'Declare the actual source for each rail with a power output or PWR_FLAG.';
     } else if (first.detector === 'audit_datasheet_coverage') {
-        firstFix = 'Sync project datasheets before relying on pin-level checks.';
+        firstFix = first.ruleId === 'DS-001'
+            ? 'Populate manufacturer part numbers before making part-specific claims.'
+            : 'Populate the missing manufacturer part numbers.';
     } else if (first.detector === 'analyze_thermal_pad_vias' && group.items.length > 1) {
         firstFix = 'Add or verify thermal vias for the listed components.';
     }
@@ -334,126 +284,6 @@ function resultSummary(domain: AnalysisDomain, candidates: FindingCandidate[]) {
         suggestions ? `${suggestions} suggestion${suggestions === 1 ? '' : 's'}` : '',
     ].filter(Boolean);
     return `${domain === 'pcb' ? 'PCB' : 'Schematic'}: ${counts.join(', ')}.`;
-}
-
-function sourceSchematicPath(raw: JsonRecord, fallback: string) {
-    const inputs = asRecord(raw.inputs);
-    const sourceFiles = inputs ? stringArray(inputs.source_files) : [];
-    return sourceFiles.find((path) => path.toLowerCase().endsWith('.kicad_sch')) || fallback;
-}
-
-function numberValue(value: unknown) {
-    return typeof value === 'number' && Number.isFinite(value) ? value : 0;
-}
-
-export function parseJsonSuffix(output: string) {
-    let start = output.indexOf('{');
-    while (start >= 0) {
-        try {
-            return asRecord(JSON.parse(output.slice(start).trim()));
-        } catch {
-            start = output.indexOf('{', start + 1);
-        }
-    }
-    return undefined;
-}
-
-export function parseDatasheetSyncOutput(stdout: string, stderr: string) {
-    const parsed = parseJsonSuffix(stdout);
-    if (parsed) return parsed;
-
-    const upToDate = stderr.match(
-        /All (\d+) datasheets up to date\.(?: (\d+) previous failures \(use --force to retry\)\.)?/,
-    );
-    if (!upToDate) return undefined;
-    const alreadyPresent = Number(upToDate[1]);
-    const failed = Number(upToDate[2] ?? 0);
-    return {
-        downloaded: 0,
-        already_present: alreadyPresent,
-        failed,
-        total_identified_parts: alreadyPresent + failed,
-    };
-}
-
-function appendSyncWarning(raw: JsonRecord, summary: string, fix: string) {
-    const findings = Array.isArray(raw.findings) ? raw.findings : [];
-    findings.push({
-        severity: 'warning',
-        detector: 'sync_datasheets_lcsc',
-        rule_id: 'DS-SYNC',
-        category: 'verification',
-        summary,
-        recommendation: fix,
-        components: [],
-        nets: [],
-        pins: [],
-    });
-    raw.findings = findings;
-}
-
-async function syncDatasheets(
-    assetDirectory: string,
-    python: Awaited<ReturnType<typeof getPython>>,
-    raw: JsonRecord,
-    fallbackPath: string,
-): Promise<DatasheetSyncSummary | undefined> {
-    const schematicPath = sourceSchematicPath(raw, fallbackPath);
-    const outputDirectory = join(dirname(schematicPath), 'datasheets');
-    const script = join(assetDirectory, 'skills', 'lcsc', 'scripts', 'sync_datasheets_lcsc.py');
-    const processResult = await runProcess(
-        python.command,
-        [
-            ...python.prefixArgs,
-            '-X',
-            'utf8',
-            '-c',
-            RUN_DATASHEET_SYNC,
-            script,
-            schematicPath,
-            '--output',
-            outputDirectory,
-            '--parallel',
-            '1',
-            '--json',
-        ],
-        { cwd: dirname(schematicPath), timeoutMs: 900_000 },
-    ).catch((error) => ({ exitCode: -1, stdout: '', stderr: String(error) }));
-
-    if (processResult.exitCode !== 0) {
-        appendSyncWarning(
-            raw,
-            'Automatic datasheet sync failed; analysis used the available local evidence.',
-            'Check network access and rerun analyze_schematic in full mode.',
-        );
-        return undefined;
-    }
-
-    const parsed = parseDatasheetSyncOutput(processResult.stdout, processResult.stderr);
-    if (!parsed || stringValue(parsed.error)) {
-        appendSyncWarning(
-            raw,
-            'Automatic datasheet sync did not return a valid result.',
-            'Check datasheets/manifest.json and rerun analyze_schematic in full mode.',
-        );
-        return undefined;
-    }
-
-    const summary = {
-        downloaded: numberValue(parsed.downloaded),
-        alreadyPresent: numberValue(parsed.already_present),
-        failed: numberValue(parsed.failed) + numberValue(parsed.skipped_previous_failures),
-        verificationWarnings: numberValue(parsed.verification_warnings),
-        total: numberValue(parsed.total_identified_parts),
-    };
-    if (summary.failed || summary.verificationWarnings) {
-        appendSyncWarning(
-            raw,
-            `Datasheet sync incomplete: ${summary.failed} failed, ${summary.verificationWarnings} need verification.`,
-            'Review datasheets/manifest.json and retry missing or unverified parts.',
-        );
-    }
-    return summary;
 }
 
 export function compactAnalysis(
@@ -519,10 +349,7 @@ async function runAnalyzer(
     inputPath: string,
     flags: string[],
     includeActionableInfo: boolean,
-    syncFullDatasheets = false,
-    options: AnalysisExecutionOptions = {},
 ) {
-    options.onStage?.(`preparing_${domain}`);
     const [asset, python, path] = await Promise.all([
         prepareKicadHappy(),
         getPython(),
@@ -540,7 +367,6 @@ async function runAnalyzer(
         domain === 'schematic' ? 'analyze_schematic.py' : 'analyze_pcb.py',
     );
 
-    options.onStage?.(`analyzing_${domain}`);
     await runProcessChecked(
         python.command,
         [
@@ -567,61 +393,21 @@ async function runAnalyzer(
             throw new Error(`kicad-happy returned invalid JSON: ${reportPath}`);
         }
     };
-    let raw = await readReport();
-    if (syncFullDatasheets) {
-        options.onStage?.('syncing_datasheets');
-        const sync = await syncDatasheets(asset.directory, python, raw, path);
-        if (sync) {
-            options.onStage?.('reanalyzing_schematic');
-            await runProcessChecked(
-                python.command,
-                [
-                    ...python.prefixArgs,
-                    '-X',
-                    'utf8',
-                    script,
-                    path,
-                    '--output',
-                    reportPath,
-                    '--compact',
-                    ...flags,
-                ],
-                { cwd: runDirectory, timeoutMs: 300_000 },
-            );
-            const rerun = await readReport();
-            if (sync.failed || sync.verificationWarnings) {
-                appendSyncWarning(
-                    rerun,
-                    `Datasheet sync incomplete: ${sync.failed} failed, ${sync.verificationWarnings} need verification.`,
-                    'Review datasheets/manifest.json and retry missing or unverified parts.',
-                );
-            }
-            raw = rerun;
-        }
-    }
+    const raw = await readReport();
     const result = compactAnalysis(raw, domain, { includeActionableInfo, reportPath });
     await writeFile(resultPath, `${JSON.stringify(result, null, 2)}\n`, 'utf8');
     return result;
 }
 
-export function analyzeSchematic(
-    path: string,
-    mode: 'quick' | 'full',
-    options: AnalysisExecutionOptions = {},
-) {
+export function analyzeSchematic(path: string, mode: 'quick' | 'full') {
     const flags = mode === 'quick' ? ['--only-deterministic'] : [];
-    return runAnalyzer('schematic', path, flags, mode === 'full', mode === 'full', options);
+    return runAnalyzer('schematic', path, flags, mode === 'full');
 }
 
-export function analyzePcb(
-    path: string,
-    full: boolean,
-    proximity: boolean,
-    options: AnalysisExecutionOptions = {},
-) {
+export function analyzePcb(path: string, full: boolean, proximity: boolean) {
     const flags = [
         ...(full ? ['--full'] : []),
         ...(proximity ? ['--proximity'] : []),
     ];
-    return runAnalyzer('pcb', path, flags, full, false, options);
+    return runAnalyzer('pcb', path, flags, full);
 }

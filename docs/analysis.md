@@ -9,22 +9,15 @@ large upstream JSON report.
 ### `analyze_schematic`
 
 - Accepts a `.kicad_sch`, `.kicad_pro`, or project directory.
-- `mode: "quick"` is offline and returns errors and warnings.
-- `mode: "full"` incrementally downloads missing PDFs through the bundled LCSC sync
-  workflow, reruns analysis when new evidence arrives, and also returns low-priority
-  findings that have a concrete recommendation.
+- Both modes are offline and never download or modify project datasheets.
+- `mode: "quick"` returns deterministic errors and warnings.
+- `mode: "full"` also returns low-priority findings that have a concrete recommendation.
 - Includes the audits built into `analyze_schematic.py`, such as connectivity, power
   sources, ESD, USB, decoupling, crystals, connectors, BOM, sourcing, and datasheet coverage.
 
 Run it after creating or modifying a functional schematic block and before PCB synchronization.
-Full mode writes PDFs and `manifest.json` under `<project>/datasheets/`. It first uses
-datasheet URLs stored in symbols, then LCSC/jlcsearch and manufacturer fallbacks. No API
-key is required. Failed or unverified downloads are returned as one compact warning;
-they do not prevent the remaining schematic checks from completing.
-
-Downloaded PDFs satisfy the coverage audit, but the analyzer does not parse arbitrary
-PDF content. Datasheet-aware electrical lookup rules consume structured files under
-`datasheets/extracted/`; creating those extractions is a separate workflow.
+The compact adapter suppresses the upstream warning that merely requests downloaded PDFs
+when MPNs are already present. Missing MPN coverage remains actionable.
 
 ### `analyze_pcb`
 
@@ -35,13 +28,6 @@ PDF content. Datasheet-aware electrical lookup rules consume structured files un
   thermal-pad, decoupling-placement, and routing checks built into `analyze_pcb.py`.
 
 Run it after placement, after routing, and before fabrication export.
-
-### `wait_analysis`
-
-Both analysis tools wait up to `wait_ms` (5 seconds by default). If work is still active,
-they return `status: "running"`, `operation_id`, and the current `stage`. Call
-`wait_analysis({ operation_id })` until it returns the final compact analysis result.
-The default wait call is 30 seconds, safely below a 60-second MCP request timeout.
 
 ## Result contract
 
@@ -57,20 +43,14 @@ type AnalysisResult = {
   }>;
   report?: string;
 };
-
-type RunningAnalysis = {
-  status: "running";
-  operation_id: string;
-  stage: string;
-};
 ```
 
 Repeated findings are grouped and synthetic references are removed. `report` is present
 only when grouping or reference limits hide details. Read it only when the compact result
 does not contain enough information to make the next correction.
 
-Downloaded PDFs remove the evidence-coverage warning, but typed pin-level lookup requires
-structured files under `datasheets/extracted/`; that extraction step is not automatic yet.
+Typed pin-level lookup requires structured files under `datasheets/extracted/`; downloading
+PDFs alone does not enable those checks and is outside these analysis tools.
 
 These tools complement, but do not replace, native KiCad ERC and DRC. Cross-domain,
 thermal-budget, current-budget, lifecycle, Gerber, and fabrication-release analysis are
