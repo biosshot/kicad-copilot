@@ -15,12 +15,34 @@ const KICAD_HAPPY_ARCHIVE = 'kicad-happy-v2.2.0.zip';
 // POSIX rename(), Windows rename() cannot replace an existing destination.
 const RUN_DATASHEET_SYNC = String.raw`
 import pathlib
+import re
 import runpy
 import sys
 
 script = sys.argv[1]
 sys.argv = sys.argv[1:]
 pathlib.Path.rename = pathlib.Path.replace
+
+sys.path.insert(0, str(pathlib.Path(script).parent))
+import fetch_datasheet_lcsc as lcsc
+
+search_lcsc = lcsc.search_lcsc
+
+def search_with_direct_fallback(query):
+    component = search_lcsc(query)
+    if component is not None and lcsc._get_datasheet_url(component):
+        return component
+
+    lcsc_code = query if re.fullmatch(r"C\d+", query, re.IGNORECASE) else ""
+    if not lcsc_code and component is not None:
+        lcsc_code = lcsc._get_lcsc_code(component)
+    if lcsc_code:
+        direct = lcsc.search_lcsc_direct(lcsc_code)
+        if direct is not None and lcsc._get_datasheet_url(direct):
+            return direct
+    return component
+
+lcsc.search_lcsc = search_with_direct_fallback
 runpy.run_path(script, run_name="__main__")
 `;
 
@@ -320,6 +342,18 @@ function numberValue(value: unknown) {
     return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
 
+export function parseJsonSuffix(output: string) {
+    let start = output.indexOf('{');
+    while (start >= 0) {
+        try {
+            return asRecord(JSON.parse(output.slice(start).trim()));
+        } catch {
+            start = output.indexOf('{', start + 1);
+        }
+    }
+    return undefined;
+}
+
 function appendSyncWarning(raw: JsonRecord, summary: string, fix: string) {
     const findings = Array.isArray(raw.findings) ? raw.findings : [];
     findings.push({
@@ -373,12 +407,7 @@ async function syncDatasheets(
         return undefined;
     }
 
-    let parsed: JsonRecord | undefined;
-    try {
-        parsed = asRecord(JSON.parse(processResult.stdout));
-    } catch {
-        parsed = undefined;
-    }
+    const parsed = parseJsonSuffix(processResult.stdout);
     if (!parsed || stringValue(parsed.error)) {
         appendSyncWarning(
             raw,

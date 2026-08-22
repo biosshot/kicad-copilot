@@ -1,5 +1,15 @@
 import assert from 'node:assert/strict';
-import { analyzePcb, analyzeSchematic, compactAnalysis } from '../src/analysis/kicad-happy';
+import {
+    analyzePcb,
+    analyzeSchematic,
+    compactAnalysis,
+    parseJsonSuffix,
+} from '../src/analysis/kicad-happy';
+
+assert.deepEqual(
+    parseJsonSuffix('Downloaded 123 bytes via requests: part.pdf\n{"downloaded":1,"failed":0}\n'),
+    { downloaded: 1, failed: 0 },
+);
 
 const syntheticSchematic = {
     nets: {
