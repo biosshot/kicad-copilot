@@ -17,6 +17,7 @@ export default defineConfig({
         'test-pcb-live': 'scripts/test-pcb-live.ts',
         'test-routing-live': 'scripts/test-routing-live.ts',
         'test-routing-integration': 'scripts/test-routing-integration.ts',
+        'test-analysis': 'scripts/test-analysis.ts',
     },
     format: ['esm'],
     clean: true,

@@ -2,6 +2,7 @@ import { access, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { CACHE_DIR } from '../utils/dirs';
 import { runProcess, runProcessChecked } from '../utils/process';
+import { getPython } from '../utils/python';
 
 export type ConverterCommand = {
     command: string;
@@ -39,36 +40,13 @@ async function inspectConverter(command: string) {
     return /easyeda2kicad/i.test(output) ? { command, prefixArgs: [] } : undefined;
 }
 
-async function findPython() {
-    const candidates: ConverterCommand[] = process.platform === 'win32'
-        ? [
-            { command: 'python', prefixArgs: [] },
-            { command: 'py', prefixArgs: ['-3'] },
-            { command: 'python3', prefixArgs: [] },
-        ]
-        : [
-            { command: 'python3', prefixArgs: [] },
-            { command: 'python', prefixArgs: [] },
-        ];
-
-    for (const candidate of candidates) {
-        const result = await runProcess(
-            candidate.command,
-            [...candidate.prefixArgs, '--version'],
-            { timeoutMs: 10_000 },
-        ).catch(() => undefined);
-        if (result?.exitCode === 0 && /Python\s+3\./i.test(`${result.stdout}${result.stderr}`)) {
-            return candidate;
-        }
-    }
-
-    throw new Error('Python 3 not found for EasyEDA2KiCad installation');
-}
-
 async function installManagedConverter() {
     const environment = managedEnvironment();
     await mkdir(join(CACHE_DIR, 'easyeda2kicad'), { recursive: true });
-    const python = await findPython();
+    const python = await getPython().catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(`Python 3 not found for EasyEDA2KiCad installation: ${message}`);
+    });
 
     try {
         await runProcessChecked(

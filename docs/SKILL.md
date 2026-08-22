@@ -20,3 +20,4 @@ The local files in this directory are the documentation source. Read only the do
 - `pcb-layout/dsl.ts`: exact JavaScript placement DSL.
 - `pcb-routing/instructions.md`: routing workflow and KRT setup.
 - `pcb-routing/dsl.d.ts`: exact JavaScript routing DSL declarations.
+- `analysis.md`: compact schematic and PCB analysis workflow and result contract.

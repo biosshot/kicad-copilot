@@ -4,7 +4,7 @@ AI-powered MCP server for KiCad. Create and modify schematics from natural langu
 
 KiCad Copilot is the KiCad counterpart to [EasyEDA Copilot](https://github.com/biosshot/easyeda-copilot). It provides the same core circuit-generation and PCB automation capabilities—and goes further with file-oriented hierarchical projects, recoverable checkpoints, native `kicad-cli` integration, and fully local PCB routing.
 
-> **Recommended companion:** [kicad-happy](https://github.com/aklofas/kicad-happy) complements KiCad Copilot with independent design review, datasheet-backed analysis, SPICE simulation, EMC pre-compliance, BOM sourcing, and manufacturing checks. Use KiCad Copilot to build and modify the design, then use kicad-happy to analyze and review it.
+> **Integrated analysis:** KiCad Copilot downloads a pinned, verified [kicad-happy](https://github.com/aklofas/kicad-happy) v2.2.0 release on first use of `analyze_schematic` or `analyze_pcb`. The MCP tools return compact actionable findings while retaining grouped details in a temporary report.
 
 <p align="center">
   <a href="https://github.com/biosshot/kicad-copilot/releases/latest">
@@ -148,11 +148,15 @@ Restart the MCP client after adding the server. KiCad Copilot includes local wor
 
 - Node.js 20 or newer
 - KiCad 9 or 10
-- Python 3 only if EasyEDA2KiCad is not already available
+- Python 3 for managed EasyEDA2KiCad installation and kicad-happy analysis
 
 KiCad Copilot searches for `kicad-cli` in `PATH` and standard KiCad installation locations, preferring KiCad 10 when multiple supported versions are installed. Set `KICAD_CLI_PATH` when the executable is stored elsewhere.
 
 The first real-component conversion uses an existing EasyEDA2KiCad installation or installs it automatically into a managed local virtual environment.
+
+The first design-analysis call downloads the pinned kicad-happy release into the shared
+EDA Copilot asset cache after verifying its archive size and SHA-256 hash. Set
+`KICAD_HAPPY_DIR` to use a trusted local checkout instead.
 
 ## Schematic workflow
 
@@ -210,6 +214,16 @@ Routing, pours, and placement are separate operations. This keeps schematic-to-P
 
 See [KiCad CLI workflow](docs/kicad-cli.md) for ready-to-use commands.
 
+## Design analysis
+
+`analyze_schematic` runs the schematic checks and embedded audits from kicad-happy;
+full mode also syncs missing datasheet PDFs through LCSC without an API key.
+`analyze_pcb` runs PCB connectivity, placement, routing, DFM, thermal-pad,
+and optional trace-proximity checks. Both tools group repeated issues and omit internal
+rule identifiers, detector metadata, runtime metrics, and large pad lists from the LLM response.
+
+See [design analysis](docs/analysis.md) for the exact compact result contract and workflow.
+
 ## Compatibility
 
 | KiCad version | Status    |
@@ -229,6 +243,7 @@ Other major versions are rejected because their file formats and CLI behavior ar
 - [PCB placement rules](docs/pcb-layout/instructions.md)
 - [Placement DSL](docs/pcb-layout/dsl.ts)
 - [KiCad CLI](docs/kicad-cli.md)
+- [Design analysis](docs/analysis.md)
 - [Troubleshooting](docs/troubleshooting.md)
 
 ## Development
