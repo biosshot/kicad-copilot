@@ -3,10 +3,10 @@ import * as z from 'zod/v4';
 import { assemblePcbLayout } from '../../pcb/assemble';
 import { getPcbComponentSizes } from '../../pcb/component-sizes';
 import { importPcbChanges } from '../../pcb/import';
-import { cancelPcbLayout, makePcbLayout, waitPcbLayout } from '../../pcb/layout-operation';
+import { makePcbLayout } from '../../pcb/layout-operation';
 import { pourPcbLayers } from '../../pcb/pour';
 import { clearPcbRouting } from '../../pcb/clear-routing';
-import { autoRoutePcb, cancelAutoRoute, waitAutoRoute } from '../../routing/routing-operation';
+import { autoRoutePcb } from '../../routing/routing-operation';
 import { setPcbStackLayers } from '../../kicad/pcb-stack';
 import { DOCS_DIR } from '../../utils/dirs';
 import { enqueueMutation } from '../../utils/mutation-queue';
@@ -76,33 +76,10 @@ export function registerPcbTools(server: McpServer) {
             inputSchema: z.object({
                 path: z.string().min(1).describe('Target .kicad_pcb path.'),
                 file: z.string().min(1).describe('JavaScript PCB layout DSL file path.'),
-                wait_ms: z.number().min(30_000).max(180_000).default(60_000),
+                wait_ms: z.number().int().min(1_000).max(55_000).default(30_000),
             }),
         },
         async ({ path, file, wait_ms }) => runTool(() => makePcbLayout(path, file, wait_ms)),
-    );
-
-    server.registerTool(
-        'wait_pcb_layout',
-        {
-            title: 'Wait PCB Layout',
-            description: 'Wait for an active make_pcb_layout operation and return its PNG/SVG preview paths.',
-            inputSchema: z.object({
-                operation_id: z.string().min(1),
-                wait_ms: z.number().min(30_000).max(180_000).default(60_000),
-            }),
-        },
-        async ({ operation_id, wait_ms }) => runTool(() => waitPcbLayout(operation_id, wait_ms)),
-    );
-
-    server.registerTool(
-        'cancel_pcb_layout',
-        {
-            title: 'Cancel PCB Layout',
-            description: 'Request cancellation of an active make_pcb_layout operation.',
-            inputSchema: z.object({ operation_id: z.string().min(1) }),
-        },
-        async ({ operation_id }) => runTool(() => cancelPcbLayout(operation_id)),
     );
 
     server.registerTool(
@@ -129,7 +106,7 @@ export function registerPcbTools(server: McpServer) {
                 path: z.string().min(1).describe('Target .kicad_pcb path.'),
                 file: z.string().min(1).describe('JavaScript routing DSL file path.'),
                 timeout_sec: z.number().int().min(10).max(1800).default(1800),
-                wait_ms: z.number().int().min(1_000).max(180_000).default(60_000),
+                wait_ms: z.number().int().min(1_000).max(55_000).default(30_000),
             }),
         },
         async (input) => runTool(() => autoRoutePcb(
@@ -138,29 +115,6 @@ export function registerPcbTools(server: McpServer) {
             { timeoutSec: input.timeout_sec },
             input.wait_ms,
         )),
-    );
-
-    server.registerTool(
-        'wait_auto_route',
-        {
-            title: 'Wait Auto Route',
-            description: 'Wait for a running local PCB auto-route operation.',
-            inputSchema: z.object({
-                operation_id: z.string().uuid(),
-                wait_ms: z.number().int().min(1_000).max(180_000).default(60_000),
-            }),
-        },
-        async ({ operation_id, wait_ms }) => runTool(() => waitAutoRoute(operation_id, wait_ms)),
-    );
-
-    server.registerTool(
-        'cancel_auto_route',
-        {
-            title: 'Cancel Auto Route',
-            description: 'Cancel a running local PCB auto-route operation.',
-            inputSchema: z.object({ operation_id: z.string().uuid() }),
-        },
-        async ({ operation_id }) => runTool(async () => cancelAutoRoute(operation_id)),
     );
 
     server.registerTool(

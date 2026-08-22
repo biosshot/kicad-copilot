@@ -395,6 +395,7 @@ async function runScript(
     args: string[],
     reportPath: string,
     timeoutMs = 300_000,
+    signal?: AbortSignal,
 ) {
     const script = join(asset.directory, 'skills', skill, 'scripts', scriptName);
     await runProcessChecked(
@@ -408,7 +409,7 @@ async function runScript(
             '--output',
             reportPath,
         ],
-        { cwd: runDirectory, timeoutMs },
+        { cwd: runDirectory, timeoutMs, signal },
     );
     return readReport(reportPath);
 }
@@ -546,7 +547,11 @@ export type LifecycleAuditOptions = {
     findings?: boolean;
 };
 
-export async function runLifecycleAudit(inputPath: string, options: LifecycleAuditOptions = {}) {
+export async function runLifecycleAudit(
+    inputPath: string,
+    options: LifecycleAuditOptions = {},
+    signal?: AbortSignal,
+) {
     const [asset, python, path, runDirectory] = await Promise.all([
         prepareKicadHappy(),
         getPython(),
@@ -557,7 +562,7 @@ export async function runLifecycleAudit(inputPath: string, options: LifecycleAud
     const lifecyclePath = join(runDirectory, 'lifecycle.json');
     await runScript(
         asset, python, runDirectory, 'kicad', 'analyze_schematic.py',
-        [path, '--compact'], schematicPath,
+        [path, '--compact'], schematicPath, 300_000, signal,
     );
     const flags = [schematicPath];
     if (options.sources?.length) flags.push('--only', options.sources.join(','));
@@ -565,7 +570,7 @@ export async function runLifecycleAudit(inputPath: string, options: LifecycleAud
     if (options.suggestAlternatives) flags.push('--suggest-alternatives');
     const lifecycle = await runScript(
         asset, python, runDirectory, 'kicad', 'lifecycle_audit.py',
-        flags, lifecyclePath, 1_800_000,
+        flags, lifecyclePath, 1_800_000, signal,
     );
     const skipped: string[] = [];
     const capabilityNote = String(lifecycle.capability_note || '').trim();

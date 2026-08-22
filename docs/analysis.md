@@ -82,17 +82,21 @@ the associated schematic, runs schematic analysis once, passes its JSON to
 Run after placement and again after routing. EMC is most meaningful after routing and ground
 zones exist. These checks complement but do not replace native KiCad DRC.
 
-## `audit_lifecycle` and `wait_analysis`
+## `audit_lifecycle` and unified operations
 
 `audit_lifecycle` analyzes schematic MPNs using LCSC and any configured DigiKey, Mouser, or
 element14 credentials. It can also validate commercial/industrial/extended/automotive/military
 temperature grades and optionally search for alternatives.
 
-The audit starts asynchronously and waits briefly. If it returns `status: "running"`, call:
+The audit starts asynchronously and waits up to 30 seconds by default. If it returns
+`status: "running"`, call:
 
 ```ts
-wait_analysis({ operation_id, wait_ms: 30000 })
+wait_operation({ operation_id, wait_ms: 30000 })
 ```
+
+Use `cancel_operation({ operation_id })` when the network-backed audit is no
+longer needed. Lifecycle IDs use the form `lifecycle:1a2b3c4d`.
 
 Repeat while the status remains `running`. The completed result uses the shared compact
 contract. LCSC does not expose authoritative lifecycle state; an LCSC-only audit reports

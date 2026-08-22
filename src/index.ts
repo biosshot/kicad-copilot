@@ -8,6 +8,7 @@ import { registerAgentDocs } from './tools/docs';
 import { registerDocumentTools } from './tools/documents';
 import { registerPcbTools } from './tools/pcb/index';
 import { registerAnalysisTools } from './tools/analysis';
+import { registerOperationTools } from './tools/operations';
 
 function createServer() {
     const server = new McpServer({
@@ -21,6 +22,7 @@ function createServer() {
     registerCheckpointTools(server);
     registerPcbTools(server);
     registerAnalysisTools(server);
+    registerOperationTools(server);
 
     return server;
 }

@@ -1,6 +1,7 @@
 import { resolve } from 'node:path';
 import { clearPcbRouting } from '../src/pcb/clear-routing';
-import { autoRoutePcb, waitAutoRoute } from '../src/routing/routing-operation';
+import { autoRoutePcb } from '../src/routing/routing-operation';
+import { waitOperation } from '../src/operations/control';
 import { pourPcbLayers } from '../src/pcb/pour';
 
 const [mode, path, dslFile, timeoutArg] = process.argv.slice(2);
@@ -26,9 +27,9 @@ async function main() {
     if (!dslFile) throw new Error('Routing DSL file is required.');
     const timeoutSec = timeoutArg === undefined ? 600 : Number(timeoutArg);
     if (!Number.isFinite(timeoutSec) || timeoutSec <= 0) throw new Error(`Invalid timeout: ${timeoutArg}`);
-    let result = await autoRoutePcb(target, resolve(dslFile), { timeoutSec }, 180_000);
+    let result = await autoRoutePcb(target, resolve(dslFile), { timeoutSec }, 55_000);
     while (result && typeof result === 'object' && 'operation_id' in result) {
-        result = await waitAutoRoute(String(result.operation_id), 180_000);
+        result = await waitOperation(String(result.operation_id), 55_000);
     }
     console.log(JSON.stringify(result, null, 2));
 }

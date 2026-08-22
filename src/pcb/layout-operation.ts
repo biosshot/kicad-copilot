@@ -21,6 +21,7 @@ import {
     storeLayout,
     writeActiveLayout,
 } from './layout-cache';
+import { createOperationId } from '../operations/id';
 
 const TASK_PATH = '/v1/mcp-tools/make-pcb-layout';
 
@@ -54,7 +55,10 @@ function record(value: unknown): Record<string, unknown> | undefined {
 async function ensureNoActiveOperation() {
     const active = await readActiveLayout();
     if (!active) return;
-    const status = await getAsyncTaskStatus<MakePcbLayoutResponse>(TASK_PATH, active.operation_id).catch(() => undefined);
+    const status = await getAsyncTaskStatus<MakePcbLayoutResponse>(
+        TASK_PATH,
+        active.remote_operation_id,
+    ).catch(() => undefined);
     if (status?.status === 'pending') {
         throw new Error(`make_pcb_layout is already running: ${active.operation_id}`);
     }
@@ -120,7 +124,7 @@ async function finishOperation(active: ActivePcbLayout, operation: AsyncOperatio
     };
 }
 
-export async function makePcbLayout(pcbPath: string, file: string, waitMs = 60_000) {
+export async function makePcbLayout(pcbPath: string, file: string, waitMs = 30_000) {
     await ensureNoActiveOperation();
     const schematicPath = await associatedSchematicPath(pcbPath);
     const [code, input, pcbHash, schematicHash] = await Promise.all([
@@ -129,9 +133,11 @@ export async function makePcbLayout(pcbPath: string, file: string, waitMs = 60_0
         fileHash(pcbPath),
         fileHash(schematicPath),
     ]);
-    const operationId = await startAsyncTask(TASK_PATH, { code, ...input });
+    const remoteOperationId = await startAsyncTask(TASK_PATH, { code, ...input });
+    const operationId = createOperationId('pcb-layout');
     const active: ActivePcbLayout = {
         operation_id: operationId,
+        remote_operation_id: remoteOperationId,
         pcb_path: pcbPath,
         schematic_path: schematicPath,
         pcb_hash: pcbHash,
@@ -139,20 +145,31 @@ export async function makePcbLayout(pcbPath: string, file: string, waitMs = 60_0
         started_at: Date.now(),
     };
     await writeActiveLayout(active);
-    return finishOperation(active, await waitForAsyncTask<MakePcbLayoutResponse>(TASK_PATH, operationId, waitMs));
+    return finishOperation(active, await waitForAsyncTask<MakePcbLayoutResponse>(
+        TASK_PATH,
+        remoteOperationId,
+        waitMs,
+    ));
 }
 
-export async function waitPcbLayout(operationId: string, waitMs = 60_000) {
+export async function waitPcbLayout(operationId: string, waitMs = 30_000) {
     const active = await readActiveLayout();
     if (!active || active.operation_id !== operationId) throw new Error(`PCB layout operation not found: ${operationId}`);
-    return finishOperation(active, await waitForAsyncTask<MakePcbLayoutResponse>(TASK_PATH, operationId, waitMs));
+    return finishOperation(active, await waitForAsyncTask<MakePcbLayoutResponse>(
+        TASK_PATH,
+        active.remote_operation_id,
+        waitMs,
+    ));
 }
 
 export async function cancelPcbLayout(operationId: string) {
     const active = await readActiveLayout();
     if (!active || active.operation_id !== operationId) throw new Error(`PCB layout operation not found: ${operationId}`);
-    await cancelAsyncTask(TASK_PATH, operationId);
-    const status = await getAsyncTaskStatus<MakePcbLayoutResponse>(TASK_PATH, operationId).catch(() => undefined);
+    await cancelAsyncTask(TASK_PATH, active.remote_operation_id);
+    const status = await getAsyncTaskStatus<MakePcbLayoutResponse>(
+        TASK_PATH,
+        active.remote_operation_id,
+    ).catch(() => undefined);
     if (status && status.status !== 'pending') await clearActiveLayout(operationId);
     return { status: 'cancel_requested', operation_id: operationId };
 }

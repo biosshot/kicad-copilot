@@ -10,6 +10,7 @@ import { inspectPcbCandidate, pcbDrcMetrics } from '../kicad/pcb-validation';
 import { atomicWritePcb } from '../kicad/pcb-writer';
 import { TEMP_DIR } from '../utils/dirs';
 import { enqueueMutation } from '../utils/mutation-queue';
+import { createOperationId } from '../operations/id';
 
 export type AutoRouteOptions = Readonly<{
     timeoutSec?: number;
@@ -103,7 +104,7 @@ function trimOperations() {
 }
 
 async function runOperation(operation: RouteOperation, dslPath: string, options: AutoRouteOptions) {
-    const artifactsDirectory = join(TEMP_DIR, 'copilot-router', operation.id);
+    const artifactsDirectory = join(TEMP_DIR, 'copilot-router', operation.id.replace(':', '-'));
     const timeoutMs = (options.timeoutSec ?? 600) * 1000;
     try {
         await mkdir(artifactsDirectory, { recursive: true });
@@ -191,22 +192,29 @@ export async function autoRoutePcb(
     path: string,
     dslFile: string,
     options: AutoRouteOptions = {},
-    waitMs = 60_000,
+    waitMs = 30_000,
 ) {
     const active = [...operations.values()].find(operation => operation.status === 'running');
     if (active) throw new Error(`auto route is already running: ${active.id}`);
     const controller = new AbortController();
     let resolveDone!: () => void;
     const done = new Promise<void>(resolvePromise => { resolveDone = resolvePromise; });
+    let operationId: string;
+    do operationId = createOperationId('pcb-route'); while (operations.has(operationId));
     const operation: RouteOperation = {
-        id: randomUUID(), path: resolve(path), status: 'running', stage: 'starting', controller, done,
+        id: operationId,
+        path: resolve(path),
+        status: 'running',
+        stage: 'starting',
+        controller,
+        done,
     };
     operations.set(operation.id, operation);
     void runOperation(operation, dslFile, options).finally(resolveDone);
     return wait(operation, waitMs);
 }
 
-export async function waitAutoRoute(operationId: string, waitMs = 60_000) {
+export async function waitAutoRoute(operationId: string, waitMs = 30_000) {
     const operation = operations.get(operationId);
     if (!operation) throw new Error(`auto route operation not found: ${operationId}`);
     return wait(operation, waitMs);
@@ -216,5 +224,5 @@ export function cancelAutoRoute(operationId: string) {
     const operation = operations.get(operationId);
     if (!operation) throw new Error(`auto route operation not found: ${operationId}`);
     if (operation.status === 'running') operation.controller.abort();
-    return 'ok';
+    return { status: 'cancel_requested' as const, operation_id: operationId };
 }

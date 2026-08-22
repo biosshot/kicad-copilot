@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process';
 type RunProcessOptions = {
     cwd?: string;
     timeoutMs?: number;
+    signal?: AbortSignal;
 };
 
 export type ProcessResult = {
@@ -22,12 +23,19 @@ export function runProcess(command: string, args: string[], options: RunProcessO
         let stdout = '';
         let stderr = '';
         let settled = false;
+        let timeout: ReturnType<typeof setTimeout> | undefined;
 
         const finish = (action: () => void) => {
             if (settled) return;
             settled = true;
             if (timeout) clearTimeout(timeout);
+            options.signal?.removeEventListener('abort', abort);
             action();
+        };
+
+        const abort = () => {
+            child.kill();
+            finish(() => reject(new Error('Operation cancelled.')));
         };
 
         child.stdout.setEncoding('utf8');
@@ -45,7 +53,10 @@ export function runProcess(command: string, args: string[], options: RunProcessO
             stderr,
         })));
 
-        const timeout = options.timeoutMs
+        if (options.signal?.aborted) abort();
+        else options.signal?.addEventListener('abort', abort, { once: true });
+
+        timeout = options.timeoutMs
             ? setTimeout(() => {
                 child.kill();
                 finish(() => reject(new Error(`${command} timed out`)));

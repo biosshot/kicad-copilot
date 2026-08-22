@@ -1,11 +1,29 @@
 import assert from 'node:assert/strict';
 import { analyzePcb, analyzeSchematic, compactAnalysis } from '../src/analysis/kicad-happy';
-import { auditLifecycle, waitAnalysis } from '../src/analysis/lifecycle-operation';
+import { auditLifecycle } from '../src/analysis/lifecycle-operation';
+import { waitOperation } from '../src/operations/control';
+import { createOperationId, parseOperationId } from '../src/operations/id';
 import { projectPcb, projectSchematic } from '../src/analysis/projections';
 import { runCompactTool } from '../src/utils/tool-result';
+import { runProcessChecked } from '../src/utils/process';
 
 const compactToolResult = await runCompactTool(async () => ({ status: 'pass', empty: undefined }));
 assert.equal(compactToolResult.content[0].text, '{"status":"pass"}');
+for (const kind of ['pcb-layout', 'pcb-route', 'lifecycle'] as const) {
+    const operationId = createOperationId(kind);
+    assert.match(operationId, new RegExp(`^${kind}:[0-9a-f]{8}$`));
+    assert.equal(parseOperationId(operationId).kind, kind);
+}
+assert.throws(() => parseOperationId('lifecycle:not-hex'), /Invalid operation_id/);
+
+const processController = new AbortController();
+const cancellableProcess = runProcessChecked(
+    process.execPath,
+    ['-e', 'setTimeout(() => {}, 30000)'],
+    { timeoutMs: 30_000, signal: processController.signal },
+);
+processController.abort();
+await assert.rejects(cancellableProcess, /Operation cancelled/);
 
 const syntheticSchematic = {
     nets: {
@@ -134,7 +152,7 @@ const lifecycleFixture = process.env.KICAD_LIFECYCLE_FIXTURE;
 if (lifecycleFixture) {
     let lifecycle = await auditLifecycle(lifecycleFixture, { sources: ['lcsc'] }, 1_000);
     while (lifecycle.status === 'running') {
-        lifecycle = await waitAnalysis(lifecycle.operation_id, 30_000);
+        lifecycle = await waitOperation(lifecycle.operation_id, 30_000);
     }
     console.log(JSON.stringify({
         lifecycle: {

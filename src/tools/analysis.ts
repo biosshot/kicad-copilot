@@ -2,7 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp';
 import * as z from 'zod/v4';
 import { join } from 'node:path';
 import { analyzePcb, analyzeSchematic } from '../analysis/kicad-happy';
-import { auditLifecycle, waitAnalysis } from '../analysis/lifecycle-operation';
+import { auditLifecycle } from '../analysis/lifecycle-operation';
 import { DOCS_DIR } from '../utils/dirs';
 import { runCompactTool } from '../utils/tool-result';
 
@@ -69,7 +69,7 @@ export function registerAnalysisTools(server: McpServer) {
         'audit_lifecycle',
         {
             title: 'Audit Component Lifecycle',
-            description: `Run network-backed component lifecycle and optional temperature-range checks. Long audits return an operation_id for wait_analysis. Analysis instructions: ${ANALYSIS_DOC_PATH}`,
+            description: `Run network-backed component lifecycle and optional temperature-range checks. Long audits return an operation_id for wait_operation. Analysis instructions: ${ANALYSIS_DOC_PATH}`,
             inputSchema: z.object({
                 path: z.string().min(1)
                     .describe('Path to a .kicad_sch, .kicad_pro, or KiCad project directory.'),
@@ -82,7 +82,7 @@ export function registerAnalysisTools(server: McpServer) {
                     .describe('Search for replacement parts when obsolete, EOL, or NRND parts are found. Adds network requests.'),
                 findings: z.boolean().default(true)
                     .describe('Return compact per-part lifecycle and temperature findings.'),
-                wait_ms: z.number().int().min(1_000).max(30_000).default(5_000)
+                wait_ms: z.number().int().min(1_000).max(55_000).default(30_000)
                     .describe('Initial synchronous wait. A still-running audit returns operation_id.'),
             }),
         },
@@ -92,19 +92,5 @@ export function registerAnalysisTools(server: McpServer) {
             suggestAlternatives: input.suggest_alternatives,
             findings: input.findings,
         }, input.wait_ms)),
-    );
-
-    server.registerTool(
-        'wait_analysis',
-        {
-            title: 'Wait Analysis',
-            description: 'Wait for a running long analysis operation such as audit_lifecycle.',
-            inputSchema: z.object({
-                operation_id: z.string().uuid(),
-                wait_ms: z.number().int().min(1_000).max(55_000).default(30_000)
-                    .describe('Wait below the common 60-second MCP request timeout.'),
-            }),
-        },
-        async ({ operation_id, wait_ms }) => runCompactTool(() => waitAnalysis(operation_id, wait_ms)),
     );
 }

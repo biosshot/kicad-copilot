@@ -221,7 +221,9 @@ overview, hierarchy, block, connectivity, power, bus, BOM, assembly, and verific
 `analyze_pcb` automatically enriches PCB analysis from the associated schematic, runs
 cross-domain checks, and optionally adds thermal, EMC, or trace-proximity analysis. Individual
 boolean flags control each optional report field; compact findings are enabled by default.
-`audit_lifecycle` performs long network-backed lifecycle checks through `wait_analysis`.
+Long-running PCB layout, PCB routing, and lifecycle audits return a prefixed
+`operation_id` such as `pcb-route:1a2b3c4d`. Continue any of them with
+`wait_operation`; stop obsolete work with `cancel_operation`.
 The tools omit internal rule identifiers, runtime metrics, and coordinate-level copper from
 the LLM response.
 

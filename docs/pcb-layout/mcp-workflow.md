@@ -7,12 +7,11 @@ Read `dsl.ts` for placement syntax and `instructions.md` for placement and local
 - `import_pcb_changes({ path })` explicitly synchronizes the target PCB from its associated schematic.
 - `set_pcb_stack_layers({ path, copper_layer_count })` sets 2-32 even copper layers before placement or routing.
 - `make_pcb_layout({ path, file })` reads the local DSL and associated schematic, runs placement, stores the BoardAssemble payload locally, and returns `layout_id` plus preview paths.
-- `wait_pcb_layout({ operation_id })` is needed only when `make_pcb_layout` returns `status: "running"` after its synchronous wait.
-- `cancel_pcb_layout({ operation_id })` stops an obsolete pending placement.
+- `wait_operation({ operation_id })` is needed only when a long operation returns `status: "running"` after its synchronous wait.
+- `cancel_operation({ operation_id })` stops obsolete placement, routing, or lifecycle work.
 - `assemble_pcb_layout({ path, layout_id })` applies a previously completed final placement to the target PCB file.
 - `auto_route_pcb({ path, file })` runs the routing DSL through `eda-copilot-router` (KRT default), performs native refill/DRC, and applies the candidate.
-- `wait_auto_route({ operation_id })` waits for a long local routing operation.
-- `cancel_auto_route({ operation_id })` stops a running local routing operation before application.
+- PCB layout IDs use `pcb-layout:<8 hex>`; routing IDs use `pcb-route:<8 hex>`.
 - `clear_pcb_routing({ path })` removes tracks, track arcs, and vias but preserves footprints, zones, and outline.
 - `pour_pcb_layers({ path, net, layers })` rebuilds managed full-board zones and optional stitching vias.
 

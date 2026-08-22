@@ -23,7 +23,7 @@
 
 `set_pcb_stack_layers` preserves the outer copper layers and creates or removes standard `InN.Cu` layers. Decreasing is rejected when a removed layer is referenced. Boards with an explicit physical stackup must be changed in KiCad because this tool does not manage dielectric or material settings.
 
-If `make_pcb_layout` returns `status: "running"`, call `wait_pcb_layout({ operation_id })`. Otherwise use its completed result directly.
+If `make_pcb_layout` returns `status: "running"`, call `wait_operation({ operation_id })`. Otherwise use its completed result directly. Use `cancel_operation` for obsolete work.
 
 ## Errors And Warnings
 
@@ -82,6 +82,6 @@ Use `compactness: "high"` only when board area is genuinely constrained.
 - `auto_route_pcb({ path, file })` passes the routing DSL to `eda-copilot-router`; KRT is the default backend.
 - The router owns power polygons, special differential/equal-length routing, remaining routing, and optional GND plane/stitching declared in the DSL.
 - Existing copper is fixed. Call `clear_pcb_routing` first for a full reroute.
-- If the result is running, call `wait_auto_route({ operation_id })`; use `cancel_auto_route` for obsolete work.
+- If the result is running, call `wait_operation({ operation_id })`; use `cancel_operation` for obsolete work.
 - KiCad refills zones and runs native DRC before the candidate is applied. Diagnostics do not crash the workflow.
 - Routing success is not final sign-off: inspect the board and run `kicad-cli pcb drc` after routing.
