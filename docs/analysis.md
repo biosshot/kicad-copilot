@@ -22,6 +22,10 @@ datasheet URLs stored in symbols, then LCSC/jlcsearch and manufacturer fallbacks
 key is required. Failed or unverified downloads are returned as one compact warning;
 they do not prevent the remaining schematic checks from completing.
 
+Downloaded PDFs satisfy the coverage audit, but the analyzer does not parse arbitrary
+PDF content. Datasheet-aware electrical lookup rules consume structured files under
+`datasheets/extracted/`; creating those extractions is a separate workflow.
+
 ### `analyze_pcb`
 
 - Accepts a `.kicad_pcb`, `.kicad_pro`, or project directory.
@@ -31,6 +35,13 @@ they do not prevent the remaining schematic checks from completing.
   thermal-pad, decoupling-placement, and routing checks built into `analyze_pcb.py`.
 
 Run it after placement, after routing, and before fabrication export.
+
+### `wait_analysis`
+
+Both analysis tools wait up to `wait_ms` (5 seconds by default). If work is still active,
+they return `status: "running"`, `operation_id`, and the current `stage`. Call
+`wait_analysis({ operation_id })` until it returns the final compact analysis result.
+The default wait call is 30 seconds, safely below a 60-second MCP request timeout.
 
 ## Result contract
 
@@ -46,15 +57,20 @@ type AnalysisResult = {
   }>;
   report?: string;
 };
+
+type RunningAnalysis = {
+  status: "running";
+  operation_id: string;
+  stage: string;
+};
 ```
 
 Repeated findings are grouped and synthetic references are removed. `report` is present
 only when grouping or reference limits hide details. Read it only when the compact result
 does not contain enough information to make the next correction.
 
-Downloaded PDFs remove the evidence-coverage warning, but typed pin-level lookup still
-requires structured files under `datasheets/extracted/`; that extraction step is not
-automatic yet.
+Downloaded PDFs remove the evidence-coverage warning, but typed pin-level lookup requires
+structured files under `datasheets/extracted/`; that extraction step is not automatic yet.
 
 These tools complement, but do not replace, native KiCad ERC and DRC. Cross-domain,
 thermal-budget, current-budget, lifecycle, Gerber, and fabrication-release analysis are

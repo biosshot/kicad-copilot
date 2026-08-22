@@ -6,10 +6,31 @@ import {
     parseDatasheetSyncOutput,
     parseJsonSuffix,
 } from '../src/analysis/kicad-happy';
+import { startAnalysisOperation, waitAnalysis } from '../src/analysis/operation';
 
 assert.deepEqual(
     parseJsonSuffix('Downloaded 123 bytes via requests: part.pdf\n{"downloaded":1,"failed":0}\n'),
     { downloaded: 1, failed: 0 },
+);
+
+let finishOperation!: (result: ReturnType<typeof compactAnalysis>) => void;
+const operationResult = new Promise<ReturnType<typeof compactAnalysis>>((resolve) => {
+    finishOperation = resolve;
+});
+const running = await startAnalysisOperation(
+    'schematic',
+    async (onStage) => {
+        onStage('syncing_datasheets');
+        return operationResult;
+    },
+    0,
+);
+assert.equal(running.status, 'running');
+assert.equal(running.stage, 'syncing_datasheets');
+finishOperation({ status: 'pass', summary: 'done', findings: [] });
+assert.deepEqual(
+    await waitAnalysis(running.operation_id, 1_000),
+    { status: 'pass', summary: 'done', findings: [] },
 );
 assert.deepEqual(
     parseDatasheetSyncOutput('', 'All 17 datasheets up to date.\n'),

@@ -219,7 +219,8 @@ See [KiCad CLI workflow](docs/kicad-cli.md) for ready-to-use commands.
 `analyze_schematic` runs the schematic checks and embedded audits from kicad-happy;
 full mode also syncs missing datasheet PDFs through LCSC without an API key.
 `analyze_pcb` runs PCB connectivity, placement, routing, DFM, thermal-pad,
-and optional trace-proximity checks. Both tools group repeated issues and omit internal
+and optional trace-proximity checks. Long runs return an operation ID for `wait_analysis`
+instead of holding one MCP request open. Both tools group repeated issues and omit internal
 rule identifiers, detector metadata, runtime metrics, and large pad lists from the LLM response.
 
 See [design analysis](docs/analysis.md) for the exact compact result contract and workflow.

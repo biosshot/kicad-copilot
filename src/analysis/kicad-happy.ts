@@ -143,6 +143,10 @@ export type AnalysisResult = {
 type AnalysisDomain = 'schematic' | 'pcb';
 type JsonRecord = Record<string, unknown>;
 
+export type AnalysisExecutionOptions = {
+    onStage?: (stage: string) => void;
+};
+
 type DatasheetSyncSummary = {
     downloaded: number;
     alreadyPresent: number;
@@ -516,7 +520,9 @@ async function runAnalyzer(
     flags: string[],
     includeActionableInfo: boolean,
     syncFullDatasheets = false,
+    options: AnalysisExecutionOptions = {},
 ) {
+    options.onStage?.(`preparing_${domain}`);
     const [asset, python, path] = await Promise.all([
         prepareKicadHappy(),
         getPython(),
@@ -534,6 +540,7 @@ async function runAnalyzer(
         domain === 'schematic' ? 'analyze_schematic.py' : 'analyze_pcb.py',
     );
 
+    options.onStage?.(`analyzing_${domain}`);
     await runProcessChecked(
         python.command,
         [
@@ -562,8 +569,10 @@ async function runAnalyzer(
     };
     let raw = await readReport();
     if (syncFullDatasheets) {
+        options.onStage?.('syncing_datasheets');
         const sync = await syncDatasheets(asset.directory, python, raw, path);
         if (sync) {
+            options.onStage?.('reanalyzing_schematic');
             await runProcessChecked(
                 python.command,
                 [
@@ -595,15 +604,24 @@ async function runAnalyzer(
     return result;
 }
 
-export function analyzeSchematic(path: string, mode: 'quick' | 'full') {
+export function analyzeSchematic(
+    path: string,
+    mode: 'quick' | 'full',
+    options: AnalysisExecutionOptions = {},
+) {
     const flags = mode === 'quick' ? ['--only-deterministic'] : [];
-    return runAnalyzer('schematic', path, flags, mode === 'full', mode === 'full');
+    return runAnalyzer('schematic', path, flags, mode === 'full', mode === 'full', options);
 }
 
-export function analyzePcb(path: string, full: boolean, proximity: boolean) {
+export function analyzePcb(
+    path: string,
+    full: boolean,
+    proximity: boolean,
+    options: AnalysisExecutionOptions = {},
+) {
     const flags = [
         ...(full ? ['--full'] : []),
         ...(proximity ? ['--proximity'] : []),
     ];
-    return runAnalyzer('pcb', path, flags, full);
+    return runAnalyzer('pcb', path, flags, full, false, options);
 }
