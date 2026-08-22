@@ -2,7 +2,7 @@
   "name": "kicad-copilot-mcp",
   "version": "0.1.0",
   "mcpName": "io.github.biosshot/kicad-copilot",
-  "description": "File-oriented MCP server for KiCad schematics, PCB placement, routing, and pours",
+  "description": "File-oriented MCP server for KiCad schematics, PCB placement, and routing DSL workflows",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -41,8 +41,8 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "eda-copilot-router": "0.1.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "eda-copilot-router": "0.2.1",
     "fast-xml-parser": "^5.10.1",
     "find-up": "^5.0.0",
     "p-queue": "^9.1.0",

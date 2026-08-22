@@ -9,7 +9,7 @@ import { runProcessChecked } from '../src/utils/process';
 
 const compactToolResult = await runCompactTool(async () => ({ status: 'pass', empty: undefined }));
 assert.equal(compactToolResult.content[0].text, '{"status":"pass"}');
-for (const kind of ['pcb-layout', 'pcb-route', 'lifecycle'] as const) {
+for (const kind of ['pcb-layout', 'pcb-dsl', 'lifecycle'] as const) {
     const operationId = createOperationId(kind);
     assert.match(operationId, new RegExp(`^${kind}:[0-9a-f]{8}$`));
     assert.equal(parseOperationId(operationId).kind, kind);

@@ -6,7 +6,6 @@ import { importKiCadRoutingBoard } from 'eda-copilot-router/adapters/kicad';
 import { applyBoardAssemble } from '../src/kicad/board-assemble';
 import { createDocument } from '../src/kicad/create-document';
 import { getSupportedKicadCli, preferredSupportedKicadCli } from '../src/kicad/cli';
-import { setPcbStackLayers } from '../src/kicad/pcb-stack';
 import { footprintAt, footprintIsGenerated, footprintLayer, footprintReference, listChildren, pcbFootprints, readPcb } from '../src/kicad/pcb-reader';
 import { footprintGeometryIsNormalized, normalizeEasyEdaFootprintGeometry } from '../src/kicad/footprint-normalization';
 import { atomicWritePcb, parsePcbSource } from '../src/kicad/pcb-writer';
@@ -20,16 +19,6 @@ import { runProcessChecked } from '../src/utils/process';
 async function verifyWithCli(path: string) {
     const cli = await getSupportedKicadCli();
     await runProcessChecked(cli.path, ['pcb', 'upgrade', '--force', path], { timeoutMs: 30_000 });
-}
-
-async function copperLayerNames(path: string) {
-    const pcb = await readPcb(path);
-    const layers = findChild(pcb.root, 'layers');
-    assert.ok(layers, 'PCB must contain a layers table');
-    return layers.slice(1)
-        .filter(isSExpressionList)
-        .map((entry) => atom(entry[1]))
-        .filter((name): name is string => Boolean(name && /^(?:F|B|In\d+)\.Cu$/.test(name)));
 }
 
 async function main() {
@@ -160,31 +149,6 @@ async function main() {
         const emptyPath = join(directory, 'empty.kicad_pcb');
         await createDocument({ doc_type: 'pcb', path: emptyPath });
         await verifyWithCli(emptyPath);
-        await setPcbStackLayers(emptyPath, 4);
-        assert.deepEqual(await copperLayerNames(emptyPath), ['F.Cu', 'In1.Cu', 'In2.Cu', 'B.Cu']);
-        await verifyWithCli(emptyPath);
-
-        const usedLayerBoard = await readPcb(emptyPath);
-        usedLayerBoard.root.push([
-            token('gr_line'),
-            [token('start'), token('0'), token('0')],
-            [token('end'), token('1'), token('0')],
-            [token('stroke'), [token('width'), token('0.2')], [token('type'), token('default')]],
-            [token('layer'), token('In2.Cu', true)],
-        ]);
-        await atomicWritePcb(emptyPath, usedLayerBoard.source, usedLayerBoard.root);
-        await assert.rejects(
-            () => setPcbStackLayers(emptyPath, 2),
-            /cannot remove used copper layers: In2\.Cu/,
-        );
-
-        const reduciblePath = join(directory, 'reducible.kicad_pcb');
-        await createDocument({ doc_type: 'pcb', path: reduciblePath });
-        await setPcbStackLayers(reduciblePath, 6);
-        await setPcbStackLayers(reduciblePath, 2);
-        assert.deepEqual(await copperLayerNames(reduciblePath), ['F.Cu', 'B.Cu']);
-        await verifyWithCli(reduciblePath);
-
         const fixtureDirectory = process.env.KICAD_COPILOT_PCB_FIXTURE_DIR || 'D:\\MyProject\\kicad\\test';
         const sourceSch = join(fixtureDirectory, 'stm32_debug.kicad_sch');
         const targetPcb = join(directory, 'stm32_debug.kicad_pcb');

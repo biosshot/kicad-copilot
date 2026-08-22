@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { run } from 'eda-copilot-router';
 import { applyKiCadRoutingResult, importKiCadRoutingBoard } from 'eda-copilot-router/adapters/kicad';
-import { autoRoutePcb } from '../src/routing/routing-operation';
+import { runPcbDsl } from '../src/routing/routing-operation';
 
 const fixture = fileURLToPath(new URL('../tests/fixtures/cap-chain.kicad_pcb', import.meta.url));
 const directory = await mkdtemp(join(tmpdir(), 'kicad-router-integration-'));
@@ -40,13 +40,58 @@ try {
     assert.ok((await readFile(output, 'utf8')).includes('(kicad_pcb'));
     assert.ok((await readFile(output.replace(/\.kicad_pcb$/, '.kicad_pro'), 'utf8')).length > 0);
 
-    const dsl = join(directory, 'rules.js');
-    await writeFile(dsl, 'applyDrcRules()\n');
-    const routed = await autoRoutePcb(source, dsl, { timeoutSec: 30 }, 180_000);
-    assert.ok(routed && typeof routed === 'object' && 'status' in routed);
-    assert.notEqual(routed.status, 'running');
+    async function executeDsl(name: string, code: string) {
+        const dsl = join(directory, `${name}.js`);
+        await writeFile(dsl, code);
+        const result = await runPcbDsl(source, dsl, { timeoutSec: 30 }, 55_000);
+        assert.ok(result && typeof result === 'object' && 'status' in result);
+        assert.notEqual(result.status, 'running');
+        return result;
+    }
+
+    await executeDsl('rules', 'applyDrcRules()\n');
+
+    const stackResult = await executeDsl('stack', `
+stack({
+  boardThicknessMm: 1.2,
+  layers: [
+    { kind: "copper", name: "TOP", thicknessOz: 1 },
+    { kind: "dielectric", name: "PREPREG", thicknessMm: 0.2, relativePermittivity: 4.2 },
+    { kind: "copper", name: "INNER_1", thicknessOz: 1 },
+    { kind: "dielectric", name: "CORE", thicknessMm: 0.9, relativePermittivity: 4.2 },
+    { kind: "copper", name: "INNER_2", thicknessOz: 1 },
+    { kind: "dielectric", name: "PREPREG_2", thicknessMm: 0.2, relativePermittivity: 4.2 },
+    { kind: "copper", name: "BOTTOM", thicknessOz: 1 },
+  ],
+})
+applyStackup()
+`);
+    assert.equal('operation' in stackResult ? stackResult.operation : undefined, 'apply-stackup');
+    assert.match(await readFile(source, 'utf8'), /\(4 "In1\.Cu" signal\)/);
+    assert.match(await readFile(source, 'utf8'), /\(6 "In2\.Cu" signal\)/);
+
+    const removableUuid = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const withTrack = (await readFile(source, 'utf8')).replace(/\)\s*$/, `
+  (segment (start 60 60) (end 61 60) (width 0.2) (layer "F.Cu") (net "DPA_P") (uuid "${removableUuid}"))
+)\n`);
+    await writeFile(source, withTrack);
+    const clearResult = await executeDsl('clear', `
+clearRouting({ nets: "all", items: ["tracks", "vias"] })
+runCopper()
+`);
+    assert.equal('operation' in clearResult ? clearResult.operation : undefined, 'copper');
+    assert.doesNotMatch(await readFile(source, 'utf8'), new RegExp(removableUuid));
+
+    const copperResult = await executeDsl('copper', `
+plane({ net: "DPA_P", layers: "BOTTOM", region: board() })
+runCopper()
+`);
+    assert.equal('operation' in copperResult ? copperResult.operation : undefined, 'copper');
+    assert.ok('zones' in copperResult && Number(copperResult.zones) > 0);
+    assert.match(await readFile(source, 'utf8'), /\(zone\b/);
+
     assert.ok((await readFile(source, 'utf8')).includes('(kicad_pcb'));
-    process.stdout.write('Published router integration: ok\n');
+    process.stdout.write('Published router stack, cleanup, and copper integration: ok\n');
 } finally {
     await rm(directory, { recursive: true, force: true });
 }

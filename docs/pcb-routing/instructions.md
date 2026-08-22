@@ -1,11 +1,19 @@
 # PCB routing DSL
 
-Create one local JavaScript DSL file, then call `auto_route_pcb({ path, file })`.
+Create one local JavaScript DSL file, then call `run_pcb_dsl({ path, file })`.
 The complete declaration reference is in `dsl.d.ts` in this directory.
 
 The router uses native KiCad rules by default. DSL values may define the
-effective routing rules for this run. `runRouting()` routes without persisting
-those overrides; `applyDrcRules()` writes rules only; `runAll()` does both.
+effective routing rules and physical stack. End the file with exactly one terminal:
+
+- `applyDrcRules()` persists DRC rules without changing copper;
+- `applyStackup()` applies `stack(...)` without running KRT;
+- `runCopper()` applies polygons, planes, zone cleanup, and grid/around stitching without KRT;
+- `runRouting()` routes without persisting DRC overrides;
+- `runAll()` applies stackup/rules and performs complete routing.
+
+Existing unlocked tracks, vias, and zones are preserved unless an explicit
+`clearRouting(...)` selects them. Locked copper is always preserved.
 
 KRT is the default backend. `eda-copilot-router` owns polygon planning, special
 differential/equal-length routing, remaining routing, ground plane/stitching,
@@ -36,6 +44,30 @@ plane({
 
 runAll()
 ```
+
+Use focused DSL operations instead of separate stack, clear, or pour tools:
+
+```js
+// Clear unlocked routing without rerouting.
+clearRouting({ nets: "all", items: ["tracks", "vias"] })
+runCopper()
+```
+
+```js
+// Rebuild a GND plane without running KRT.
+clearRouting({ nets: ["GND"], items: ["zones"] })
+plane({
+  net: "GND",
+  layers: outerLayers(),
+  region: board(),
+  stitching: { gridMm: 5, via: "drc-min" },
+})
+runCopper()
+```
+
+For a layer-count or physical-stack change, declare the complete ordered
+copper/dielectric stack and finish with `applyStackup()`. Do not guess dielectric
+thickness or material when impedance-controlled routing depends on it.
 
 No KRT installation is required. On first routing use, `eda-copilot-router`
 downloads the pinned official KRT release, verifies its SHA-256, prepares the

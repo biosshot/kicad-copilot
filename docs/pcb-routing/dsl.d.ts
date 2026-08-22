@@ -1,6 +1,7 @@
 /**
  * Local routing DSL. A file is a sequence of statements followed by exactly
- * one of applyDrcRules(), runRouting(), or runAll(). Dimensions are mm.
+ * exactly one of applyDrcRules(), applyStackup(), runCopper(), runRouting(),
+ * or runAll(). Dimensions are mm.
  * Omitted values inherit the imported board/DSN rules.
  */
 
@@ -221,5 +222,7 @@ declare function clearRouting(options?: {
 }): void;
 
 declare function applyDrcRules(): void;
+declare function applyStackup(): void;
+declare function runCopper(): void;
 declare function runRouting(): void;
 declare function runAll(): void;

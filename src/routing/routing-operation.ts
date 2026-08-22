@@ -12,11 +12,11 @@ import { TEMP_DIR } from '../utils/dirs';
 import { enqueueMutation } from '../utils/mutation-queue';
 import { createOperationId } from '../operations/id';
 
-export type AutoRouteOptions = Readonly<{
+export type PcbDslOptions = Readonly<{
     timeoutSec?: number;
 }>;
 
-type PublicRouteResult = Readonly<{
+type PublicPcbDslResult = Readonly<{
     status: RoutingResult['status'];
     operation: RoutingResult['operation'];
     tracks: number;
@@ -28,18 +28,18 @@ type PublicRouteResult = Readonly<{
     artifacts_directory: string;
 }>;
 
-type RouteOperation = {
+type PcbDslOperation = {
     id: string;
     path: string;
     status: 'running' | 'completed' | 'failed' | 'cancelled';
     stage: string;
     controller: AbortController;
-    result?: PublicRouteResult;
+    result?: PublicPcbDslResult;
     error?: string;
     done: Promise<void>;
 };
 
-const operations = new Map<string, RouteOperation>();
+const operations = new Map<string, PcbDslOperation>();
 
 function projectPath(boardPath: string, suffix: '.kicad_pro' | '.kicad_dru') {
     return `${boardPath.slice(0, -extname(boardPath).length)}${suffix}`;
@@ -76,15 +76,15 @@ function nativeVerificationDiagnostics(report: unknown): RoutingDiagnostic[] {
     }] : [];
 }
 
-function publicStatus(operation: RouteOperation) {
+function publicStatus(operation: PcbDslOperation) {
     if (operation.status === 'completed') return operation.result;
     if (operation.status === 'failed' || operation.status === 'cancelled') {
-        throw new Error(operation.error || `auto route ${operation.status}`);
+        throw new Error(operation.error || `PCB DSL ${operation.status}`);
     }
     return { status: 'running', operation_id: operation.id, stage: operation.stage };
 }
 
-async function wait(operation: RouteOperation, waitMs: number) {
+async function wait(operation: PcbDslOperation, waitMs: number) {
     if (operation.status !== 'running') return publicStatus(operation);
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
@@ -103,13 +103,13 @@ function trimOperations() {
     while (operations.size > 20 && finished.length) operations.delete(finished.shift()!.id);
 }
 
-async function runOperation(operation: RouteOperation, dslPath: string, options: AutoRouteOptions) {
+async function runOperation(operation: PcbDslOperation, dslPath: string, options: PcbDslOptions) {
     const artifactsDirectory = join(TEMP_DIR, 'copilot-router', operation.id.replace(':', '-'));
     const timeoutMs = (options.timeoutSec ?? 600) * 1000;
     try {
         await mkdir(artifactsDirectory, { recursive: true });
         operation.stage = 'importing';
-        const imported = await importKiCadRoutingBoard(operation.path, { existingCopper: 'fixed' });
+        const imported = await importKiCadRoutingBoard(operation.path);
         if (!imported.board || !imported.context) throw new Error(imported.diagnostics.map(item => item.message).join('\n'));
         const dsl = await readFile(resolve(dslPath), 'utf8');
         operation.controller.signal.throwIfAborted();
@@ -156,7 +156,7 @@ async function runOperation(operation: RouteOperation, dslPath: string, options:
         await enqueueMutation(async () => {
             const current = await readPcb(operation.path);
             signal.throwIfAborted();
-            await saveCheckpoint(current.path, 'Before copilot-router auto route');
+            await saveCheckpoint(current.path, 'Before copilot-router PCB DSL');
             await atomicWritePcb(current.path, current.source, inspected.root);
             if (result.rules.applyRequested) {
                 await replaceFileIfPresent(projectPath(applied.outputPath!, '.kicad_pro'), projectPath(current.path, '.kicad_pro'));
@@ -188,20 +188,20 @@ async function runOperation(operation: RouteOperation, dslPath: string, options:
     }
 }
 
-export async function autoRoutePcb(
+export async function runPcbDsl(
     path: string,
     dslFile: string,
-    options: AutoRouteOptions = {},
+    options: PcbDslOptions = {},
     waitMs = 30_000,
 ) {
     const active = [...operations.values()].find(operation => operation.status === 'running');
-    if (active) throw new Error(`auto route is already running: ${active.id}`);
+    if (active) throw new Error(`PCB DSL operation is already running: ${active.id}`);
     const controller = new AbortController();
     let resolveDone!: () => void;
     const done = new Promise<void>(resolvePromise => { resolveDone = resolvePromise; });
     let operationId: string;
-    do operationId = createOperationId('pcb-route'); while (operations.has(operationId));
-    const operation: RouteOperation = {
+    do operationId = createOperationId('pcb-dsl'); while (operations.has(operationId));
+    const operation: PcbDslOperation = {
         id: operationId,
         path: resolve(path),
         status: 'running',
@@ -214,15 +214,15 @@ export async function autoRoutePcb(
     return wait(operation, waitMs);
 }
 
-export async function waitAutoRoute(operationId: string, waitMs = 30_000) {
+export async function waitPcbDsl(operationId: string, waitMs = 30_000) {
     const operation = operations.get(operationId);
-    if (!operation) throw new Error(`auto route operation not found: ${operationId}`);
+    if (!operation) throw new Error(`PCB DSL operation not found: ${operationId}`);
     return wait(operation, waitMs);
 }
 
-export function cancelAutoRoute(operationId: string) {
+export function cancelPcbDsl(operationId: string) {
     const operation = operations.get(operationId);
-    if (!operation) throw new Error(`auto route operation not found: ${operationId}`);
+    if (!operation) throw new Error(`PCB DSL operation not found: ${operationId}`);
     if (operation.status === 'running') operation.controller.abort();
     return { status: 'cancel_requested' as const, operation_id: operationId };
 }
