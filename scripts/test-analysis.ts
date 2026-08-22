@@ -2,6 +2,10 @@ import assert from 'node:assert/strict';
 import { analyzePcb, analyzeSchematic, compactAnalysis } from '../src/analysis/kicad-happy';
 import { auditLifecycle, waitAnalysis } from '../src/analysis/lifecycle-operation';
 import { projectPcb, projectSchematic } from '../src/analysis/projections';
+import { runCompactTool } from '../src/utils/tool-result';
+
+const compactToolResult = await runCompactTool(async () => ({ status: 'pass', empty: undefined }));
+assert.equal(compactToolResult.content[0].text, '{"status":"pass"}');
 
 const syntheticSchematic = {
     nets: {
@@ -43,7 +47,6 @@ const syntheticSchematic = {
 
 const schematic = compactAnalysis(syntheticSchematic, 'schematic', {
     includeActionableInfo: true,
-    reportPath: 'schematic.json',
 });
 assert.equal(schematic.status, 'warn');
 assert.deepEqual(schematic.skipped, []);
@@ -62,7 +65,6 @@ const syntheticPcb = {
 };
 const pcb = compactAnalysis(syntheticPcb, 'pcb', {
     includeActionableInfo: true,
-    reportPath: 'pcb.json',
 });
 assert.equal(pcb.status, 'fail');
 assert.equal(pcb.findings?.length, 1);
@@ -70,7 +72,7 @@ assert.match(pcb.findings![0].message, /^25 unrouted nets\./);
 assert.equal(pcb.findings![0].refs?.length, 12);
 assert.deepEqual(pcb.findings![0].refs?.slice(0, 3), ['N0', 'N1', 'N2']);
 assert.equal(pcb.findings![0].fix, 'Route the listed nets before detailed PCB review.');
-assert.equal(pcb.report, 'pcb.json');
+assert.ok(!('report' in pcb));
 
 const schematicProjection = projectSchematic({
     statistics: { total_components: 12, total_nets: 8 },
@@ -94,10 +96,23 @@ if (fixture) {
     assert.equal(focusedResult.findings, undefined);
     assert.ok(focusedResult.power);
     assert.ok(Array.isArray(focusedResult.skipped));
+    assert.ok(!('report' in schematicResult));
+    assert.ok(!JSON.stringify(schematicResult).includes('simulation_readiness'));
+    assert.ok(!JSON.stringify(schematicResult).includes('ic_lib_id'));
+    assert.ok(!JSON.stringify(schematicResult).includes('ic_value'));
+    assert.ok(!JSON.stringify(schematicResult).includes('single_pin_net_findings'));
+    const serializedResult = await runCompactTool(async () => schematicResult);
+    const serialized = serializedResult.content[0].text;
+    assert.equal(serialized.split('\n').length, 1);
+    assert.ok(!serialized.includes(':""'));
+    assert.ok(!serialized.includes(':[]'));
+    assert.ok(!serialized.includes(':{}'));
+    assert.ok(!/neighbor_components":\[[^\]]*"type"/.test(serialized));
     console.log(JSON.stringify({
         schematic: {
             status: schematicResult.status,
             bytes: JSON.stringify(schematicResult).length,
+            pretty_lines: JSON.stringify(schematicResult, null, 2).split('\n').length,
             fields: Object.keys(schematicResult),
         },
         pcb: {

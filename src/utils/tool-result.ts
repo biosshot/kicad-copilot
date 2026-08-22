@@ -1,8 +1,8 @@
-export function textResult(value: unknown) {
+export function textResult(value: unknown, compact = false) {
     return {
         content: [{
             type: 'text' as const,
-            text: typeof value === 'string' ? value : JSON.stringify(value, null, 2),
+            text: typeof value === 'string' ? value : JSON.stringify(value, null, compact ? undefined : 2),
         }],
     };
 }
@@ -26,6 +26,15 @@ export function errorResult(error: unknown) {
 export async function runTool(operation: () => Promise<unknown>) {
     try {
         return textResult(await operation());
+    } catch (error) {
+        return errorResult(error);
+    }
+}
+
+/** Serialize token-sensitive machine reports without indentation. */
+export async function runCompactTool(operation: () => Promise<unknown>) {
+    try {
+        return textResult(await operation(), true);
     } catch (error) {
         return errorResult(error);
     }

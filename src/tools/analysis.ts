@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { analyzePcb, analyzeSchematic } from '../analysis/kicad-happy';
 import { auditLifecycle, waitAnalysis } from '../analysis/lifecycle-operation';
 import { DOCS_DIR } from '../utils/dirs';
-import { runTool } from '../utils/tool-result';
+import { runCompactTool } from '../utils/tool-result';
 
 const ANALYSIS_DOC_PATH = join(DOCS_DIR, 'analysis.md');
 const optionalReport = (description: string) => z.boolean().default(false).describe(description);
@@ -28,11 +28,11 @@ export function registerAnalysisTools(server: McpServer) {
                 buses: optionalReport('Return detected buses, interfaces, differential pairs, and cross-domain signals.'),
                 bom: optionalReport('Return compact BOM, sourcing coverage, missing properties, and optimization observations.'),
                 assembly: optionalReport('Return package mix and estimated hand/professional assembly complexity.'),
-                verification: optionalReport('Return test coverage, simulation readiness, protocol checks, and analysis trust coverage.'),
+                verification: optionalReport('Return test coverage, protocol checks, and compact analysis trust coverage.'),
                 all: optionalReport('Return every optional schematic report field. Does not override findings=false.'),
             }),
         },
-        async (input) => runTool(() => analyzeSchematic(input.path, input)),
+        async (input) => runCompactTool(() => analyzeSchematic(input.path, input)),
     );
 
     server.registerTool(
@@ -62,7 +62,7 @@ export function registerAnalysisTools(server: McpServer) {
                 all: optionalReport('Return all optional PCB fields and run thermal and EMC. Does not override findings=false or enable proximity.'),
             }),
         },
-        async (input) => runTool(() => analyzePcb(input.path, input)),
+        async (input) => runCompactTool(() => analyzePcb(input.path, input)),
     );
 
     server.registerTool(
@@ -86,7 +86,7 @@ export function registerAnalysisTools(server: McpServer) {
                     .describe('Initial synchronous wait. A still-running audit returns operation_id.'),
             }),
         },
-        async (input) => runTool(() => auditLifecycle(input.path, {
+        async (input) => runCompactTool(() => auditLifecycle(input.path, {
             sources: input.sources,
             temperature: input.temperature,
             suggestAlternatives: input.suggest_alternatives,
@@ -105,6 +105,6 @@ export function registerAnalysisTools(server: McpServer) {
                     .describe('Wait below the common 60-second MCP request timeout.'),
             }),
         },
-        async ({ operation_id, wait_ms }) => runTool(() => waitAnalysis(operation_id, wait_ms)),
+        async ({ operation_id, wait_ms }) => runCompactTool(() => waitAnalysis(operation_id, wait_ms)),
     );
 }

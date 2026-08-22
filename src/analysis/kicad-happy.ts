@@ -117,7 +117,6 @@ export type AnalysisResult = {
     summary: string;
     skipped: string[];
     findings?: AnalysisFinding[];
-    report?: string;
 } & JsonRecord;
 
 type AnalysisDomain = 'schematic' | 'pcb' | 'lifecycle';
@@ -278,7 +277,7 @@ function compactGroup(group: FindingGroup) {
     };
     if (refs.length) finding.refs = refs.slice(0, MAX_REFS);
     if (firstFix) finding.fix = firstFix;
-    return { finding, refsTruncated: refs.length > MAX_REFS };
+    return finding;
 }
 
 function severityRank(severity: AnalysisSeverity) {
@@ -307,7 +306,6 @@ function compactReports(
     options: {
         includeActionableInfo: boolean;
         includeFindings: boolean;
-        reportPath: string;
         skipped: string[];
     },
 ): AnalysisResult {
@@ -327,8 +325,7 @@ function compactReports(
         return severity || b.items.length - a.items.length || a.key.localeCompare(b.key);
     });
     const selectedGroups = groups.slice(0, MAX_FINDING_GROUPS);
-    const compacted = selectedGroups.map(compactGroup);
-    const findings = compacted.map((item) => item.finding);
+    const findings = selectedGroups.map(compactGroup);
 
     const hasErrors = candidates.some((item) => item.severity === 'error');
     const result: AnalysisResult = {
@@ -337,21 +334,16 @@ function compactReports(
         skipped: options.skipped,
     };
     if (options.includeFindings) result.findings = findings;
-    const detailsHidden = groups.length > selectedGroups.length
-        || groups.some((group) => group.items.length > 1)
-        || compacted.some((item) => item.refsTruncated)
-        || !options.includeFindings;
-    if (detailsHidden) result.report = options.reportPath;
     return result;
 }
 
 export function compactAnalysis(
     rawValue: unknown,
     domain: 'schematic' | 'pcb',
-    options: { includeActionableInfo: boolean; reportPath: string },
+    options: { includeActionableInfo: boolean },
 ): AnalysisResult {
     return compactReports([rawValue], domain, {
-        ...options,
+        includeActionableInfo: options.includeActionableInfo,
         includeFindings: true,
         skipped: [],
     });
@@ -440,15 +432,6 @@ async function automaticSchematicInput(inputPath: string, override?: string) {
     return stat(sibling).then(() => sibling, () => undefined);
 }
 
-function reportManifest(runDirectory: string, reports: Record<string, string | undefined>) {
-    const path = join(runDirectory, 'reports.json');
-    return writeFile(
-        path,
-        `${JSON.stringify(Object.fromEntries(Object.entries(reports).filter(([, value]) => value)), null, 2)}\n`,
-        'utf8',
-    ).then(() => path);
-}
-
 export async function analyzeSchematic(
     inputPath: string,
     options: SchematicAnalysisOptions = {},
@@ -472,7 +455,6 @@ export async function analyzeSchematic(
     const result = compactReports([raw], 'schematic', {
         includeActionableInfo: true,
         includeFindings: options.findings !== false,
-        reportPath,
         skipped: ['Native KiCad ERC was not run by analyze_schematic.'],
     });
     Object.assign(result, projectSchematic(raw, options));
@@ -543,13 +525,6 @@ export async function analyzePcb(inputPath: string, options: PcbAnalysisOptions 
         skipped.push('EMC analysis was skipped because no schematic was found.');
     }
 
-    const manifestPath = await reportManifest(runDirectory, {
-        schematic: schematic ? schematicPath : undefined,
-        pcb: pcbPath,
-        cross: cross ? crossPath : undefined,
-        thermal: thermal ? thermalPath : undefined,
-        emc: emc ? emcPath : undefined,
-    });
     const related: PcbRelatedReports = { schematic, cross, thermal, emc };
     const result = compactReports(
         [pcb, cross, thermal, emc].filter((raw): raw is JsonRecord => raw !== undefined),
@@ -557,7 +532,6 @@ export async function analyzePcb(inputPath: string, options: PcbAnalysisOptions 
         {
             includeActionableInfo: true,
             includeFindings: options.findings !== false,
-            reportPath: manifestPath,
             skipped,
         },
     );
@@ -601,7 +575,6 @@ export async function runLifecycleAudit(inputPath: string, options: LifecycleAud
     const result = compactReports([lifecycle], 'lifecycle', {
         includeActionableInfo: true,
         includeFindings: options.findings !== false,
-        reportPath: lifecyclePath,
         skipped,
     });
     if (capabilityNote && result.status === 'pass') result.status = 'warn';

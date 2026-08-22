@@ -4,7 +4,7 @@ AI-powered MCP server for KiCad. Create and modify schematics from natural langu
 
 KiCad Copilot is the KiCad counterpart to [EasyEDA Copilot](https://github.com/biosshot/easyeda-copilot). It provides the same core circuit-generation and PCB automation capabilities—and goes further with file-oriented hierarchical projects, recoverable checkpoints, native `kicad-cli` integration, and fully local PCB routing.
 
-> **Integrated analysis:** KiCad Copilot downloads a pinned, verified [kicad-happy](https://github.com/aklofas/kicad-happy) v2.2.0 release on first use of `analyze_schematic` or `analyze_pcb`. The MCP tools return compact actionable findings while retaining grouped details in a temporary report.
+> **Integrated analysis:** KiCad Copilot downloads a pinned, verified [kicad-happy](https://github.com/aklofas/kicad-happy) v2.2.0 release on first use of `analyze_schematic` or `analyze_pcb`. The MCP tools return compact, token-efficient actionable findings and focused design data.
 
 <p align="center">
   <a href="https://github.com/biosshot/kicad-copilot/releases/latest">

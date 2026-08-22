@@ -23,14 +23,19 @@ type AnalysisResult = {
     refs?: string[];
     fix?: string;
   }>;
-  report?: string;
   // Requested domain fields such as power, routing, assembly, thermal, or emc.
 };
 ```
 
-Repeated findings are grouped, synthetic references are removed, and coordinate-level
-copper is never returned inline. `report` points to raw analyzer output when compacting or
-disabling findings hides details.
+Repeated findings are grouped, synthetic references and empty values are removed, and
+coordinate-level copper is never returned inline. Analysis tool JSON is serialized without
+indentation to reduce token use.
+
+Prefer `findings` plus one or two domain flags during normal iteration. Use `all` for an
+occasional design-wide review, not after every edit. Even with `all`, the response is a
+semantic summary rather than an upstream report dump: duplicated connectivity findings,
+per-sample PDN curves, repeated decoupling lists, temporary report paths, and empty fields
+are intentionally omitted.
 
 ## `analyze_schematic`
 
@@ -46,7 +51,7 @@ context needed by the current task:
 - `buses`: interfaces, bus topology, differential pairs, and cross-domain signals.
 - `bom`: compact BOM groups, MPN/footprint coverage, sourcing, and optimization.
 - `assembly`: package mix and estimated hand/professional assembly complexity.
-- `verification`: test coverage, simulation readiness, protocol checks, and trust coverage.
+- `verification`: test coverage, protocol checks, and compact trust coverage.
 - `all`: every optional schematic field.
 
 Run after changing a functional schematic block and before PCB synchronization. The adapter

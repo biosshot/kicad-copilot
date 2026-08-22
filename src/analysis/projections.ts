@@ -1,3 +1,5 @@
+import { basename } from 'node:path';
+
 export type JsonRecord = Record<string, unknown>;
 
 export type SchematicAnalysisOptions = {
@@ -54,12 +56,25 @@ const MAX_ARRAY_ITEMS = 40;
 const MAX_OBJECT_KEYS = 80;
 const MAX_DEPTH = 7;
 
+function isEmpty(value: unknown) {
+    return value === undefined
+        || value === null
+        || (typeof value === 'string' && value.trim() === '')
+        || (Array.isArray(value) && value.length === 0)
+        || (typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 0);
+}
+
 /** Keep optional report sections useful to an LLM without returning raw track/net dumps. */
 function bounded(input: unknown, depth = 0): unknown {
-    if (input === null || input === undefined || typeof input !== 'object') return input;
+    if (input === null || input === undefined) return undefined;
+    if (typeof input === 'string') return input.trim() || undefined;
+    if (typeof input !== 'object') return input;
     if (depth >= MAX_DEPTH) return '[nested details omitted]';
     if (Array.isArray(input)) {
-        const items = input.slice(0, MAX_ARRAY_ITEMS).map(item => bounded(item, depth + 1));
+        const items = input.slice(0, MAX_ARRAY_ITEMS)
+            .map(item => bounded(item, depth + 1))
+            .filter(item => !isEmpty(item));
+        if (!items.length) return undefined;
         return input.length > MAX_ARRAY_ITEMS
             ? { count: input.length, items, truncated: input.length - MAX_ARRAY_ITEMS }
             : items;
@@ -71,13 +86,14 @@ function bounded(input: unknown, depth = 0): unknown {
     for (const [key, item] of entries.slice(0, MAX_OBJECT_KEYS)) {
         // Coordinate-level copper is available through report, never inline.
         if ((key === 'segments' || key === 'arcs' || key === 'vias') && Array.isArray(item)) {
-            output[`${key}_count`] = item.length;
+            if (item.length) output[`${key}_count`] = item.length;
             continue;
         }
-        output[key] = bounded(item, depth + 1);
+        const compacted = bounded(item, depth + 1);
+        if (!isEmpty(compacted)) output[key] = compacted;
     }
     if (entries.length > MAX_OBJECT_KEYS) output.truncated_keys = entries.length - MAX_OBJECT_KEYS;
-    return output;
+    return Object.keys(output).length ? output : undefined;
 }
 
 function pick(record: JsonRecord, keys: string[]) {
@@ -102,22 +118,172 @@ function findingFacts(raw: JsonRecord | undefined, predicate: (finding: JsonReco
 }
 
 function compactIcPinAnalysis(raw: unknown) {
-    return array(raw).map(asRecord).filter((item): item is JsonRecord => item !== undefined).map((item) => ({
-        reference: item.reference,
-        value: item.value,
-        function: item.function,
-        total_pins: item.total_pins,
-        unconnected_pins: Array.isArray(item.unconnected_pins)
-            ? item.unconnected_pins.length
-            : item.unconnected_pins,
-        power_pins: array(item.power_pins).map(asRecord).filter(Boolean).map((pin) => ({
-            pin: pin?.pin_number,
-            name: pin?.pin_name,
-            net: pin?.net,
-            has_decoupling_cap: pin?.has_decoupling_cap,
-        })),
-        decoupling_caps_by_rail: item.decoupling_caps_by_rail,
+    return array(raw)
+        .map(asRecord)
+        .filter((item): item is JsonRecord => item !== undefined && /^U\d/i.test(String(item.reference || '')))
+        .map((item) => {
+            const pins = array(item.power_pins).map(asRecord).filter((pin): pin is JsonRecord => pin !== undefined);
+            const grouped = new Map<string, JsonRecord[]>();
+            for (const pin of pins) {
+                const net = String(pin.net || 'unnamed');
+                grouped.set(net, [...(grouped.get(net) || []), pin]);
+            }
+            return {
+                reference: item.reference,
+                function: item.function,
+                total_pins: item.total_pins,
+                unconnected_pins: Array.isArray(item.unconnected_pins)
+                    ? item.unconnected_pins.length
+                    : item.unconnected_pins,
+                power_rails: Object.fromEntries([...grouped].map(([net, railPins]) => [
+                    net,
+                    railPins.map(pin => `${pin.pin_number}:${pin.pin_name}`),
+                ])),
+                undecoupled_power_pins: pins
+                    .filter(pin => pin.has_decoupling_cap !== true)
+                    .map(pin => `${pin.pin_number}:${pin.pin_name}@${pin.net}`),
+            };
+        });
+}
+
+function compactSubcircuits(raw: unknown) {
+    return array(raw).map(asRecord).filter((item): item is JsonRecord => item !== undefined).map(item => ({
+        center_ic: item.center_ic,
+        ic_mpn: item.ic_mpn,
+        neighbor_components: array(item.neighbor_components)
+            .map(asRecord)
+            .filter((neighbor): neighbor is JsonRecord => neighbor !== undefined)
+            .map(neighbor => ({ ref: neighbor.ref, value: neighbor.value })),
+        description: item.description,
     }));
+}
+
+function compactPowerDomains(raw: unknown) {
+    return value(asRecord(raw), 'domain_groups');
+}
+
+function compactGroundDomains(raw: unknown) {
+    const ground = asRecord(raw);
+    const nets = asRecord(ground?.ground_nets);
+    const entries = Object.entries(nets || {});
+    if (ground?.multiple_domains !== true && entries.length <= 1) return undefined;
+    return {
+        nets: nets ? Object.fromEntries(entries.map(([name, rawNet]) => {
+            const net = asRecord(rawNet);
+            return [name, { domain: net?.domain, connections: net?.connections }];
+        })) : undefined,
+        multiple_domains: ground?.multiple_domains,
+    };
+}
+
+function compactPowerBudget(raw: unknown) {
+    const rails = asRecord(asRecord(raw)?.rails);
+    if (!rails) return undefined;
+    return Object.fromEntries(Object.entries(rails).map(([name, rawRail]) => {
+        const rail = asRecord(rawRail);
+        const regulator = asRecord(rail?.regulator);
+        const loads = array(rail?.ics).map(asRecord).filter(Boolean).map(load => ({
+            ref: load?.ref,
+            estimated_mA: load?.estimated_mA,
+        }));
+        return [name, {
+            estimated_load_mA: rail?.estimated_load_mA,
+            loads: loads.length > 1 ? loads : undefined,
+            regulator: regulator ? {
+                ref: regulator.ref,
+                topology: regulator.topology,
+            } : undefined,
+        }];
+    }));
+}
+
+function compactSleepCurrent(raw: unknown) {
+    const sleep = asRecord(raw);
+    const rails = asRecord(sleep?.rails);
+    return {
+        rails: rails ? Object.fromEntries(Object.entries(rails).map(([name, rawRail]) => {
+            const rail = asRecord(rawRail);
+            return [name, {
+                always_on_uA: rail?.always_on_uA,
+                conditional_uA: rail?.conditional_uA,
+                realistic_uA: rail?.realistic_uA,
+                paths: array(rail?.current_paths).map(asRecord).filter(Boolean).map(path => ({
+                    ref: path?.ref,
+                    type: path?.type,
+                    current_uA: path?.current_uA,
+                    has_enable_pin: path?.has_enable_pin,
+                    likely_state: path?.likely_state,
+                    realistic_uA: path?.realistic_uA,
+                })),
+            }];
+        })) : undefined,
+        realistic_total_uA: sleep?.realistic_total_uA,
+    };
+}
+
+function compactInrush(raw: unknown) {
+    return array(asRecord(raw)?.rails).map(asRecord).filter(Boolean).map(rail => ({
+        regulator: rail?.regulator,
+        output_rail: rail?.output_rail,
+        total_output_capacitance_uF: rail?.total_output_capacitance_uF,
+        estimated_inrush_A: rail?.estimated_inrush_A,
+        assumed_soft_start_ms: rail?.assumed_soft_start_ms,
+    }));
+}
+
+function compactBom(raw: unknown) {
+    return array(raw).map(asRecord).filter((item): item is JsonRecord => item !== undefined).map(item => ({
+        value: item.value === item.mpn ? undefined : item.value,
+        footprint: typeof item.footprint === 'string' ? item.footprint.split(':').at(-1) : item.footprint,
+        mpn: item.mpn,
+        manufacturer: item.manufacturer,
+        digikey: item.digikey,
+        mouser: item.mouser,
+        lcsc: item.lcsc,
+        element14: item.element14,
+        references: item.references,
+        dnp: item.dnp === true ? true : undefined,
+    }));
+}
+
+function compactSourcing(raw: unknown) {
+    const sourcing = asRecord(raw);
+    return {
+        total_components: sourcing?.total_bom_components,
+        mpn_coverage: sourcing?.mpn_coverage,
+        mpn_percent: sourcing?.mpn_percent,
+    };
+}
+
+function compactCrossDomainSignals(raw: unknown) {
+    const groups = new Map<string, { nets: string[]; ics: unknown; power_domains: unknown; needs_level_shifter: unknown }>();
+    for (const rawSignal of array(raw)) {
+        const signal = asRecord(rawSignal);
+        if (!signal) continue;
+        const key = JSON.stringify([signal.ics, signal.power_domains, signal.needs_level_shifter]);
+        const existing = groups.get(key);
+        if (existing) existing.nets.push(String(signal.net));
+        else groups.set(key, {
+            nets: [String(signal.net)],
+            ics: signal.ics,
+            power_domains: signal.power_domains,
+            needs_level_shifter: signal.needs_level_shifter,
+        });
+    }
+    return [...groups.values()];
+}
+
+function compactTrust(raw: unknown) {
+    const trust = asRecord(raw);
+    return {
+        trust_level: trust?.trust_level,
+        findings_by_confidence: trust?.by_confidence,
+        provenance_coverage_pct: trust?.provenance_coverage_pct,
+    };
+}
+
+function compactHierarchySheets(raw: unknown) {
+    return array(raw).map(sheet => typeof sheet === 'string' ? basename(sheet) : sheet);
 }
 
 function compactPdnImpedance(raw: unknown) {
@@ -133,12 +299,9 @@ function compactPdnImpedance(raw: unknown) {
             cap_count: rail.cap_count ?? array(rail.capacitors).length,
             total_capacitance_uF: rail.total_capacitance_uF,
             min_impedance: bounded(rail.min_impedance),
-            anti_resonances: bounded(rail.anti_resonances),
-            capacitors: array(rail.capacitors).slice(0, 12).map(asRecord).filter(Boolean).map(cap => ({
-                reference: cap?.reference ?? cap?.ref,
-                value: cap?.value,
-                type: cap?.type,
-                srf: cap?.srf_formatted ?? cap?.srf,
+            anti_resonances: array(rail.anti_resonances).map(asRecord).filter(Boolean).map(item => ({
+                frequency: item?.freq_formatted,
+                impedance_ohm: item?.impedance_ohm,
             })),
         };
     }
@@ -194,18 +357,23 @@ export function projectSchematic(raw: JsonRecord, options: SchematicAnalysisOpti
 
     if (selected(options, 'hierarchy')) {
         output.hierarchy = bounded(pick(raw, [
-            'sheets', 'hierarchical_labels', 'hierarchy_context', 'hierarchy_warning',
+            'hierarchical_labels', 'hierarchy_context', 'hierarchy_warning',
         ]));
+        const hierarchy = asRecord(output.hierarchy);
+        if (hierarchy) hierarchy.sheets = bounded(compactHierarchySheets(raw.sheets));
     }
 
     if (selected(options, 'blocks')) {
         const detections = findingFacts(raw, finding => {
             const detector = String(finding.detector || '');
             const rule = String(finding.rule_id || '');
-            return detector.startsWith('detect_') || rule.endsWith('-DET');
+            const message = String(finding.summary || finding.title || '');
+            return (detector.startsWith('detect_') || rule.endsWith('-DET'))
+                && !detector.includes('decoupl')
+                && !message.toLowerCase().startsWith('decoupling');
         });
         output.blocks = bounded({
-            subcircuits: raw.subcircuits,
+            subcircuits: compactSubcircuits(raw.subcircuits),
             detections,
             ic_pin_analysis: compactIcPinAnalysis(raw.ic_pin_analysis),
             transistor_pin_analysis: compactIcPinAnalysis(raw.transistor_pin_analysis),
@@ -213,8 +381,13 @@ export function projectSchematic(raw: JsonRecord, options: SchematicAnalysisOpti
     }
 
     if (selected(options, 'connectivity')) {
+        const issues = asRecord(raw.connectivity_issues);
         output.connectivity = bounded({
-            issues: raw.connectivity_issues,
+            issues: {
+                unconnected_pins: issues?.unconnected_pins,
+                single_pin_nets: issues?.single_pin_nets,
+                multi_driver_nets: issues?.multi_driver_nets,
+            },
             labels: Array.isArray(raw.labels) ? { count: raw.labels.length } : undefined,
             no_connects: raw.no_connects,
             annotation_issues: raw.annotation_issues,
@@ -226,15 +399,15 @@ export function projectSchematic(raw: JsonRecord, options: SchematicAnalysisOpti
     if (selected(options, 'power')) {
         output.power = bounded({
             rails: raw.rail_voltages,
-            domains: value(design, 'power_domains'),
-            ground_domains: raw.ground_domains,
-            sequencing: raw.power_sequencing_validation,
-            budget: raw.power_budget,
-            sleep_current: raw.sleep_current_audit,
+            domains: compactPowerDomains(value(design, 'power_domains')),
+            ground_domains: compactGroundDomains(raw.ground_domains),
+            sequencing: value(asRecord(raw.power_sequencing_validation), 'power_tree'),
+            budget: compactPowerBudget(raw.power_budget),
+            sleep_current: compactSleepCurrent(raw.sleep_current_audit),
             // Raw impedance profiles contain dozens of samples per rail. The
             // extrema and anti-resonances are the actionable part for an LLM.
             pdn_impedance: compactPdnImpedance(raw.pdn_impedance),
-            inrush: raw.inrush_analysis,
+            inrush: compactInrush(raw.inrush_analysis),
         });
     }
 
@@ -243,15 +416,15 @@ export function projectSchematic(raw: JsonRecord, options: SchematicAnalysisOpti
             topology: raw.bus_topology,
             analysis: value(design, 'bus_analysis'),
             differential_pairs: value(design, 'differential_pairs'),
-            cross_domain_signals: value(design, 'cross_domain_signals'),
+            cross_domain_signals: compactCrossDomainSignals(value(design, 'cross_domain_signals')),
             net_classifications: raw.net_classifications,
         });
     }
 
     if (selected(options, 'bom')) {
         output.bom = bounded({
-            component_groups: raw.bom,
-            sourcing: raw.sourcing_audit,
+            component_groups: compactBom(raw.bom),
+            sourcing: compactSourcing(raw.sourcing_audit),
             optimization: raw.bom_optimization,
             missing_mpn: value(statistics, 'missing_mpn'),
             missing_footprint: value(statistics, 'missing_footprint'),
@@ -263,11 +436,9 @@ export function projectSchematic(raw: JsonRecord, options: SchematicAnalysisOpti
     if (selected(options, 'verification')) {
         output.verification = bounded({
             test_coverage: raw.test_coverage,
-            simulation_readiness: raw.simulation_readiness,
             usb_compliance: raw.usb_compliance,
             erc_warnings: value(design, 'erc_warnings'),
-            trust: raw.trust_summary,
-            capability: raw.capability_mode_ref,
+            trust: compactTrust(raw.trust_summary),
         });
     }
 
