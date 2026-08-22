@@ -10,7 +10,7 @@ Read `dsl.ts` for placement syntax and `instructions.md` for placement and local
 - `wait_pcb_layout({ operation_id })` is needed only when `make_pcb_layout` returns `status: "running"` after its synchronous wait.
 - `cancel_pcb_layout({ operation_id })` stops an obsolete pending placement.
 - `assemble_pcb_layout({ path, layout_id })` applies a previously completed final placement to the target PCB file.
-- `auto_route_pcb({ path, file })` runs the routing DSL through `@easyeda-copilot/router` (KRT default), performs native refill/DRC, and applies the candidate.
+- `auto_route_pcb({ path, file })` runs the routing DSL through `eda-copilot-router` (KRT default), performs native refill/DRC, and applies the candidate.
 - `wait_auto_route({ operation_id })` waits for a long local routing operation.
 - `cancel_auto_route({ operation_id })` stops a running local routing operation before application.
 - `clear_pcb_routing({ path })` removes tracks, track arcs, and vias but preserves footprints, zones, and outline.

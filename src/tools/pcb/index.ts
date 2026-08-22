@@ -124,11 +124,11 @@ export function registerPcbTools(server: McpServer) {
         'auto_route_pcb',
         {
             title: 'Auto Route PCB',
-            description: `Run the routing DSL through @easyeda-copilot/router (KRT by default), verify natively, and apply atomically. PCB instructions: ${PCB_DOC_PATH}`,
+            description: `Run the routing DSL through eda-copilot-router (KRT by default), verify natively, and apply atomically. PCB instructions: ${PCB_DOC_PATH}`,
             inputSchema: z.object({
                 path: z.string().min(1).describe('Target .kicad_pcb path.'),
                 file: z.string().min(1).describe('JavaScript routing DSL file path.'),
-                timeout_sec: z.number().int().min(10).max(1800).default(600),
+                timeout_sec: z.number().int().min(10).max(1800).default(1800),
                 wait_ms: z.number().int().min(1_000).max(180_000).default(60_000),
             }),
         },

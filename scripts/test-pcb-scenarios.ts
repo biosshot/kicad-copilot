@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { importKiCadRoutingBoard } from 'eda-copilot-router/adapters/kicad';
 import { applyBoardAssemble } from '../src/kicad/board-assemble';
 import { createDocument } from '../src/kicad/create-document';
 import { getSupportedKicadCli, preferredSupportedKicadCli } from '../src/kicad/cli';
@@ -14,7 +15,6 @@ import { atom, findChild, isSExpressionList, listHead, parseSExpression, printSE
 import { importPcbChanges } from '../src/pcb/import';
 import { pcbLayoutWithoutPlacementResult } from '../src/pcb/layout-operation';
 import { boardOutline } from '../src/pcb/board-geometry';
-import { netClassFor, readPcbRoutingRules } from '../src/pcb/router-rules';
 import { runProcessChecked } from '../src/utils/process';
 
 async function verifyWithCli(path: string) {
@@ -285,14 +285,16 @@ async function main() {
                     },
                 ],
                 netclass_assignments: { [classifiedNet]: 'Fine' },
-                netclass_patterns: [{ netclass: 'Fine', pattern: 'UART_*' }],
+                netclass_patterns: [],
             },
         }), 'utf8');
-        const designRules = await readPcbRoutingRules(targetPcb);
-        assert.equal(netClassFor(designRules, classifiedNet), 'Fine');
-        assert.equal(netClassFor(designRules, 'UART_RX'), 'Fine');
-        assert.equal(designRules.minimumTrackWidth, 0.2);
-        assert.equal(designRules.minimumViaAnnularWidth, 0.15);
+        const routingImport = await importKiCadRoutingBoard(targetPcb);
+        assert.ok(routingImport.board, routingImport.diagnostics.map(item => item.message).join('\n'));
+        assert.equal(routingImport.board.rules.default.minTrackWidthMm, 0.2);
+        assert.equal(routingImport.board.rules.default.via.minDiameterMm, 0.55);
+        const classifiedRules = routingImport.board.rules.nets.find(item => item.net === classifiedNet)?.values;
+        assert.ok(classifiedRules, `router rules missing for ${classifiedNet}`);
+        assert.equal(classifiedRules.preferredTrackWidthMm, 0.2);
         assert.ok(pcbFootprints(assembled.root).some((item) => item.some((child) => Array.isArray(child) && child[0] && !Array.isArray(child[0]) && child[0].value === 'property')));
         await verifyWithCli(targetPcb);
         await writeFile(join(directory, 'result.txt'), `ok ${refs.length}\n`);

@@ -16,15 +16,15 @@ export default defineConfig({
         'test-footprint-spec': 'scripts/test-footprint-spec.ts',
         'test-pcb-live': 'scripts/test-pcb-live.ts',
         'test-routing-live': 'scripts/test-routing-live.ts',
-        'test-router-package-adapter': 'scripts/test-router-package-adapter.ts',
-        'test-krt-board-transport': 'scripts/test-krt-board-transport.ts',
-        'router-package-adapter': 'src/routing/router-package-adapter.ts',
+        'test-routing-integration': 'scripts/test-routing-integration.ts',
     },
     format: ['esm'],
     clean: true,
     dts: false,
     sourcemap: false,
-    noExternal: ['@modelcontextprotocol/sdk', '@easyeda-copilot/router'],
+    // Keep eda-copilot-router external so its package-relative KRT assets remain
+    // discoverable after kicad-copilot-mcp is installed from npm.
+    noExternal: ['@modelcontextprotocol/sdk'],
     esbuildPlugins: [
         {
             name: 'mcp-sdk-extensionless-imports',

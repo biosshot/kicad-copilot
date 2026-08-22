@@ -13,8 +13,7 @@
     "kicad-copilot-mcp": "./dist/index.js"
   },
   "exports": {
-    ".": "./dist/index.js",
-    "./router-package-adapter": "./dist/router-package-adapter.js"
+    ".": "./dist/index.js"
   },
   "files": [
     "dist",
@@ -35,14 +34,13 @@
     "test:footprint-spec": "npm run build && node dist/test-footprint-spec.js",
     "test:pcb-live": "npm run build && node dist/test-pcb-live.js",
     "test:routing-live": "npm run build && node dist/test-routing-live.js",
-    "test:router-package-adapter": "npm run build && node dist/test-router-package-adapter.js",
-    "test:krt-transport": "npm run build && node dist/test-krt-board-transport.js",
+    "test:routing-integration": "npm run build && node dist/test-routing-integration.js",
     "check": "npm run typecheck && npm run build",
     "prepack": "npm run build",
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "@easyeda-copilot/router": "file:../copilot-router",
+    "eda-copilot-router": "0.1.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "fast-xml-parser": "^5.10.1",
     "find-up": "^5.0.0",

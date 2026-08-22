@@ -1,14 +1,15 @@
 import { randomUUID } from 'node:crypto';
-import { copyFile, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { access, copyFile, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, extname, join, resolve } from 'node:path';
-import { createKrtBackend, run, type RoutingResult } from '@easyeda-copilot/router';
+import { run, type RoutingDiagnostic, type RoutingResult } from 'eda-copilot-router';
+import { applyKiCadRoutingResult, importKiCadRoutingBoard } from 'eda-copilot-router/adapters/kicad';
+import { createKrtBackend } from 'eda-copilot-router/backends/krt';
 import { saveCheckpoint } from '../checkpoints/store';
 import { readPcb } from '../kicad/pcb-reader';
+import { inspectPcbCandidate, pcbDrcMetrics } from '../kicad/pcb-validation';
 import { atomicWritePcb } from '../kicad/pcb-writer';
 import { TEMP_DIR } from '../utils/dirs';
 import { enqueueMutation } from '../utils/mutation-queue';
-import { createKiCadKrtBoardTransport } from './krt-board-transport';
-import { applyKiCadRoutingResult, importKiCadRoutingBoard } from './router-package-adapter';
 
 export type AutoRouteOptions = Readonly<{
     timeoutSec?: number;
@@ -53,6 +54,27 @@ async function replaceFile(source: string, target: string) {
     }
 }
 
+async function replaceFileIfPresent(source: string, target: string) {
+    if (!await access(source).then(() => true, () => false)) return false;
+    await replaceFile(source, target);
+    return true;
+}
+
+async function restoreSourceRulesForRoutingOnly(sourceBoard: string, candidateBoard: string) {
+    for (const suffix of ['.kicad_pro', '.kicad_dru'] as const) {
+        await replaceFileIfPresent(projectPath(sourceBoard, suffix), projectPath(candidateBoard, suffix));
+    }
+}
+
+function nativeVerificationDiagnostics(report: unknown): RoutingDiagnostic[] {
+    const errors = pcbDrcMetrics(report).errorViolations.length;
+    return errors ? [{
+        code: 'KICAD_NATIVE_DRC_ERRORS',
+        severity: 'error',
+        message: `KiCad reports ${errors} DRC error violation(s).`,
+    }] : [];
+}
+
 function publicStatus(operation: RouteOperation) {
     if (operation.status === 'completed') return operation.result;
     if (operation.status === 'failed' || operation.status === 'cancelled') {
@@ -82,6 +104,7 @@ function trimOperations() {
 
 async function runOperation(operation: RouteOperation, dslPath: string, options: AutoRouteOptions) {
     const artifactsDirectory = join(TEMP_DIR, 'copilot-router', operation.id);
+    const timeoutMs = (options.timeoutSec ?? 600) * 1000;
     try {
         await mkdir(artifactsDirectory, { recursive: true });
         operation.stage = 'importing';
@@ -92,37 +115,51 @@ async function runOperation(operation: RouteOperation, dslPath: string, options:
 
         operation.stage = 'routing';
         const backend = createKrtBackend({
-            transport: createKiCadKrtBoardTransport(imported.context),
             artifactsDirectory: join(artifactsDirectory, 'krt'),
-            timeoutMs: (options.timeoutSec ?? 600) * 1000,
             keepArtifacts: true,
         });
+        const signal = AbortSignal.any([
+            operation.controller.signal,
+            AbortSignal.timeout(timeoutMs),
+        ]);
         const result = await run({
             board: imported.board,
             dsl,
             backend,
-            policy: { profile: 'completion-first', timeoutMs: (options.timeoutSec ?? 600) * 1000 },
-            signal: operation.controller.signal,
+            policy: { profile: 'completion-first' },
+            signal,
         });
         await writeFile(join(artifactsDirectory, 'routing-result.json'), `${JSON.stringify(result, null, 2)}\n`);
-        operation.controller.signal.throwIfAborted();
+        signal.throwIfAborted();
 
         operation.stage = 'verifying';
         const candidatePath = join(artifactsDirectory, 'candidate.kicad_pcb');
-        const applied = await applyKiCadRoutingResult(imported.context, result, candidatePath, { nativeVerify: true });
+        const applied = await applyKiCadRoutingResult(imported.context, result, candidatePath);
         if (!applied.outputPath) throw new Error(applied.diagnostics.map(item => item.message).join('\n'));
-        operation.controller.signal.throwIfAborted();
+        signal.throwIfAborted();
+        if (!result.rules.applyRequested) {
+            await restoreSourceRulesForRoutingOnly(operation.path, applied.outputPath);
+        }
+        const candidate = await readPcb(applied.outputPath);
+        const inspected = await inspectPcbCandidate(
+            applied.outputPath,
+            candidate.root,
+            Boolean(result.copper?.zones.length),
+        );
+        const verificationDiagnostics = nativeVerificationDiagnostics(inspected.report);
+        const nativeVerification = verificationDiagnostics.length ? 'failed' as const : 'passed' as const;
+        const diagnostics = [...applied.diagnostics, ...verificationDiagnostics];
+        signal.throwIfAborted();
 
         operation.stage = 'applying';
         await enqueueMutation(async () => {
             const current = await readPcb(operation.path);
-            operation.controller.signal.throwIfAborted();
+            signal.throwIfAborted();
             await saveCheckpoint(current.path, 'Before copilot-router auto route');
-            const candidate = await readPcb(applied.outputPath!);
-            await atomicWritePcb(current.path, current.source, candidate.root);
+            await atomicWritePcb(current.path, current.source, inspected.root);
             if (result.rules.applyRequested) {
-                await replaceFile(projectPath(applied.outputPath!, '.kicad_pro'), projectPath(current.path, '.kicad_pro'));
-                await replaceFile(projectPath(applied.outputPath!, '.kicad_dru'), projectPath(current.path, '.kicad_dru'));
+                await replaceFileIfPresent(projectPath(applied.outputPath!, '.kicad_pro'), projectPath(current.path, '.kicad_pro'));
+                await replaceFileIfPresent(projectPath(applied.outputPath!, '.kicad_dru'), projectPath(current.path, '.kicad_dru'));
             }
         });
 
@@ -132,8 +169,8 @@ async function runOperation(operation: RouteOperation, dslPath: string, options:
             tracks: result.copper?.tracks.length ?? 0,
             vias: result.copper?.vias.length ?? 0,
             zones: result.copper?.zones.length ?? 0,
-            native_verification: applied.nativeVerification,
-            diagnostics: applied.diagnostics,
+            native_verification: nativeVerification,
+            diagnostics,
             metrics: result.metrics,
             artifacts_directory: artifactsDirectory,
         };

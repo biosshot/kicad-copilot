@@ -4,7 +4,7 @@ import { getSupportedKicadCli } from './cli';
 import { parsePcbSource, serializePcb } from './pcb-writer';
 import { SExpression } from './sexpr/ast';
 import { runProcessChecked } from '../utils/process';
-import { findPcbProjectPath } from '../pcb/router-rules';
+import { findPcbProjectPath } from '../pcb/project-path';
 
 async function prepareCandidate(targetPath: string, root: SExpression[]) {
     const targetDirectory = dirname(targetPath);

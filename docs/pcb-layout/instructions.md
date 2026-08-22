@@ -79,7 +79,7 @@ Use `compactness: "high"` only when board area is genuinely constrained.
 
 ## Local Routing
 
-- `auto_route_pcb({ path, file })` passes the routing DSL to `@easyeda-copilot/router`; KRT is the default backend.
+- `auto_route_pcb({ path, file })` passes the routing DSL to `eda-copilot-router`; KRT is the default backend.
 - The router owns power polygons, special differential/equal-length routing, remaining routing, and optional GND plane/stitching declared in the DSL.
 - Existing copper is fixed. Call `clear_pcb_routing` first for a full reroute.
 - If the result is running, call `wait_auto_route({ operation_id })`; use `cancel_auto_route` for obsolete work.

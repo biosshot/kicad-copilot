@@ -32,7 +32,7 @@ KiCad Copilot gives AI agents a high-level, file-oriented interface to KiCad:
 - **Preserve recoverable checkpoints**: save, list, and restore exact versions of individual KiCad files.
 - **Synchronize schematic and PCB**: explicitly import schematic changes into the associated board.
 - **Generate PCB placement**: describe board constraints in a compact JavaScript DSL, review PNG/SVG previews, and apply the approved result.
-- **Route locally**: use the bundled WASM router without sending routing work to an external service.
+- **Route locally**: use `eda-copilot-router` with its managed KRT backend without sending routing work to an external service.
 - **Create copper pours**: add simple full-board zones with optional stitching vias.
 - **Use native KiCad tooling**: discover `kicad-cli` for ERC, DRC, previews, exports, manufacturing files, and other native operations.
 

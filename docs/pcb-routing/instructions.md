@@ -7,7 +7,7 @@ The router uses native KiCad rules by default. DSL values may define the
 effective routing rules for this run. `runRouting()` routes without persisting
 those overrides; `applyDrcRules()` writes rules only; `runAll()` does both.
 
-KRT is the default backend. `copilot-router` owns polygon planning, special
+KRT is the default backend. `eda-copilot-router` owns polygon planning, special
 differential/equal-length routing, remaining routing, ground plane/stitching,
 error collection, and final `RoutingResult`. KiCad imports the board once,
 materializes the result in a candidate, performs refill/DRC, then commits it.
@@ -37,7 +37,7 @@ plane({
 runAll()
 ```
 
-No KRT installation is required. On first routing use, `copilot-router`
+No KRT installation is required. On first routing use, `eda-copilot-router`
 downloads the pinned official KRT release, verifies its SHA-256, prepares the
 platform module and Python dependencies in the user cache, then reuses it
 offline. `COPILOT_ROUTER_KRT_DIR` and `COPILOT_ROUTER_PYTHON` are optional
