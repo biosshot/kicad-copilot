@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { run } from 'eda-copilot-router';
 import { applyKiCadRoutingResult, importKiCadRoutingBoard } from 'eda-copilot-router/adapters/kicad';
-import { runPcbDsl } from '../src/routing/routing-operation';
+import { runPcbRouterDsl } from '../src/routing/routing-operation';
 
 const fixture = fileURLToPath(new URL('../tests/fixtures/cap-chain.kicad_pcb', import.meta.url));
 const directory = await mkdtemp(join(tmpdir(), 'kicad-router-integration-'));
@@ -43,7 +43,7 @@ try {
     async function executeDsl(name: string, code: string) {
         const dsl = join(directory, `${name}.js`);
         await writeFile(dsl, code);
-        const result = await runPcbDsl(source, dsl, { timeoutSec: 30 }, 55_000);
+        const result = await runPcbRouterDsl(source, dsl, 55_000);
         assert.ok(result && typeof result === 'object' && 'status' in result);
         assert.notEqual(result.status, 'running');
         return result;

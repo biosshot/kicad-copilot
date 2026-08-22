@@ -12,9 +12,7 @@ import { TEMP_DIR } from '../utils/dirs';
 import { enqueueMutation } from '../utils/mutation-queue';
 import { createOperationId } from '../operations/id';
 
-export type PcbDslOptions = Readonly<{
-    timeoutSec?: number;
-}>;
+const ROUTER_TIMEOUT_MS = 60 * 60 * 1000;
 
 type PublicPcbDslResult = Readonly<{
     status: RoutingResult['status'];
@@ -103,9 +101,8 @@ function trimOperations() {
     while (operations.size > 20 && finished.length) operations.delete(finished.shift()!.id);
 }
 
-async function runOperation(operation: PcbDslOperation, dslPath: string, options: PcbDslOptions) {
+async function runOperation(operation: PcbDslOperation, dslPath: string) {
     const artifactsDirectory = join(TEMP_DIR, 'copilot-router', operation.id.replace(':', '-'));
-    const timeoutMs = (options.timeoutSec ?? 600) * 1000;
     try {
         await mkdir(artifactsDirectory, { recursive: true });
         operation.stage = 'importing';
@@ -121,7 +118,7 @@ async function runOperation(operation: PcbDslOperation, dslPath: string, options
         });
         const signal = AbortSignal.any([
             operation.controller.signal,
-            AbortSignal.timeout(timeoutMs),
+            AbortSignal.timeout(ROUTER_TIMEOUT_MS),
         ]);
         const result = await run({
             board: imported.board,
@@ -188,10 +185,9 @@ async function runOperation(operation: PcbDslOperation, dslPath: string, options
     }
 }
 
-export async function runPcbDsl(
+export async function runPcbRouterDsl(
     path: string,
     dslFile: string,
-    options: PcbDslOptions = {},
     waitMs = 30_000,
 ) {
     const active = [...operations.values()].find(operation => operation.status === 'running');
@@ -210,7 +206,7 @@ export async function runPcbDsl(
         done,
     };
     operations.set(operation.id, operation);
-    void runOperation(operation, dslFile, options).finally(resolveDone);
+    void runOperation(operation, dslFile).finally(resolveDone);
     return wait(operation, waitMs);
 }
 

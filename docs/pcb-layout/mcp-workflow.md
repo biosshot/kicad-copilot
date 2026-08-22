@@ -9,7 +9,7 @@ Read `dsl.ts` for placement syntax and `instructions.md` for placement and local
 - `wait_operation({ operation_id })` is needed only when a long operation returns `status: "running"` after its synchronous wait.
 - `cancel_operation({ operation_id })` stops obsolete placement, routing, or lifecycle work.
 - `assemble_pcb_layout({ path, layout_id })` applies a previously completed final placement to the target PCB file.
-- `run_pcb_dsl({ path, file })` applies stackup, DRC, copper-only, or routing intent, performs native refill/DRC, and commits the candidate atomically.
+- `run_pcb_router_dsl({ path, file })` applies stackup, DRC, copper-only, or routing intent, performs native refill/DRC, and commits the candidate atomically.
 - PCB layout IDs use `pcb-layout:<8 hex>`; PCB DSL IDs use `pcb-dsl:<8 hex>`.
 
 `preview_path` is the primary PNG review image. `preview_svg_path` is the same preview as SVG. `debug_path` is an optional local SVG for a visibly bad block, family, or module.
@@ -17,7 +17,7 @@ Read `dsl.ts` for placement syntax and `instructions.md` for placement and local
 ## Required Approval Flow
 
 1. Call `import_pcb_changes({ path })` for the target PCB.
-2. If the physical stack must change, use `stack(...); applyStackup()` through `run_pcb_dsl` before placement or routing.
+2. If the physical stack must change, use `stack(...); applyStackup()` through `run_pcb_router_dsl` before placement or routing.
 3. Write a small mechanical preview DSL: outline, holes, regions, pads, and mechanical/user-facing components.
 4. Add `solver({ preview: true, placeOnlyComponents: [...] })` and call `make_pcb_layout`.
 5. If the tool returns running, wait. When it completes, open `preview_path` and present the image to the user for mechanical approval.
@@ -26,7 +26,7 @@ Read `dsl.ts` for placement syntax and `instructions.md` for placement and local
 8. Fix hard errors only. Warnings are not a requirement to reach an ideal score; change one only if it visibly harms an explicit requirement.
 9. Open the final `preview_path` and request final placement approval.
 10. Assemble the intended PCB file using `layout_id`.
-11. Read `../pcb-routing/dsl.d.ts`, write one routing DSL file, and call `run_pcb_dsl({ path, file })`. For a complete reroute, include `clearRouting({ nets: "all" })` in that same DSL transaction.
+11. Read `../pcb-routing/dsl.d.ts`, write one routing DSL file, and call `run_pcb_router_dsl({ path, file })`. For a complete reroute, include `clearRouting({ nets: "all" })` in that same DSL transaction.
 12. Wait when needed, then inspect the routed board and run final DRC with `kicad-cli` as documented in `../kicad-cli.md`.
 
 ## Result Handling

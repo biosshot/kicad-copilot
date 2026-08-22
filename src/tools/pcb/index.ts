@@ -4,7 +4,7 @@ import { assemblePcbLayout } from '../../pcb/assemble';
 import { getPcbComponentSizes } from '../../pcb/component-sizes';
 import { importPcbChanges } from '../../pcb/import';
 import { makePcbLayout } from '../../pcb/layout-operation';
-import { runPcbDsl } from '../../routing/routing-operation';
+import { runPcbRouterDsl } from '../../routing/routing-operation';
 import { DOCS_DIR } from '../../utils/dirs';
 import { enqueueMutation } from '../../utils/mutation-queue';
 import { runTool } from '../../utils/tool-result';
@@ -75,23 +75,20 @@ export function registerPcbTools(server: McpServer) {
     );
 
     server.registerTool(
-        'run_pcb_dsl',
+        'run_pcb_router_dsl',
         {
             title: 'Run PCB DSL',
             description: `Apply stackup, DRC, copper-only, or routing intent through eda-copilot-router, verify natively, and commit atomically. PCB instructions: ${PCB_DOC_PATH}`,
             inputSchema: z.object({
                 path: z.string().min(1).describe('Target .kicad_pcb path.'),
                 file: z.string().min(1).describe('JavaScript PCB routing DSL file path.'),
-                timeout_sec: z.number().int().min(10).max(1800).default(1800)
-                    .describe('KRT routing timeout; non-routing terminals do not start KRT.'),
                 wait_ms: z.number().int().min(1_000).max(55_000).default(30_000)
                     .describe('Initial synchronous wait before returning a pcb-dsl operation_id.'),
             }),
         },
-        async (input) => runTool(() => runPcbDsl(
+        async (input) => runTool(() => runPcbRouterDsl(
             input.path,
             input.file,
-            { timeoutSec: input.timeout_sec },
             input.wait_ms,
         )),
     );

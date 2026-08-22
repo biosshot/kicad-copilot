@@ -1,6 +1,6 @@
 # PCB routing DSL
 
-Create one local JavaScript DSL file, then call `run_pcb_dsl({ path, file })`.
+Create one local JavaScript DSL file, then call `run_pcb_router_dsl({ path, file })`.
 The complete declaration reference is in `dsl.d.ts` in this directory.
 
 The router uses native KiCad rules by default. DSL values may define the
