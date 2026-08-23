@@ -562,6 +562,12 @@ function globalLabel(name: string, point: Point, angle = 0) {
         ${property('Intersheetrefs', '${INTERSHEET_REFS}', point.x, point.y, true)})`;
 }
 
+function localLabel(name: string, point: Point) {
+    return `(label ${quoteSExpression(name)} (at ${point.x} ${point.y} 0)
+        ${effects()}
+        (uuid ${quoteSExpression(randomUUID())}))`;
+}
+
 function wireSegment(start: Point, end: Point) {
     return `(wire (pts (xy ${start.x} ${start.y}) (xy ${end.x} ${end.y}))
         (stroke (width 0) (type default)) (uuid ${quoteSExpression(randomUUID())}))`;
@@ -1254,9 +1260,11 @@ export async function applyCircuitAssembly(
 
         const usedShapes = new Set<string>();
         const generatedSegments: RoutedSegment[] = [];
+        const edgeLabels: { signal: string; point: Point }[] = [];
         const requestedJunctions: Point[] = [];
         for (const edge of assembly.edges) {
             let edgeApplied = false;
+            let edgeLabel: { signal: string; point: Point } | undefined;
             for (const section of edge.sections || []) {
                 const serverStart = serverPoint(section.startPoint, placement);
                 const serverEnd = serverPoint(section.endPoint, placement);
@@ -1294,6 +1302,9 @@ export async function applyCircuitAssembly(
                         const segment = { start: points[index - 1], end: points[index], signal };
                         if (pointKey(segment.start) === pointKey(segment.end)) continue;
                         generatedSegments.push(segment);
+                        if (!edgeLabel && signal && signal.toUpperCase() !== 'NC') {
+                            edgeLabel = { signal, point: segment.start };
+                        }
                     }
                     if (section.incomingShape) usedShapes.add(section.incomingShape);
                     if (section.outgoingShape) usedShapes.add(section.outgoingShape);
@@ -1306,9 +1317,11 @@ export async function applyCircuitAssembly(
             for (const point of edgeApplied ? junctionPoints || [] : []) {
                 requestedJunctions.push(serverPoint(point, placement));
             }
+            if (edgeApplied && edgeLabel) edgeLabels.push(edgeLabel);
         }
         const normalizedSegments = normalizedNetSegments(generatedSegments);
         for (const segment of normalizedSegments) objects.push(wireSegment(segment.start, segment.end));
+        for (const label of edgeLabels) objects.push(localLabel(label.signal, label.point));
 
         const addedJunctions = new Set<string>();
         for (const point of [...requestedJunctions, ...calculatedJunctions(normalizedSegments)]) {

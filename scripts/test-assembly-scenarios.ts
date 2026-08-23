@@ -517,6 +517,8 @@ async function main() {
             const assembledSource = await readFile(path, 'utf8');
             expect(!assembledSource.includes('(lib_id "kicad-copilot:EDGE_B")'),
                 'best-effort edge: conflicting server edge was replaced with a client port');
+            expect(assembledSource.includes('(label "EDGE_A"'),
+                'best-effort edge: signal name was not materialized as a local label');
         });
         await runScenario('component fields preserve converted symbol positions', async () => {
             const path = await copySchematic(blank, join(root, 'component-fields'));
@@ -720,10 +722,8 @@ async function main() {
             second.pins[1].signal_name = 'GND';
             await extractCircuit(path, modification({ add_components: [first, second] }));
             const initialSource = await readFile(path, 'utf8');
-            expect(findLists(initialSource, 'global_label').length === 0,
-                'global labels: physically connected internal net received a global label');
-            expect(findLists(initialSource, 'label').length === 0,
-                'global labels: assembly created a local label');
+            expect(initialSource.includes('(label "MID"'),
+                'local labels: physically connected internal net lost its signal name');
             expect(initialSource.includes('(lib_id "kicad-copilot:VCC_5V")'),
                 'project library: generated power port uses an unregistered library');
             const powerDefinition = findLists(initialSource, 'symbol').find((range) => (
