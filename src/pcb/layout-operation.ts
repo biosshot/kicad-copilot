@@ -11,6 +11,7 @@ import {
     waitForAsyncTask,
 } from '../utils/server';
 import { associatedSchematicPath } from './paths';
+import { importPcbChanges } from './import';
 import { createPcbLayoutInput } from './layout-input';
 import {
     ActivePcbLayout,
@@ -131,6 +132,7 @@ async function finishOperation(active: ActivePcbLayout, operation: AsyncOperatio
 export async function makePcbLayout(pcbPath: string, file: string, waitMs = 30_000) {
     await ensureNoActiveOperation();
     const schematicPath = await associatedSchematicPath(pcbPath);
+    await enqueueMutation(() => importPcbChanges(pcbPath, schematicPath));
     const [code, input, pcbHash, schematicHash] = await Promise.all([
         readFile(file, 'utf8'),
         createPcbLayoutInput(pcbPath, schematicPath, true),

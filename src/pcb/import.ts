@@ -17,7 +17,7 @@ import {
     propertyValue,
     readPcb,
 } from '../kicad/pcb-reader';
-import { atomicWritePcb } from '../kicad/pcb-writer';
+import { atomicWritePcb, serializePcb } from '../kicad/pcb-writer';
 import { getPcbSchematic, PcbSchematicComponent } from '../kicad/schematic-reader';
 import {
     atom,
@@ -273,6 +273,8 @@ export async function importPcbChanges(pcbPathInput: string, schematicOverride?:
         if (allByIdentity.has(path) || (reference && activeByReference.has(reference))) continue;
         pcb.root.splice(pcb.root.indexOf(footprint), 1);
     }
+
+    if (serializePcb(pcb.root) === pcb.source) return 'ok';
 
     await saveCheckpoint(pcb.path, 'Before PCB import');
     await atomicWritePcb(pcb.path, pcb.source, pcb.root);
