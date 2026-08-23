@@ -1,102 +1,56 @@
 # KiCad CLI
 
-Prefer the native `kicad-cli` whenever it already provides the required operation. Do not request a new MCP tool for checks, previews, exports, reports, manufacturing files, format upgrades, or jobsets that the installed CLI can handle.
+Use native `kicad-cli` for ERC, DRC, conditional previews, and exports. Call `get_project_info` once and use its exact `kicad_cli.path`. Inspect `--help` for the installed KiCad version before using unfamiliar flags.
 
-## Locate The CLI
-
-Call `get_project_info({ path })` first. Its `kicad_cli` field contains the discovered executable path and version:
-
-```json
-{
-  "kicad_cli": {
-    "path": "C:\\Program Files\\KiCad\\10.0\\bin\\kicad-cli.exe",
-    "version": "10.0.0"
-  }
-}
-```
-
-Use the returned path exactly. Quote it when it contains spaces. In PowerShell:
+## ERC and DRC
 
 ```powershell
-$kicadCli = 'C:\Program Files\KiCad\10.0\bin\kicad-cli.exe'
-& $kicadCli --version
-```
+& $kicadCli sch erc --format json --severity-all `
+  --output 'schematic-erc.json' 'root.kicad_sch'
 
-If `kicad_cli` is `null`, try `kicad-cli` from `PATH` or ask the user to install KiCad or set `KICAD_CLI_PATH` for the MCP process.
-
-Always inspect help from the installed version when using an unfamiliar command:
-
-```powershell
-& $kicadCli --help
-& $kicadCli pcb --help
-& $kicadCli pcb render --help
-& $kicadCli pcb export --help
-& $kicadCli sch --help
-```
-
-## DRC And ERC
-
-Run PCB DRC as JSON:
-
-```powershell
 & $kicadCli pcb drc --format json --severity-all `
   --output 'board-drc.json' 'board.kicad_pcb'
 ```
 
-Inspect `violations` and `unconnected_items`. Treat any `shorting_items` as a failed result. After generated routing, the number of unconnected items must not increase.
+Inspect violations and unconnected items. Treat shorts as failures. After generated routing, unconnected items must not increase without an explained reason.
 
-Run schematic ERC as JSON:
+Use `--refill-zones` when DRC must validate current fills. Do not add `--save-board` unless changing the user's board is explicitly allowed. Add `--exit-code-violations` when CI must fail on violations.
 
-```powershell
-& $kicadCli sch erc --format json --severity-all `
-  --output 'schematic-erc.json' 'schematic.kicad_sch'
-```
+## Conditional PCB preview
 
-Add `--exit-code-violations` when a CI command must fail on reported violations.
+Do not render after every PCB operation.
 
-`--refill-zones` recalculates zones for DRC. Do not add `--save-board` to the user's board unless the requested operation permits changing it. MCP routing and pour operations already validate a temporary candidate before atomically replacing the target file.
+Render the applied board when:
 
-## PCB Preview
+- a connector, switch, button, display, antenna, card slot, mounting feature, or other mechanical component was added, moved, rotated, or changed side;
+- the outline, cutout, or mounting holes changed;
+- mechanics need LLM or user approval;
+- the user requests visual validation.
 
-Render a 3D PNG from the top:
+Normally skip preview for analyze-only, stackup/rules-only, and routing/copper-only work. Export a 2D copper view only when it helps validate that operation.
+
+The `make_pcb_layout` preview is solver diagnostic output. A native render is the authoritative visual check of the applied `.kicad_pcb`.
+
+Render only required views:
 
 ```powershell
 & $kicadCli pcb render 'board.kicad_pcb' `
-  --output 'board-top.png' `
-  --side top `
-  --quality high `
-  --background opaque
+  --output 'board-top.png' --side top --quality high --background opaque
 ```
 
-Use `--side bottom` for the back. Use `--rotate`, `--zoom`, `--pan`, `--width`, and `--height` when another view is needed.
+Render the bottom only when bottom-side mechanics changed. Use `--zoom`, `--pan`, and `--rotate` for a closer connector view.
 
-Export a single 2D SVG of selected front layers:
+For reliable 2D geometry or copper:
 
 ```powershell
 & $kicadCli pcb export svg 'board.kicad_pcb' `
-  --mode-single `
-  --output 'board-front.svg' `
+  --mode-single --output 'board-front.svg' `
   --layers 'F.Cu,F.SilkS,Edge.Cuts' `
-  --fit-page-to-board `
-  --exclude-drawing-sheet
+  --fit-page-to-board --exclude-drawing-sheet
 ```
 
-For the back, use `--layers 'B.Cu,B.SilkS,Edge.Cuts' --mirror`. Add `--check-zones` when the preview must include current zone fills.
+Use `B.Cu,B.SilkS,Edge.Cuts` with `--mirror` for the back. Add `--check-zones` when filled zones must appear. Native CLI cannot highlight one component or net.
 
-The native preview cannot highlight one net or component. Use PCB parsing or a purpose-built MCP feature only when highlighting is essential to the task.
+## Other native operations
 
-## Other Native Operations
-
-Use CLI subcommands instead of MCP wrappers where possible:
-
-- `pcb export stats --format json` for board statistics;
-- `pcb export gerbers` and `pcb export drill` for manufacturing outputs;
-- `pcb export pos` for placement files;
-- `pcb export step`, `stl`, `glb`, `vrml`, or `3dpdf` for mechanical exchange;
-- `pcb export pdf`, `svg`, or `dxf` for drawings;
-- `sch export bom`, `netlist`, `pdf`, `svg`, or `dxf` for schematic outputs;
-- `fp` and `sym` for footprint and symbol library operations;
-- `jobset run` for a project-defined KiCad jobset;
-- `pcb upgrade` and `sch upgrade` only when an explicit format upgrade is required.
-
-Checks and exports are normally read-only. Commands containing `upgrade`, `--save-board`, imports, or a jobset may modify files or create many outputs. Resolve exact targets first, preserve checkpoints where appropriate, and do not overwrite user files accidentally.
+Prefer CLI support for BOM/netlist, statistics, manufacturing files, drawings, position files, STEP/STL/GLB/VRML/3DPDF, jobsets, and library operations. Commands containing `upgrade`, `--save-board`, imports, or a jobset may modify files or create many outputs; resolve targets and permission first.

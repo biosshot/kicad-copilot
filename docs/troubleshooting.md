@@ -35,5 +35,7 @@ restored file in KiCad.
 ## `no free area on schematic sheet`
 
 The assembled block does not fit the target sheet or overlaps retained
-content. Increase the top-level `(paper ...)` size in the target `.kicad_sch`
-file, for example from `(paper "A4")` to `(paper "A3")`, then retry.
+content. Move an independent function to a hierarchical sheet first. If one
+coherent block still does not fit, increase the top-level `(paper ...)` size
+in the target `.kicad_sch`, for example from `(paper "A4")` to
+`(paper "A3")`, then retry.

@@ -1,37 +1,30 @@
 # Projects and hierarchical sheets
 
-## File-oriented model
+KiCad Copilot is file-oriented. Tools have no implicit current project or selected sheet.
 
-KiCad Copilot has no selected or current project state. Tools receive a path
-to the file or directory relevant to that operation.
+## Required hierarchy
 
-`get_project_info` resolves `.kicad_pro` projects and returns KiCad files plus
-the schematic hierarchy. Returned paths are relative to the directory holding
-the root `.kicad_pro` file.
+New or substantially expanded projects must use hierarchical sheets.
 
-## Creating documents
+- Keep the root sheet as a readable project overview with child-sheet symbols.
+- Put one coherent subsystem on each child sheet, for example `power`, `mcu`, `usb`, `sensors`, or `motor-driver`.
+- Keep an IC with its local decoupling and closely related support parts; do not create one sheet per small IC.
+- Split a sheet when it contains independent functions or is no longer understandable as one block.
+- Use stable descriptive filenames and net names.
 
-`create_doc` supports:
+`create_doc({ doc: { doc_type: "schematic_page", path, parent_path } })` creates a child file and adds its sheet symbol to the parent. It does not create hierarchical pins. For cross-sheet circuits created through the current MCP, use intentional globally named nets. Do not create future or ambiguous nets.
 
-- `project`: create `<name>.kicad_pro` and matching `<name>.kicad_sch`;
-- `schematic`: create one standalone `.kicad_sch`;
-- `schematic_page`: create a child `.kicad_sch` and add its sheet symbol to a
-  specified parent schematic.
+Do not silently reorganize a flat user schematic during a small unrelated edit. Propose the required sheet plan first and migrate only after user approval.
 
-Existing destination files are never overwritten. A child sheet name is
-derived from its filename, and its `Sheetfile` reference is relative to the
-parent schematic.
+## Tools
 
-## Hierarchy
+- `get_project_info({ path })` returns projects, files, the schematic tree, and discovered `kicad-cli`.
+- `create_doc({ doc: { doc_type: "project", path } })` creates matching `.kicad_pro` and root `.kicad_sch` files.
+- `create_doc({ doc: { doc_type: "schematic_page", path, parent_path } })` creates one child sheet.
+- `create_doc` never overwrites an existing destination.
 
-Each physical `.kicad_sch` file is read and modified separately. A sheet file
-can appear in a hierarchy through a parent sheet reference. Use the physical
-file path supplied by the project tree when targeting a child sheet.
+Each `.kicad_sch` is read and modified separately. Resolve returned relative paths against the project directory and pass the exact physical sheet path to schematic tools.
 
 ## Sheet size
 
-The sheet size is stored directly in the `.kicad_sch` file. If an assembled
-circuit does not fit, change the top-level paper entry before retrying, for
-example from `(paper "A4")` to `(paper "A3")`. A custom millimetre size can be
-written as `(paper "User" 500 300)`. Save a checkpoint or backup before manual
-editing, and keep the S-expression syntax intact.
+Prefer another functional sheet over making one page extremely large. If one coherent block still does not fit, save a checkpoint and enlarge that sheet's top-level `(paper ...)` entry, for example from `A4` to `A3`, while preserving valid S-expression syntax.

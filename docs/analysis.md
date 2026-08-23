@@ -1,108 +1,53 @@
 # Design analysis
 
-Use the analysis tools after meaningful schematic or PCB changes. They run the pinned
-`kicad-happy` v2.2.0 analyzers and return compact LLM-facing results. No analysis tool
-modifies the KiCad project. Schematic and PCB analysis are offline; lifecycle audit uses
-distributor networks.
+`analyze_schematic` and `analyze_pcb` run pinned `kicad-happy` v2.2.0 checks without modifying the project. Use them for design reasoning; use native KiCad ERC/DRC for release verification.
 
-## Shared result behavior
+## Context rule
 
-Every completed analysis returns `status`, `summary`, and `skipped`. `findings` is enabled
-by default and can be disabled with `findings: false`. Optional report fields are selected
-with individual booleans and appear at the top level. `all: true` enables all optional
-report fields but never overrides `findings: false`.
+- Keep `findings: true` for compact actionable findings.
+- Add only fields needed for the current decision.
+- Use `findings: false` for one focused report-only query.
+- Do not use `all: true` by default. It returns many fields and PCB `all` also runs thermal and EMC. Use it only for an explicitly requested deep audit when focused reports are insufficient.
 
-```ts
-type AnalysisResult = {
-  status: "pass" | "warn" | "fail";
-  summary: string;
-  skipped: string[];
-  findings?: Array<{
-    severity: "error" | "warning" | "info";
-    message: string;
-    refs?: string[];
-    fix?: string;
-  }>;
-  // Requested domain fields such as power, routing, assembly, thermal, or emc.
-};
-```
+Results contain `status: pass | warn | fail`, a compact `summary`, `skipped`, optional `findings`, and requested top-level report fields. Report skipped checks; never treat them as passes.
 
-Repeated findings are grouped, synthetic references and empty values are removed, and
-coordinate-level copper is never returned inline. Analysis tool JSON is serialized without
-indentation to reduce token use.
+## Schematic selection
 
-Prefer `findings` plus one or two domain flags during normal iteration. Use `all` for an
-occasional design-wide review, not after every edit. Even with `all`, the response is a
-semantic summary rather than an upstream report dump: duplicated connectivity findings,
-per-sample PDN curves, repeated decoupling lists, temporary report paths, and empty fields
-are intentionally omitted.
+| Need | Fields |
+|---|---|
+| New hierarchy or sheet split | `hierarchy`, `overview` |
+| Circuit edit or beautify | `connectivity`, `blocks` |
+| Rails or power stage | `power`, `connectivity` |
+| Interfaces or differential signals | `buses`, `connectivity` |
+| BOM or assembly review | `bom`, `assembly` |
+| Verification planning | `verification` |
 
-## `analyze_schematic`
+Run once at project level after all related sheet changes. The tool accepts a `.kicad_sch`, `.kicad_pro`, or project directory. It does not run native ERC.
 
-Accepts a `.kicad_sch`, `.kicad_pro`, or project directory. There is no `mode`; the
-analyzer always performs its core offline analysis. Use the optional booleans only for
-context needed by the current task:
+## PCB selection
 
-- `overview`: project size, sheets, components, nets, and versions.
-- `hierarchy`: sheets, hierarchical/global labels, and discovery warnings.
-- `blocks`: detected regulators, crystals, filters, IC neighborhoods, and interfaces.
-- `connectivity`: unconnected pins, single-pin/multi-driver nets, labels, and no-connects.
-- `power`: rails, voltage estimates, domains, sequencing, budget, sleep current, PDN, inrush.
-- `buses`: interfaces, bus topology, differential pairs, and cross-domain signals.
-- `bom`: compact BOM groups, MPN/footprint coverage, sourcing, and optimization.
-- `assembly`: package mix and estimated hand/professional assembly complexity.
-- `verification`: test coverage, protocol checks, and compact trust coverage.
-- `all`: every optional schematic field.
+`analyze_pcb` works after placement, stackup/rule, copper, and routing operations. It automatically discovers an associated schematic and runs cross-domain checks when one exists.
 
-Run after changing a functional schematic block and before PCB synchronization. The adapter
-suppresses the upstream warning that only requests downloaded PDFs. Missing MPN coverage
-remains actionable. Structured datasheet extraction is not performed.
+| PCB operation | Focused fields |
+|---|---|
+| Placement or mechanics | `overview`, `placement`, optionally `assembly` |
+| Stackup or DRC rules | `overview`, `dfm` |
+| Zones, planes, or stitching | `connectivity`, `power`, `dfm` |
+| Routing | `routing`, `connectivity`, `power` |
+| Buses or differential pairs | previous fields plus `buses` |
+| Assembly/production review | `assembly`, `dfm` |
+| Detailed project consistency | `cross` |
 
-## `analyze_pcb`
+Enable `proximity: true` only after routing exists and crosstalk/proximity matters. Enable `thermal` or `emc` only when the design or user requires those analyses.
 
-Accepts a `.kicad_pcb`, `.kicad_pro`, or project directory. The adapter automatically finds
-the associated schematic, runs schematic analysis once, passes its JSON to
-`analyze_pcb.py --schematic`, enables `--full`, and runs `cross_analysis.py`. Use
-`schematic` only to override automatic discovery.
+`placement` can detect density, courtyard, edge, keepout, and decoupling issues. It cannot reliably determine whether a connector opening is accessible or faces outward; follow `pcb-layout/mechanical-validation.md`.
 
-- `overview`: board size, layers, footprints, tracks, vias, zones, and routing completion.
-- `placement`: density, groups, courtyard/edge issues, and decoupling distances.
-- `routing`: track/via distributions, net lengths, layer transitions, and proximity results.
-- `connectivity`: copper islands, disconnected pads, plane splits, and zone continuity.
-- `power`: power routing, ground domains, decoupling, current risks, and switching loops.
-- `buses`: schematic-enriched bus/differential-pair routing and cross findings.
-- `assembly`: fiducials, orientation, test points, silkscreen, tombstoning, via-in-pad, and complexity.
-- `dfm`: process tier, project-rule compliance, manufacturing metrics, and violations.
-- `cross`: detailed schematic/PCB sync, ESD, decoupling, current, return-path, plane, and diff-pair checks.
-- `thermal`: run and return `analyze_thermal.py` results. Missing power evidence is reported in `skipped`.
-- `emc`: run and return analytical `analyze_emc.py` results without SPICE.
-- `proximity`: enable slower trace-proximity/crosstalk analysis after routing exists.
-- `all`: return every optional PCB field and run thermal plus EMC; it does not enable proximity.
+`analyze_pcb` does not run native DRC. After a PCB mutation, run the relevant focused analysis and `kicad-cli pcb drc`. For an existing design, collect a focused baseline first only when a before/after comparison is needed.
 
-Run after placement and again after routing. EMC is most meaningful after routing and ground
-zones exist. These checks complement but do not replace native KiCad DRC.
+## Lifecycle
 
-## `audit_lifecycle` and unified operations
+`audit_lifecycle` is network-backed and may return `status: "running"`. Wait with `wait_operation({ operation_id })`; cancel obsolete work with `cancel_operation`. Use lifecycle audit for sourcing or release work, not ordinary drawing/layout iteration.
 
-`audit_lifecycle` analyzes schematic MPNs using LCSC and any configured DigiKey, Mouser, or
-element14 credentials. It can also validate commercial/industrial/extended/automotive/military
-temperature grades and optionally search for alternatives.
+## Decision
 
-The audit starts asynchronously and waits up to 30 seconds by default. If it returns
-`status: "running"`, call:
-
-```ts
-wait_operation({ operation_id, wait_ms: 30000 })
-```
-
-Use `cancel_operation({ operation_id })` when the network-backed audit is no
-longer needed. Lifecycle IDs use the form `lifecycle:1a2b3c4d`.
-
-Repeat while the status remains `running`. The completed result uses the shared compact
-contract. LCSC does not expose authoritative lifecycle state; an LCSC-only audit reports
-that capability gap instead of claiming that an unknown part is active.
-
-## Native verification gap
-
-`skipped` always states that native KiCad ERC or DRC was not run. Run those checks through
-`kicad-cli` before treating an analysis result as release-ready.
+An analyzer finding does not authorize rollback. Separate pre-existing findings from new ones, stop further dependent work, and ask the user to choose `KEEP`, `FIX`, or `RESTORE`.

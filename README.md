@@ -31,7 +31,7 @@ KiCad Copilot gives AI agents a high-level, file-oriented interface to KiCad:
 - **Work with KiCad projects**: inspect project trees and create projects, standalone schematics, hierarchical sheets, and PCB files.
 - **Preserve recoverable checkpoints**: save, list, and restore exact versions of individual KiCad files.
 - **Synchronize schematic and PCB**: explicitly import schematic changes into the associated board.
-- **Generate PCB placement**: describe board constraints in a compact JavaScript DSL, review PNG/SVG previews, and apply the approved result.
+- **Generate PCB placement**: describe board constraints in a compact JavaScript DSL, checkpoint and apply returned layouts, and validate changed mechanics with native KiCad views.
 - **Route locally**: use `eda-copilot-router` with its managed KRT backend without sending routing work to an external service.
 - **Create copper pours**: add simple full-board zones with optional stitching vias.
 - **Use native KiCad tooling**: discover `kicad-cli` for ERC, DRC, previews, exports, manufacturing files, and other native operations.
@@ -186,18 +186,16 @@ After a write:
 
 ## PCB workflow
 
-PCB placement and routing use an explicit review flow:
+PCB placement, mechanics, copper, and routing can be requested independently. For a complete board:
 
-1. Import schematic changes into the target `.kicad_pcb` file.
-2. Describe the outline, holes, constraints, regions, and important components in the placement DSL.
-3. Generate a mechanical preview without modifying the PCB.
-4. Review the returned PNG or SVG preview.
-5. Generate and approve the complete placement.
-6. Apply the stored placement to the PCB.
-7. Route the remaining connections locally.
-8. Inspect the result and run final KiCad DRC.
+1. Synchronize the target `.kicad_pcb` only when the schematic changed.
+2. Select new, preserved-outline, add-only, or subset placement.
+3. Validate connectors and other changed mechanics first.
+4. Complete and analyze placement.
+5. Apply only the requested stackup, rules, copper, and routing operations.
+6. Run focused PCB analysis and final native KiCad DRC.
 
-Every placement response containing a PCB is checkpointed and applied atomically, including preview and issue-bearing results. The agent inspects the returned preview or PCB analysis and can roll back through checkpoints when needed; no separate assembly tool call is required.
+Every placement response containing a PCB is checkpointed and applied atomically, including preview and issue-bearing results; no separate assembly call exists. Solver PNG/SVG output is diagnostic. When mechanics change, the agent validates the applied board through focused analysis and a native `kicad-cli` render, then asks whether to keep, fix, or restore the result.
 
 Placement and router DSL execution remain separate operations. This keeps schematic-to-PCB synchronization explicit and makes it possible to clear or rebuild routing without deleting placed components.
 
@@ -241,14 +239,19 @@ Other major versions are rejected because their file formats and CLI behavior ar
 ## Documentation
 
 - [AI agent instructions](docs/SKILL.md)
-- [Circuit creation and modification](docs/circuit-maker/instructions.md)
+- [Full and independent workflows](docs/workflow.md)
+- [Schematic workflow](docs/schematic/workflow.md)
+- [Circuit modification schema](docs/schematic/circuit-mod.md)
 - [Projects and hierarchical sheets](docs/schematic/project-and-sheets.md)
 - [Checkpoints](docs/schematic/checkpoints.md)
-- [PCB workflow](docs/pcb-layout/mcp-workflow.md)
-- [PCB placement rules](docs/pcb-layout/instructions.md)
+- [PCB placement workflow and rules](docs/pcb-layout/instructions.md)
+- [Mechanical validation](docs/pcb-layout/mechanical-validation.md)
 - [Placement DSL](docs/pcb-layout/dsl.ts)
+- [PCB routing workflow](docs/pcb-routing/instructions.md)
+- [Routing DSL](docs/pcb-routing/dsl.d.ts)
 - [KiCad CLI](docs/kicad-cli.md)
 - [Design analysis](docs/analysis.md)
+- [Verification gates](docs/verification.md)
 - [Troubleshooting](docs/troubleshooting.md)
 
 ## Development
