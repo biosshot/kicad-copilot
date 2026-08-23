@@ -197,9 +197,9 @@ PCB placement and routing use an explicit review flow:
 7. Route the remaining connections locally.
 8. Inspect the result and run final KiCad DRC.
 
-Placement previews are never applied automatically. The agent receives a `layout_id` only for an explicitly generated result and uses it to assemble the intended board after review.
+Every placement response containing a PCB is checkpointed and applied atomically, including preview and issue-bearing results. The agent inspects the returned preview or PCB analysis and can roll back through checkpoints when needed; no separate assembly tool call is required.
 
-Routing, pours, and placement are separate operations. This keeps schematic-to-PCB synchronization explicit and makes it possible to clear or rebuild routing without deleting placed components.
+Placement and router DSL execution remain separate operations. This keeps schematic-to-PCB synchronization explicit and makes it possible to clear or rebuild routing without deleting placed components.
 
 ## KiCad CLI
 

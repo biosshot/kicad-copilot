@@ -22,6 +22,8 @@ import {
     writeActiveLayout,
 } from './layout-cache';
 import { createOperationId } from '../operations/id';
+import { enqueueMutation } from '../utils/mutation-queue';
+import { assemblePcbLayout } from './assemble';
 
 const TASK_PATH = '/v1/mcp-tools/make-pcb-layout';
 
@@ -114,8 +116,10 @@ async function finishOperation(active: ActivePcbLayout, operation: AsyncOperatio
         created_at: Date.now(),
     });
     await clearActiveLayout(active.operation_id);
+    await enqueueMutation(() => assemblePcbLayout(active.pcb_path, layoutId));
     return {
         status,
+        applied: true,
         layout_id: layoutId,
         ...(status === 'failed_with_layout' && response.content ? { message: response.content } : {}),
         ...(previewPath ? { preview_path: previewPath } : {}),

@@ -13,12 +13,12 @@
 
 1. Read `dsl.ts`, this file, and the closest complete example.
 2. If needed, apply the complete physical stack with `stack(...); applyStackup()` through `run_pcb_router_dsl` before placement or routing.
-3. Make a **mechanical preview** first: board outline, holes, constraint regions, board pads, connectors, buttons, displays, LEDs, and other edge-facing parts. Use `solver({ preview: true, placeOnlyComponents: [...] })`.
-4. Open the PNG at `preview_path` and show it to the user. Use `preview_svg_path` when vector output is useful. Ask for explicit confirmation of the mechanics. A preview is never assembled.
+3. Make a **mechanical preview** first: board outline, holes, constraint regions, board pads, connectors, buttons, displays, LEDs, and other edge-facing parts. Use `solver({ preview: true, placeOnlyComponents: [...] })`. Every returned PCB is checkpointed and applied.
+4. Open the PNG at `preview_path` and show it to the user. Use `preview_svg_path` when vector output is useful. Ask for explicit confirmation of the mechanics; roll back the checkpoint when the applied preview is rejected.
 5. After confirmation, remove preview filters and write the complete block/module/component layout.
 6. Run full placement, inspect `preview_path`, and fix fatal errors only.
-7. Show the final placement to the user for approval. Assemble only after that approval.
-8. Read `../pcb-routing/instructions.md` and its `dsl.d.ts`, then use `run_pcb_router_dsl({ path, file })` only after the final placement is approved and assembled.
+7. Show the applied final placement to the user for approval and roll back if it is rejected.
+8. Read `../pcb-routing/instructions.md` and its `dsl.d.ts`, then use `run_pcb_router_dsl({ path, file })` only after the applied final placement is approved.
 9. Inspect the routed PCB and run final DRC with `kicad-cli`; see `../kicad-cli.md`.
 
 `run_pcb_router_dsl` owns stackup, copper cleanup, planes, stitching, DRC rules, and routing. Use its focused `applyStackup()` or `runCopper()` terminals when KRT routing is unnecessary.

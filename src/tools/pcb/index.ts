@@ -1,6 +1,5 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp';
 import * as z from 'zod/v4';
-import { assemblePcbLayout } from '../../pcb/assemble';
 import { getPcbComponentSizes } from '../../pcb/component-sizes';
 import { importPcbChanges } from '../../pcb/import';
 import { makePcbLayout } from '../../pcb/layout-operation';
@@ -49,7 +48,7 @@ export function registerPcbTools(server: McpServer) {
         'make_pcb_layout',
         {
             title: 'Make PCB Layout',
-            description: `Create placement without changing the PCB and return PNG/SVG preview paths. PCB instructions: ${PCB_DOC_PATH}`,
+            description: `Create and atomically apply placement, save a checkpoint, and return PNG/SVG preview paths. PCB instructions: ${PCB_DOC_PATH}`,
             inputSchema: z.object({
                 path: z.string().min(1).describe('Target .kicad_pcb path.'),
                 file: z.string().min(1).describe('JavaScript PCB layout DSL file path.'),
@@ -59,20 +58,8 @@ export function registerPcbTools(server: McpServer) {
         async ({ path, file, wait_ms }) => runTool(() => makePcbLayout(path, file, wait_ms)),
     );
 
-    server.registerTool(
-        'assemble_pcb_layout',
-        {
-            title: 'Assemble PCB Layout',
-            description: `Apply a stored placement to one KiCad PCB. PCB instructions: ${PCB_DOC_PATH}`,
-            inputSchema: z.object({
-                path: z.string().min(1).describe('Target .kicad_pcb path.'),
-                layout_id: z.string().min(1),
-            }),
-        },
-        async ({ path, layout_id }) => runTool(
-            () => enqueueMutation(() => assemblePcbLayout(path, layout_id)),
-        ),
-    );
+    // assemble_pcb_layout is intentionally hidden. make_pcb_layout applies every
+    // returned PCB immediately while the stored layout remains available internally.
 
     server.registerTool(
         'run_pcb_router_dsl',
