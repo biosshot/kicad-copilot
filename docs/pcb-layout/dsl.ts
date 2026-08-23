@@ -124,6 +124,16 @@ declare const board: {
   polygon(points: Array<{ x: number; y: number }>, options?: PolygonBoardOptions): void;
 };
 
+interface PreserveOptions {
+  /** Use the current KiCad Edge.Cuts outline. */
+  board?: boolean;
+  /** Preserve explicit components, or every current component whose center is inside Edge.Cuts. */
+  components?: "all" | string[];
+}
+
+/** Preserve positions loaded from the current KiCad PCB. */
+declare function preserve(options: PreserveOptions): void;
+
 interface BoardHoleOptions {
   /** Board anchor that defines the reference point. Component/block-relative holes are intentionally unsupported for now. */
   at: Extract<TargetRef, { type: "board_anchor" }>;

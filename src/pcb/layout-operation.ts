@@ -133,7 +133,7 @@ export async function makePcbLayout(pcbPath: string, file: string, waitMs = 30_0
     const schematicPath = await associatedSchematicPath(pcbPath);
     const [code, input, pcbHash, schematicHash] = await Promise.all([
         readFile(file, 'utf8'),
-        createPcbLayoutInput(pcbPath, schematicPath),
+        createPcbLayoutInput(pcbPath, schematicPath, true),
         fileHash(pcbPath),
         fileHash(schematicPath),
     ]);

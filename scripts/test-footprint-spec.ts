@@ -57,6 +57,7 @@ assert.deepEqual(convertedSpec.pads.map((pad) => [pad.pin_number, pad.x, pad.y, 
 
 const nativeFootprint = parseSExpression(`(footprint "Custom:ASYMMETRIC"
     (layer "F.Cu")
+    (at 105 55 90)
     (uuid "native-footprint-uuid")
     (path "/sheet/symbol-1")
     (property "Reference" "U1")
@@ -82,20 +83,60 @@ const localPayload = createPcbLayoutPayload(circuit(localComponent), [localCompo
 assert.equal(localPayload.circuit.components[0].footprint_uuid, 'native-footprint-uuid');
 assert.deepEqual(localPayload.footprints['native-footprint-uuid'], nativeSpec);
 
+const placementPayload = createPcbLayoutPayload(
+    circuit(localComponent),
+    [localComponent],
+    [nativeFootprint],
+    [{ x: 90, y: 45 }, { x: 110, y: 45 }, { x: 110, y: 55 }, { x: 90, y: 55 }],
+);
+assert.deepEqual(placementPayload.existingPlacement?.board.polygon, [
+    { x: -10, y: -5 }, { x: 10, y: -5 }, { x: 10, y: 5 }, { x: -10, y: 5 },
+]);
+assert.deepEqual(placementPayload.existingPlacement?.components, [{
+    designator: 'U1', x: 5, y: 5.5, rotate: 90, layer: 'top',
+}]);
+
 const easyEdaPartUuid = '11111111111111111111111111111111';
 const easyEdaFootprintUuid = '22222222222222222222222222222222';
 const easyEdaComponent = component();
 const identifiedFootprint = parseSExpression(`(footprint "kicad-copilot:REMOTE"
     (layer "F.Cu")
+    (at 102 53 90)
     (uuid "native-uuid-that-must-not-be-used")
     (path "/sheet/symbol-1")
     (property "Reference" "U1")
     (property "EasyEDA part_uuid" "${easyEdaPartUuid}")
     (property "EasyEDA footprint_uuid" "${easyEdaFootprintUuid}")
+    (property "kicad_copilot:easyeda_geometry_rotation" "180")
     (pad "1" smd rect (at 0 0) (size 1 1) (layers "F.Cu" "F.Mask")))`);
 const remotePayload = createPcbLayoutPayload(circuit(easyEdaComponent), [easyEdaComponent], [identifiedFootprint]);
 assert.deepEqual(remotePayload.footprints, {});
 assert.equal(remotePayload.circuit.components[0].part_uuid, easyEdaPartUuid);
 assert.equal(remotePayload.circuit.components[0].footprint_uuid, easyEdaFootprintUuid);
+
+const remotePlacementPayload = createPcbLayoutPayload(
+    circuit(easyEdaComponent),
+    [easyEdaComponent],
+    [identifiedFootprint],
+    [{ x: 90, y: 45 }, { x: 110, y: 45 }, { x: 110, y: 55 }, { x: 90, y: 55 }],
+);
+assert.deepEqual(remotePlacementPayload.existingPlacement?.components, [{
+    designator: 'U1', x: 2, y: 3, rotate: 270, layer: 'top',
+}]);
+
+const unnormalizedFootprint = parseSExpression(`(footprint "kicad-copilot:REMOTE"
+    (layer "F.Cu")
+    (at 102 53 0)
+    (path "/sheet/symbol-1")
+    (property "Reference" "U1")
+    (property "EasyEDA footprint_uuid" "${easyEdaFootprintUuid}")
+    (pad "1" smd rect (at 0 0) (size 1 1) (layers "F.Cu" "F.Mask")))`);
+const unnormalizedPlacementPayload = createPcbLayoutPayload(
+    circuit(easyEdaComponent),
+    [easyEdaComponent],
+    [unnormalizedFootprint],
+    [{ x: 90, y: 45 }, { x: 110, y: 45 }, { x: 110, y: 55 }, { x: 90, y: 55 }],
+);
+assert.equal(unnormalizedPlacementPayload.existingPlacement?.components[0].rotate, 180);
 
 console.log('KiCad FootprintSpec tests passed');

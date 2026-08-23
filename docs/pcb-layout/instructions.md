@@ -66,6 +66,7 @@ Use `compactness: "high"` only when board area is genuinely constrained.
 - Use `edgeMount` only for a part that must physically overhang the board. Use `edgePlace` for buttons, LEDs, and controls that remain inside the outline.
 - Use `fixed` only for actual mechanical locks. Never fix normal ICs, passives, crystals, or inductors merely to improve a preview.
 - Use `componentGrid` for existing header/test/indicator arrays and `boardPad` for new synthetic board pads.
+- Use `preserve({ board: true, components: "all" })` to keep the current `Edge.Cuts` outline and every current component whose center is inside it.
 - Use `constraintRegion` for placement-only antenna, display, USB-tongue, or mechanical exclusion areas. It is not a copper keepout.
 
 ## Avoid

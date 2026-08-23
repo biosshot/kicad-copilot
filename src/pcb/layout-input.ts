@@ -1,7 +1,9 @@
 import type { SExpression } from '../kicad/sexpr/ast';
 import {
     childText,
+    footprintAt,
     footprintIsBoardOnly,
+    footprintLayer,
     footprintPath,
     footprintReference,
     pcbFootprints,
@@ -10,7 +12,11 @@ import {
 } from '../kicad/pcb-reader';
 import { getPcbSchematic, type PcbSchematicComponent } from '../kicad/schematic-reader';
 import { kicadFootprintToSpec, validEasyEdaUuid } from '../kicad/footprint-spec';
+import { footprintGeometryIsNormalized } from '../kicad/footprint-normalization';
 import type { ExplainCircuit } from '../types/circuit';
+import { boardOutline } from './board-geometry';
+
+type Point = { x: number; y: number };
 
 function uniqueIndex(footprints: SExpression[][], key: (footprint: SExpression[]) => string | undefined) {
     const result = new Map<string, SExpression[]>();
@@ -43,15 +49,17 @@ function easyEdaIdentity(footprint: SExpression[]) {
     };
 }
 
-export async function createPcbLayoutInput(pcbPath: string, schematicPath: string) {
+export async function createPcbLayoutInput(pcbPath: string, schematicPath: string, includeExistingPlacement = false) {
     const [pcb, schematic] = await Promise.all([readPcb(pcbPath), getPcbSchematic(schematicPath)]);
-    return createPcbLayoutPayload(schematic.circuit, schematic.components, pcbFootprints(pcb.root));
+    const polygon = includeExistingPlacement ? existingBoardPolygon(pcb.root) : undefined;
+    return createPcbLayoutPayload(schematic.circuit, schematic.components, pcbFootprints(pcb.root), polygon);
 }
 
 export function createPcbLayoutPayload(
     sourceCircuit: ExplainCircuit,
     schematicComponents: PcbSchematicComponent[],
     pcbItems: SExpression[][],
+    boardPolygon?: Point[],
 ) {
     const expected = schematicComponents.filter((component) => component.on_board && component.footprint_name);
     const physicalFootprints = pcbItems.filter((footprint) => !footprintIsBoardOnly(footprint));
@@ -107,5 +115,76 @@ export function createPcbLayoutPayload(
         footprints[footprintUuid] = kicadFootprintToSpec(footprint);
     }
 
-    return { circuit, footprints };
+    return {
+        circuit,
+        footprints,
+        ...(boardPolygon ? {
+            existingPlacement: createExistingPlacement(boardPolygon, expected.map((component) => ({
+                designator: component.designator,
+                footprint: componentFootprint(component, paths.result, references.result)!,
+            }))),
+        } : {}),
+    };
+}
+
+function existingBoardPolygon(root: SExpression[]) {
+    try {
+        return boardOutline(root).points;
+    } catch {
+        return undefined;
+    }
+}
+
+function createExistingPlacement(
+    polygon: Point[],
+    components: Array<{ designator: string; footprint: SExpression[] }>,
+) {
+    const left = Math.min(...polygon.map((point) => point.x));
+    const right = Math.max(...polygon.map((point) => point.x));
+    const top = Math.min(...polygon.map((point) => point.y));
+    const bottom = Math.max(...polygon.map((point) => point.y));
+    const origin = { x: (left + right) / 2, y: (top + bottom) / 2 };
+
+    return {
+        board: {
+            polygon: polygon.map((point) => ({ x: point.x - origin.x, y: point.y - origin.y })),
+        },
+        components: components.map(({ designator, footprint }) => {
+            const at = footprintAt(footprint);
+            const layer = footprintLayer(footprint) === 'B.Cu' ? 'bottom' as const : 'top' as const;
+            const normalizedEasyEdaGeometry = footprintGeometryIsNormalized(footprint);
+            const isEasyEda = normalizedEasyEdaGeometry || Object.values(easyEdaIdentity(footprint)).some(Boolean);
+            const rotate = serverRotation(at.rotate, layer, isEasyEda, normalizedEasyEdaGeometry);
+            const rawSourceOffset = kicadFootprintToSpec(footprint).sourceOriginOffset ?? { x: 0, y: 0 };
+            const sourceOffset = isEasyEda && !normalizedEasyEdaGeometry
+                ? { x: -rawSourceOffset.x, y: -rawSourceOffset.y }
+                : rawSourceOffset;
+            const localOffset = layer === 'bottom' ? { x: -sourceOffset.x, y: sourceOffset.y } : sourceOffset;
+            const radians = rotate * Math.PI / 180;
+            const rotatedOffset = {
+                x: localOffset.x * Math.cos(radians) - localOffset.y * Math.sin(radians),
+                y: localOffset.x * Math.sin(radians) + localOffset.y * Math.cos(radians),
+            };
+            return {
+                designator,
+                x: at.x - rotatedOffset.x - origin.x,
+                y: at.y - rotatedOffset.y - origin.y,
+                rotate,
+                layer,
+            };
+        }),
+    };
+}
+
+function serverRotation(
+    kicadRotation: number,
+    layer: 'top' | 'bottom',
+    isEasyEda: boolean,
+    normalizedEasyEdaGeometry: boolean,
+) {
+    if (!isEasyEda) return ((kicadRotation % 360) + 360) % 360;
+    const rotation = normalizedEasyEdaGeometry
+        ? layer === 'top' ? -kicadRotation : kicadRotation
+        : layer === 'top' ? 180 - kicadRotation : kicadRotation + 180;
+    return ((rotation % 360) + 360) % 360;
 }
