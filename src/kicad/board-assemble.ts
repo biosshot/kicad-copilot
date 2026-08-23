@@ -10,23 +10,15 @@ import {
     visitSExpression,
 } from './sexpr/ast';
 import {
-    footprintIsGenerated,
     footprintLayer,
     footprintReference,
     listChildren,
     pcbFootprints,
-    propertyValue,
 } from './pcb-reader';
 import {
     footprintGeometryIsNormalized,
     normalizeEasyEdaFootprintGeometry,
 } from './footprint-normalization';
-
-const CLEAN_HEADS = new Set([
-    'segment', 'arc', 'via', 'zone',
-    'gr_line', 'gr_arc', 'gr_rect', 'gr_circle', 'gr_poly', 'gr_curve',
-    'group',
-]);
 
 function setChild(node: SExpression[], head: string, values: SExpression[]) {
     const existing = findChild(node, head);
@@ -334,13 +326,6 @@ function generatedPads(
 }
 
 export function applyBoardAssemble(root: SExpression[], version: number, assemble: BoardAssemble) {
-    for (let index = root.length - 1; index >= 0; index -= 1) {
-        const item = root[index];
-        if (!isSExpressionList(item)) continue;
-        if (CLEAN_HEADS.has(listHead(item) || '') || (listHead(item) === 'footprint' && footprintIsGenerated(item))) {
-            root.splice(index, 1);
-        }
-    }
     const offset = layoutOffset(root, assemble);
     moveComponents(root, assemble, offset);
     root.push(...outlineSegments(assemble, offset));

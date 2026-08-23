@@ -44,6 +44,24 @@ async function main() {
         message: 'PCB layout operation completed without result.',
     });
 
+    const preservedBoard = parseSExpression(`(kicad_pcb
+        (version 20250114)
+        (segment (start 0 0) (end 1 1) (width 0.25) (layer "F.Cu") (net 1))
+        (arc (start 1 1) (mid 2 2) (end 3 1) (width 0.25) (layer "F.Cu") (net 1))
+        (via (at 1 1) (size 0.8) (drill 0.4) (layers "F.Cu" "B.Cu") (net 1))
+        (zone (net 1) (net_name "GND") (layer "F.Cu"))
+        (gr_line (start 0 0) (end 10 0) (stroke (width 0.05) (type default)) (layer "Edge.Cuts"))
+        (group "mechanics")
+        (footprint "kicad-copilot:generated"
+            (layer "F.Cu")
+            (property "Reference" "#PAD_1" (at 0 0 0))
+            (property "kicad_copilot:generated" "yes" (at 0 0 0)))
+    )`);
+    const preservedBoardSource = printSExpression(preservedBoard);
+    applyBoardAssemble(preservedBoard, 20250114, {});
+    assert.equal(printSExpression(preservedBoard), preservedBoardSource,
+        'placement must not delete existing copper, graphics, groups, or generated footprints');
+
     const geometry = parseSExpression(`(footprint "kicad-copilot:part"
         (at 10 20 30)
         (property "EasyEDA part_uuid" "part" (at 1 2 15))
