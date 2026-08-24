@@ -1,6 +1,6 @@
 /**
  * Local routing DSL. A file is a sequence of statements followed by exactly
- * exactly one of applyDrcRules(), applyStackup(), runCopper(), runRouting(),
+ * one of applyDrcRules(), applyStackup(), runCopper(), runRouting(),
  * or runAll(). Dimensions are mm.
  * Omitted values inherit the imported board/DSN rules.
  */
@@ -110,6 +110,7 @@ declare function signalNet(net: string, options?: RuleOptions & {
 
 declare function powerNet(net: string, options?: RuleOptions & {
   netClass?: string;
+  /** Prefer this electrical intent over an LLM-calculated trackWidthMm. */
   maxCurrentA?: number;
   maxTempRiseC?: number;
   maxTrackWidthMm?: number;
@@ -191,6 +192,7 @@ declare function fanout(target: FanoutTarget, options?: FanoutOptions): void;
  */
 declare function disableFanout(...targets: FanoutTarget[]): void;
 
+/** Declare the verified board/fabricator stack for current and impedance derivation. */
 declare function stack(options: {
   boardThicknessMm?: number;
   fallbackCopperThicknessOz?: number;
@@ -206,9 +208,10 @@ declare function stack(options: {
   };
 }): void;
 
+/** Usually omit quality(); the router default is balanced. */
 declare function quality(options: {
   profile?: "fast" | "balanced" | "quality-first" | "completion-first";
-  /** 1..16; KRT also uses this as the cheap special-stage candidate cap. */
+  /** 1..16. Omit unless a measured routing problem justifies extra candidates. */
   maxCandidates?: number;
 }): void;
 

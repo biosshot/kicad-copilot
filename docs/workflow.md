@@ -25,7 +25,7 @@ Run this composition only when the user requests a complete schematic-to-PCB wor
 5. Select new or preserved placement mode.
 6. If mechanics are affected, place and validate mechanical components first; obtain user approval.
 7. Complete placement, run focused PCB analysis, and stop for placement approval when requested.
-8. Apply only the requested stackup, rules, copper, and routing operations.
+8. Apply requested stackup, rules, copper, and routing as one complete DSL transaction by default.
 9. Run focused post-operation PCB analysis and native DRC.
 10. For release work, add relevant assembly/DFM, lifecycle, thermal, EMC, and manufacturing checks; do not enable every expensive report automatically.
 
