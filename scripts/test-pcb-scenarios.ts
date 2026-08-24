@@ -62,6 +62,33 @@ async function main() {
     assert.equal(printSExpression(preservedBoard), preservedBoardSource,
         'placement must not delete existing copper, graphics, groups, or generated footprints');
 
+    const replacedOutlineBoard = parseSExpression(`(kicad_pcb
+        (version 20250114)
+        (gr_line (start 0 0) (end 10 0) (stroke (width 0.05) (type default)) (layer "Edge.Cuts"))
+        (gr_line (start 10 0) (end 10 10) (stroke (width 0.05) (type default)) (layer "Edge.Cuts"))
+        (gr_line (start 10 10) (end 0 10) (stroke (width 0.05) (type default)) (layer "Edge.Cuts"))
+        (gr_line (start 0 10) (end 0 0) (stroke (width 0.05) (type default)) (layer "Edge.Cuts"))
+        (gr_circle (center 5 5) (end 6 5) (stroke (width 0.05) (type default)) (fill none) (layer "Edge.Cuts"))
+        (gr_line (start 1 1) (end 2 2) (stroke (width 0.15) (type default)) (layer "Dwgs.User"))
+    )`);
+    const replacement = {
+        board: { polygon: [{ x: -20, y: -15 }, { x: 20, y: -15 }, { x: 20, y: 15 }, { x: -20, y: 15 }] },
+    };
+    applyBoardAssemble(replacedOutlineBoard, 20250114, replacement);
+    assert.equal(listChildren(replacedOutlineBoard, 'gr_line').filter(
+        (item) => atom(findChild(item, 'layer')?.[1]) === 'Edge.Cuts',
+    ).length, 4, 'returned board outline must replace existing Edge.Cuts graphics');
+    assert.equal(listChildren(replacedOutlineBoard, 'gr_circle').filter(
+        (item) => atom(findChild(item, 'layer')?.[1]) === 'Edge.Cuts',
+    ).length, 0, 'returned board outline must remove non-line Edge.Cuts graphics');
+    assert.equal(listChildren(replacedOutlineBoard, 'gr_line').filter(
+        (item) => atom(findChild(item, 'layer')?.[1]) === 'Dwgs.User',
+    ).length, 1, 'outline replacement must preserve graphics on other layers');
+    applyBoardAssemble(replacedOutlineBoard, 20250114, replacement);
+    assert.equal(listChildren(replacedOutlineBoard, 'gr_line').filter(
+        (item) => atom(findChild(item, 'layer')?.[1]) === 'Edge.Cuts',
+    ).length, 4, 'reapplying a returned board outline must not duplicate Edge.Cuts');
+
     const geometry = parseSExpression(`(footprint "kicad-copilot:part"
         (at 10 20 30)
         (property "EasyEDA part_uuid" "part" (at 1 2 15))

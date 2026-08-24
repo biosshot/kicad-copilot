@@ -256,6 +256,18 @@ function outlineSegments(assemble: BoardAssemble, offset: { x: number; y: number
     });
 }
 
+const BOARD_OUTLINE_HEADS = new Set([
+    'gr_line', 'gr_arc', 'gr_rect', 'gr_circle', 'gr_poly', 'gr_curve',
+]);
+
+function removeBoardOutline(root: SExpression[]) {
+    for (let index = root.length - 1; index >= 0; index -= 1) {
+        const item = root[index];
+        if (!isSExpressionList(item) || !BOARD_OUTLINE_HEADS.has(listHead(item) ?? '')) continue;
+        if (atom(findChild(item, 'layer')?.[1]) === 'Edge.Cuts') root.splice(index, 1);
+    }
+}
+
 function property(name: string, value: string): SExpression[] {
     return [
         token('property'), token(name, true), token(value, true),
@@ -353,7 +365,11 @@ function generatedPads(
 export function applyBoardAssemble(root: SExpression[], version: number, assemble: BoardAssemble) {
     const offset = layoutOffset(root, assemble);
     moveComponents(root, assemble, offset);
-    root.push(...outlineSegments(assemble, offset));
+    const outline = outlineSegments(assemble, offset);
+    if (outline.length) {
+        removeBoardOutline(root);
+        root.push(...outline);
+    }
     root.push(...generatedPads(root, assemble, offset, version));
     return root;
 }
