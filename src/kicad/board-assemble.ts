@@ -10,6 +10,7 @@ import {
     visitSExpression,
 } from './sexpr/ast';
 import {
+    footprintAt,
     footprintLayer,
     footprintReference,
     listChildren,
@@ -35,6 +36,27 @@ function removeChildren(node: SExpression[], head: string) {
 
 function normalizeRotation(value: number) {
     return ((value % 360) + 360) % 360;
+}
+
+const ABSOLUTE_ANGLE_HEADS = new Set(['pad', 'property', 'fp_text', 'fp_text_box']);
+
+function rotateFootprintChildAngles(footprint: SExpression[], delta: number) {
+    const normalizedDelta = normalizeRotation(delta);
+    if (normalizedDelta === 0) return;
+    for (const child of footprint) {
+        if (!isSExpressionList(child) || !ABSOLUTE_ANGLE_HEADS.has(listHead(child) ?? '')) continue;
+        const at = findChild(child, 'at');
+        if (!at) continue;
+        const x = atom(at[1]);
+        const y = atom(at[2]);
+        if (x === undefined || y === undefined) continue;
+        const rawAngle = atom(at[3]);
+        const parsedAngle = Number(rawAngle ?? 0);
+        const angle = Number.isFinite(parsedAngle) ? parsedAngle : 0;
+        const nextAngle = token(String(normalizeRotation(angle + normalizedDelta)));
+        if (rawAngle === undefined || !Number.isFinite(parsedAngle)) at.splice(3, 0, nextAngle);
+        else at[3] = nextAngle;
+    }
 }
 
 function kicadPoint(point: { x: number; y: number }) {
@@ -196,14 +218,17 @@ function moveComponents(root: SExpression[], assemble: BoardAssemble, offset: { 
         }
         normalizeEasyEdaFootprintGeometry(footprint);
         const normalizedEasyEdaGeometry = footprintGeometryIsNormalized(footprint);
+        const previousRotation = footprintAt(footprint).rotate;
         const targetLayer = placement.layer === 'top' ? 'F.Cu' : 'B.Cu';
         setFootprintSide(footprint, targetLayer);
         const point = kicadPoint(placement);
         const x = point.x + offset.x;
         const y = point.y + offset.y;
         const rotation = kicadComponentRotation(placement, normalizedEasyEdaGeometry);
-        // Pad and footprint-text coordinates are local to the footprint. Rotating them here
-        // would apply the placement twice and progressively corrupt repeated assemblies.
+        // KiCad stores child x/y relative to the footprint, but pad and footprint-text
+        // angles are absolute in a board file. Apply the parent's rotation delta so the
+        // children keep their orientation relative to the footprint.
+        rotateFootprintChildAngles(footprint, rotation - previousRotation);
         setChild(footprint, 'at', [
             token(String(x)), token(String(y)), token(String(rotation)),
         ]);
