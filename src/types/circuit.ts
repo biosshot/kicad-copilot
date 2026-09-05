@@ -5,7 +5,7 @@ import { ReusedCategory, ReusedTags } from './reused';
 export const PinSchema = () => z.object({
     pin_number: z.union([z.number(), z.string()]).describe('Pin number.'),
     name: z.string().describe('Pin name (e.g., "VCC").'),
-    signal_name: z.string().describe('The name of the signal the pin is connected to. (Name only). The signal name assigned to the pin must be identical to the signal name of the target output.'),
+    signal_name: z.string().describe('Signal reference: bare name or global:<name>, local:<file-scope>:<name>, hier:<file-scope-or-sheet-designator>:<port>. Copy scoped references from get_schematic; foreign local scopes are errors. Empty means disconnected; NC is a no-connect marker; global:NC is a net.'),
 });
 
 export const BaseComponentSchema = () => z.object({
@@ -14,7 +14,7 @@ export const BaseComponentSchema = () => z.object({
     pins: z.array(PinSchema()).describe('Pin details.'),
     block_name: z.string().describe('Reference to the block.'),
     search_query: z.string().describe('A component search question. For example: "1k 1W smd resistor", "LM358", "2-pin power connector"'),
-    part_uuid: LCSC_uuid().nullable().describe('If you know the part_uuid of the lcsc component, be sure to fill in this field; otherwise, fill in null.'),
+    part_uuid: LCSC_uuid().nullable().describe('Component ID returned by component_search, get_schematic, or get_project_info; null when unknown.'),
 });
 
 export const CircuitReusedBlockSchema = () => z.object({
@@ -133,7 +133,7 @@ export const CircuitAssemblyStruct = () => z.object({
 const ExplainPinSchema = () => z.object({
     pin_number: z.union([z.number(), z.string()]).describe('Pin number.'),
     name: z.string().describe('Pin name (e.g., "VCC").'),
-    signal_name: z.string().describe('The name of the signal the pin is connected to. (Name only). The signal name assigned to the pin must be identical to the signal name of the target output.'),
+    signal_name: z.string().describe('Signal reference: bare name or global:<name>, local:<file-scope>:<name>, hier:<file-scope-or-sheet-designator>:<port>. Copy scoped references from get_schematic; foreign local scopes are errors. Empty means disconnected; NC is a no-connect marker; global:NC is a net.'),
 });
 
 export const ExplainComponentSchema = () => z.object({
@@ -158,7 +158,7 @@ export const ExplainCircuitStruct = () => z.object({
 
 export const CircuitModStruct = () => z.object({
     add_components: z.array(BaseComponentSchema().omit({ part_uuid: true }).extend({
-        part_uuid: LCSC_uuid().describe('part_uuid of the lcsc component'),
+        part_uuid: LCSC_uuid().describe('Component ID returned by component_search, get_schematic, or get_project_info.'),
     })).describe('Components to add'),
     add_reused_blocks: z.array(CircuitReusedBlockSchema()).describe('reuded blocks to add'),
     rm_components: z.array(z.string().describe('component designator')).nullable().describe('Components to remove from the circuit'),

@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 
 import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { beautifySchematic } from '../src/circuit/beautify';
 import { targetCircuitAssembly } from '../src/circuit/target-assembly';
 import {
@@ -105,21 +104,6 @@ function placedObjectUuids(source: string) {
     return output;
 }
 
-function serviceAnchorSignature(source: string) {
-    return findLists(source, 'symbol')
-        .filter((range) => (
-            range.text.includes('(lib_id ')
-            && /\(property\s+"Reference"\s+"#(?:PWR|PORT)/.test(range.text)
-        ))
-        .map((range) => {
-            const value = range.text.match(/\(property\s+"Value"\s+"([^"]*)"/)?.[1] || '';
-            const at = range.text.match(/\(lib_id\s+"[^"]+"\)\s+\(at\s+([-\d.]+)\s+([-\d.]+)/);
-            expect(at, `service anchor missing: ${value}`);
-            return `${value}\u0000${at[1]}\u0000${at[2]}`;
-        })
-        .sort();
-}
-
 function expectSignal(circuit: ExplainCircuit, designator: string, pin: string, signal: string) {
     const actual = expectComponent(circuit, designator);
     const actualPin = actual.pins.find((item) => String(item.pin_number) === pin);
@@ -168,7 +152,9 @@ async function ercReport(path: string) {
 }
 
 async function main() {
-    const root = await mkdtemp(join(tmpdir(), 'kicad-copilot-assembly-'));
+    const output = resolve('.test-output');
+    await mkdir(output, { recursive: true });
+    const root = await mkdtemp(join(output, 'assembly-'));
     let completed = false;
     try {
         await runScenario('pin-to-server-route grid correction', async () => {
@@ -517,8 +503,8 @@ async function main() {
             const assembledSource = await readFile(path, 'utf8');
             expect(!assembledSource.includes('(lib_id "kicad-copilot:EDGE_B")'),
                 'best-effort edge: conflicting server edge was replaced with a client port');
-            expect(assembledSource.includes('(label "EDGE_A"'),
-                'best-effort edge: signal name was not materialized as a local label');
+            expect(assembledSource.includes('(global_label "EDGE_A"'),
+                'best-effort edge: bare signal name was not materialized as a global label');
         });
         await runScenario('component fields preserve converted symbol positions', async () => {
             const path = await copySchematic(blank, join(root, 'component-fields'));
@@ -672,7 +658,7 @@ async function main() {
                 'native KiCad project: child schematic was not created');
         });
 
-        await runScenario('project-wide server circuit context', async () => {
+        await runScenario('page context keeps sheet boundaries', async () => {
             const directory = join(root, 'project-circuit-context');
             const projectPath = join(directory, 'main.kicad_pro');
             const rootPath = join(directory, 'main.kicad_sch');
@@ -686,7 +672,7 @@ async function main() {
             expectComponent(context.target, 'R200');
             expect(!component(context.target, 'R100'),
                 'project context: target sheet contains a root-sheet component');
-            expectComponent(context.project, 'R100');
+            expect(!component(context.project, 'R100'), 'layout must not receive parent contents');
             expectComponent(context.project, 'R200');
             expect(context.projectPath === rootPath,
                 `project context: expected ${rootPath}, got ${context.projectPath}`);
@@ -696,7 +682,8 @@ async function main() {
             expect(!component(rootContext.target, 'R200'),
                 'project context: root target contains a child-sheet component');
             expectComponent(rootContext.project, 'R100');
-            expectComponent(rootContext.project, 'R200');
+            expect(!component(rootContext.project, 'R200'), 'layout must not receive child contents');
+            expectComponent(rootContext.target, 'child');
         });
 
         await runScenario('beautify schematic', async () => {
@@ -722,20 +709,10 @@ async function main() {
             second.pins[1].signal_name = 'GND';
             await extractCircuit(path, modification({ add_components: [first, second] }));
             const initialSource = await readFile(path, 'utf8');
-            expect(initialSource.includes('(label "MID"'),
-                'local labels: physically connected internal net lost its signal name');
-            expect(initialSource.includes('(lib_id "kicad-copilot:VCC_5V")'),
-                'project library: generated power port uses an unregistered library');
-            const powerDefinition = findLists(initialSource, 'symbol').find((range) => (
-                range.text.startsWith('(symbol "kicad-copilot:VCC_5V"')
-            ));
-            expect(powerDefinition?.text.includes('(xy -1.27 2.54) (xy 1.27 2.54)'),
-                'power port: T-shaped marker is missing');
-            expect(!powerDefinition?.text.includes('(xy -0.762 1.27)'),
-                'power port: old arrow marker remains');
-            const initialServiceAnchors = serviceAnchorSignature(initialSource);
-            expect(initialServiceAnchors.length > 0,
-                'beautify topology: initial assembly has no service symbols');
+            expect(initialSource.includes('(global_label "MID"'),
+                'a bare signal must be global even when connected by a local wire');
+            expect(initialSource.includes('(global_label "VCC_5V"'),
+                'power-like signals must keep their requested net name');
             const initialErc = await ercReport(path);
             expect(!/\[(lib_symbol_issues|footprint_link_issues)\]/.test(initialErc),
                 'project library: ERC still reports missing symbol or footprint libraries');
@@ -748,11 +725,8 @@ async function main() {
             const leftovers = [...oldObjects].filter((uuid) => currentObjects.has(uuid));
             expect(leftovers.length === 0,
                 `beautify topology: ${leftovers.length} old physical objects remain`);
-            expect(
-                JSON.stringify(serviceAnchorSignature(beautifiedSource))
-                    === JSON.stringify(initialServiceAnchors),
-                'beautify topology: server service symbols moved during rebuild',
-            );
+            expectSignal(await getSchematic(path), 'R10', '2', 'MID');
+            expectSignal(await getSchematic(path), 'R11', '1', 'MID');
 
             const realSymbols = findLists(beautifiedSource, 'symbol').filter((range) => (
                 range.text.includes('(lib_id "kicad-copilot:')
@@ -774,11 +748,8 @@ async function main() {
             expectComponent(repeated.result, 'R10', { blockName: 'Divider' });
             expectComponent(repeated.result, 'R11', { blockName: 'Divider' });
             const repeatedSource = await readFile(path, 'utf8');
-            expect(
-                JSON.stringify(serviceAnchorSignature(repeatedSource))
-                    === JSON.stringify(initialServiceAnchors),
-                'beautify topology: service symbols drift after repeated rebuild',
-            );
+            expectSignal(repeated.result, 'R10', '1', 'VCC_5V');
+            expectSignal(repeated.result, 'R11', '2', 'GND');
             expect(redundantJunctionRanges(repeatedSource).length === 0,
                 'beautify topology: redundant junctions remain');
         });
@@ -836,50 +807,17 @@ async function main() {
                 'no-connect replacement: marker remains on connected pin');
         });
 
-        await runScenario('signal port is one movable object without duplicate label', async () => {
+        await runScenario('named connection uses one native global label', async () => {
             const path = await copySchematic(fixture, join(root, 'signal-port'));
             const { result } = await extractScenario(path, modification({
-                external_connect: [
-                    { designator: 'R1', pin_number: '1', signal_name: 'UART_RX' },
-                ],
+                external_connect: [{ designator: 'R1', pin_number: '1', signal_name: 'UART_RX' }],
             }));
             expectSignal(result, 'R1', '1', 'UART_RX');
             const source = await readFile(path, 'utf8');
-            expect(source.includes('(property "Reference" "#PORT'),
-                'signal port: instance does not use a #PORT reference');
-            const definition = findLists(source, 'symbol').find((range) => (
-                range.text.startsWith('(symbol "kicad-copilot:UART_RX"')
-            ));
-            expect(definition, 'signal port: embedded symbol definition missing');
-            expect(definition.text.includes('(power global)'),
-                'signal port: visible symbol does not provide a global net');
-            expect(definition.text.includes('(pin power_in line'),
-                'signal port: embedded symbol cannot provide a global net');
-            const visibleInstance = findLists(source, 'symbol').find((range) => (
-                range.text.includes('(lib_id "kicad-copilot:UART_RX")')
-            ));
-            const portInstances = findLists(source, 'symbol').filter((range) => (
-                range.text.includes('(lib_id "kicad-copilot:UART_RX")')
-            ));
-            expect(portInstances.length === 1,
-                `signal port: expected one movable instance, got ${portInstances.length}`);
-            const resistorInstance = findLists(source, 'symbol').find((range) => (
-                range.text.includes('(property "Reference" "R1"')
-            ));
-            const instanceAnchor = (text: string | undefined) => text
-                ?.match(/\(lib_id\s+[^)]+\)\s+\(at\s+(-?[\d.]+)\s+(-?[\d.]+)/)
-                ?.slice(1, 3)
-                .join(',');
-            expect(instanceAnchor(visibleInstance?.text) !== instanceAnchor(resistorInstance?.text),
-                'signal port: terminal was placed inside the owning component');
-            expect(!/\(property "Value" "UART_RX"[^\n]+\(hide yes\)/.test(visibleInstance?.text || ''),
-                'signal port: visible net name is hidden');
-            expect(!source.includes('UART_RX__global'),
-                'signal port: invisible global helper remains');
-            const label = findLists(source, 'global_label').find((range) => (
-                range.text.startsWith('(global_label "UART_RX"')
-            ));
-            expect(!label, 'signal port: duplicate global label was generated');
+            const labels = findLists(source, 'global_label').filter(range => range.text.startsWith('(global_label "UART_RX"'));
+            expect(labels.length === 1, 'expected one native label for the named connection');
+            expect(!source.includes('UART_RX__global'), 'unexpected hidden global helper');
+            expect(!source.includes('(lib_id "kicad-copilot:UART_RX")'), 'unexpected duplicate service symbol');
             await ercReport(path);
         });
 
@@ -925,6 +863,7 @@ async function main() {
         });
         completed = true;
     } finally {
+        if (!resolve(root).startsWith(`${output}${process.platform === 'win32' ? '\\' : '/'}assembly-`)) throw new Error('invalid test artifact directory');
         if (completed) await rm(root, { recursive: true, force: true });
         else console.error(`failed test artifacts: ${root}`);
     }

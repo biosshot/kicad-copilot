@@ -14,6 +14,8 @@ export type LibraryPin = {
     x: number;
     y: number;
     angle: number;
+    hidden?: boolean;
+    electricalType?: string;
 };
 
 export type LibraryPropertyPosition = {
@@ -68,6 +70,8 @@ export function librarySymbolPins(symbol: SExpression[]) {
             x,
             y,
             angle: Number(atom(at[3]) || 0),
+            hidden: Boolean(findChild(item, 'hide')) || item.some(value => atom(value) === 'hide'),
+            electricalType: atom(item[1]),
         });
     });
     return pins;

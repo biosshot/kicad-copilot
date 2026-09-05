@@ -18,6 +18,7 @@ export default defineConfig({
         'test-routing-live': 'scripts/test-routing-live.ts',
         'test-routing-integration': 'scripts/test-routing-integration.ts',
         'test-analysis': 'scripts/test-analysis.ts',
+        'test-schematic-hierarchy': 'scripts/test-schematic-hierarchy.ts',
     },
     format: ['esm'],
     clean: true,

@@ -4,6 +4,8 @@ import { basename, dirname, extname, join, resolve } from 'node:path';
 import { XMLParser } from 'fast-xml-parser';
 import { ExplainCircuit } from '../types/circuit';
 import { TEMP_DIR } from '../utils/dirs';
+import { loadSchematicAssets } from './schematic-assets';
+import { readPage } from './schematic-connectivity';
 import { runProcessChecked } from '../utils/process';
 import { getSupportedKicadCli } from './cli';
 import { atom as sexprAtom, findChild as findSexprChild, isSExpressionList, listHead, parseSExpression } from './sexpr/ast';
@@ -242,10 +244,14 @@ async function exportKicadXmlNetlist(path: string) {
 }
 
 export async function getSchematic(path: string) {
-    return parseKicadXmlNetlist(await exportKicadXmlNetlist(path));
+    return (await getSchematicContext(path)).target;
 }
 
-async function projectRootSchematic(path: string) {
+export async function getProjectNetlist(path: string) {
+    return parsePcbSchematicComponents(await exportKicadXmlNetlist(path));
+}
+
+export async function projectRootSchematic(path: string) {
     const target = resolve(path);
     const targetStat = await stat(target).catch(() => undefined);
     if (!targetStat?.isFile()) throw new Error(`path not found: ${target}`);
@@ -275,32 +281,13 @@ async function projectRootSchematic(path: string) {
     }
 }
 
-async function physicalDesignators(path: string) {
-    const source = await readFile(path, 'utf8');
-    const designators = new Set<string>();
-    for (const range of findLists(source, 'symbol')) {
-        const value = parseSExpression(range.text);
-        if (!findSexprChild(value, 'lib_id')) continue;
-        const reference = sexprProperty(value, 'Reference') || '';
-        if (reference && !reference.startsWith('#')) designators.add(baseDesignator(reference));
-    }
-    return designators;
-}
-
 export async function getSchematicContext(path: string) {
     const targetPath = resolve(path);
     const projectPath = await projectRootSchematic(targetPath);
-    const exportedTarget = await getSchematic(targetPath);
-    const targetDesignators = await physicalDesignators(targetPath);
-    const target = {
-        components: exportedTarget.components.filter((component) => (
-            targetDesignators.has(component.designator)
-        )),
-    };
-    const project = projectPath.toLowerCase() === targetPath.toLowerCase()
-        ? exportedTarget
-        : await getSchematic(projectPath);
-    return { target, project, projectPath };
+    const context = await loadSchematicAssets(projectPath, [targetPath]);
+    const page = readPage(context.files.get(targetPath)!, targetPath, projectPath, context.assets);
+    // Page layout sees child sheet boundaries. Descendant contents stay in KiCad.
+    return { target: page.circuit, project: page.circuit, projectPath, page, ...context };
 }
 
 export async function getPcbSchematic(path: string) {

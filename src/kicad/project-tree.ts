@@ -2,6 +2,7 @@ import { readFile, readdir, stat } from 'node:fs/promises';
 import { basename, dirname, extname, relative, resolve } from 'node:path';
 import { findLists, findQuotedProperty } from './sexpr/scan';
 import { getKicadCli } from './cli';
+import { filePartUuid, loadSchematicAssets } from './schematic-assets';
 
 const KICAD_EXTENSIONS = new Set([
     '.kicad_pro',
@@ -20,6 +21,7 @@ type KiCadFileNode = {
 };
 
 export type SchematicTreeNode = KiCadFileNode & {
+    part_uuid?: string;
     sheets: SchematicTreeNode[];
 };
 
@@ -146,6 +148,13 @@ async function buildProjectTree(projectPath: string): Promise<KiCadProjectTree> 
         return left.localeCompare(right);
     });
 
+    const context = rootPaths.length ? await loadSchematicAssets(rootPaths[0], schematicPaths) : undefined;
+    const decorate = (node: SchematicTreeNode): SchematicTreeNode => ({
+        ...node,
+        part_uuid: context ? filePartUuid(context.files.get(resolve(projectDirectory, node.path))!) : undefined,
+        sheets: node.sheets.map(decorate),
+    });
+
     const byExtension = (extension: string) => sortPaths(
         files.filter((path) => extname(path).toLowerCase() === extension),
     ).map((path) => fileNode(projectDirectory, path));
@@ -159,12 +168,12 @@ async function buildProjectTree(projectPath: string): Promise<KiCadProjectTree> 
     return {
         name: projectBasename,
         path: basename(projectPath),
-        schematics: rootPaths.map((path) => buildSchematicNode(
+        schematics: rootPaths.map((path) => decorate(buildSchematicNode(
             projectDirectory,
             path,
             references,
             new Set(),
-        )),
+        ))),
         pcbs: byExtension('.kicad_pcb'),
         libraries: sortPaths(libraryPaths).map((path) => fileNode(projectDirectory, path)),
         other_files: sortPaths(otherPaths).map((path) => fileNode(projectDirectory, path)),

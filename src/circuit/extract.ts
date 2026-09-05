@@ -1,10 +1,15 @@
-import { restoreCheckpoint, saveCheckpoint } from '../checkpoints/store';
+import { saveCheckpoint } from '../checkpoints/store';
 import { applyCircuitAssembly } from '../kicad/assembly';
-import { getSchematic, getSchematicContext } from '../kicad/schematic-reader';
+import { getProjectNetlist, getSchematicContext } from '../kicad/schematic-reader';
 import { CircuitAssembly, CircuitMod, ExplainCircuit } from '../types/circuit';
 import { createDiagnosticCollector, errorWithDiagnostics } from '../utils/diagnostics';
 import { postJson } from '../utils/server';
 import { targetCircuitAssembly } from './target-assembly';
+import { prepareSchematicInput } from './schematic-input';
+import { withSchematicChanges } from '../kicad/schematic-writer';
+import { synchronizeHierarchy } from '../kicad/schematic-hierarchy';
+import { projectConnections, SchematicPage, validateKiCadConnectivity, validateRetainedConnections } from '../kicad/schematic-connectivity';
+import { readFile } from 'node:fs/promises';
 
 type ExtractCircuitOptions = {
     onAssembly?: (assembly: CircuitAssembly) => void | Promise<void>;
@@ -25,6 +30,7 @@ function hasRequestedChanges(circuit: CircuitMod) {
 function pinSignal(circuit: ExplainCircuit, designator: string, pinNumber: string | number) {
     const component = circuit.components.find((item) => (
         baseDesignator(item.designator) === baseDesignator(designator)
+        && item.pins.some(p => String(p.pin_number) === String(pinNumber))
     ));
     if (!component) throw new Error(`component not found after assembly: ${designator}`);
     const pin = component.pins.find((item) => String(item.pin_number) === String(pinNumber));
@@ -32,12 +38,17 @@ function pinSignal(circuit: ExplainCircuit, designator: string, pinNumber: strin
     return pin.signal_name;
 }
 
-function validateRequestedNets(circuit: CircuitMod, result: ExplainCircuit) {
+function validateRequestedNets(circuit: CircuitMod, result: ExplainCircuit, page: SchematicPage) {
     const expected = new Map<string, {
         designator: string;
         pinNumber: string | number;
         signal: string;
     }>();
+    for (const component of circuit.add_components) for (const pin of component.pins) {
+        expected.set(`${baseDesignator(component.designator)}\u0000${pin.pin_number}`, {
+            designator: component.designator, pinNumber: pin.pin_number, signal: pin.signal_name,
+        });
+    }
     for (const item of circuit.external_rm_connect || []) {
         expected.set(`${baseDesignator(item.designator)}\u0000${item.pin_number}`, {
             designator: item.designator,
@@ -54,7 +65,7 @@ function validateRequestedNets(circuit: CircuitMod, result: ExplainCircuit) {
     }
     for (const item of expected.values()) {
         const actual = pinSignal(result, item.designator, item.pinNumber);
-        if (actual !== item.signal) {
+        if (actual !== page.signalFor(item.signal)) {
             throw new Error(
                 `${item.designator}.${item.pinNumber}: expected `
                 + `${item.signal || 'disconnected'}, got ${actual || 'disconnected'}`,
@@ -68,12 +79,15 @@ export async function extractCircuit(
     circuit: CircuitMod,
     options: ExtractCircuitOptions = {},
 ) {
-    const { target: inputCircuit, project: projectCircuit } = await getSchematicContext(path);
     if (!hasRequestedChanges(circuit)) throw new Error('no circuit changes requested');
+    const context = await prepareSchematicInput(path, circuit);
+    circuit = context.circuit;
+    const { target: inputCircuit, project: projectCircuit } = context;
     const checkpointId = await saveCheckpoint(path, 'Before extract_circuit');
     const response = await postJson('/v1/mcp-tools/extract-circuit', {
         circuit,
         inputCircuit: projectCircuit,
+        symbols: context.symbols,
     });
     const record = typeof response === 'object' && response !== null
         ? response as Record<string, unknown>
@@ -85,31 +99,33 @@ export async function extractCircuit(
         projectCircuit,
     );
     await options.onAssembly?.(assembly);
-    let applyResult: Awaited<ReturnType<typeof applyCircuitAssembly>>;
     try {
-        applyResult = await applyCircuitAssembly(
-            path,
-            assembly,
-            inputCircuit,
-            diagnostics.report,
-            diagnostics.warn,
-        );
+        return await withSchematicChanges(async () => {
+            for (const [file, source] of context.files) {
+                if (await readFile(file, 'utf8') !== source) throw new Error(`file changed while layout was running: ${file}`);
+            }
+            const applyResult = await applyCircuitAssembly(
+                path,
+                assembly,
+                inputCircuit,
+                diagnostics.report,
+                diagnostics.warn,
+                context,
+            );
+            if (applyResult === 'unchanged') throw new Error('circuit assembly did not change the schematic');
+            await synchronizeHierarchy(context.rootPath);
+            const after = await getSchematicContext(path);
+            const result = after.target;
+            validateRequestedNets(circuit, result, after.page);
+            validateRetainedConnections(context.page, after.page, circuit);
+            validateKiCadConnectivity(projectConnections(after.rootPath, after.files, after.assets), (await getProjectNetlist(after.rootPath)).circuit);
+            for (const designator of circuit.rm_components ?? []) {
+                if (circuit.add_components.some(c => c.designator === designator)) continue;
+                if (result.components.some(c => c.designator === designator)) throw new Error(`component was not removed: ${designator}`);
+            }
+            return { checkpointId, result, assembly, diagnostics: diagnostics.summary() };
+        });
     } catch (error) {
         throw errorWithDiagnostics(error, diagnostics.summary());
     }
-    if (applyResult === 'unchanged') {
-        throw errorWithDiagnostics(
-            new Error('circuit assembly did not change the schematic'),
-            diagnostics.summary(),
-        );
-    }
-    const result = await getSchematic(path);
-    try {
-        validateRequestedNets(circuit, result);
-    } catch (error) {
-        await restoreCheckpoint(path, checkpointId);
-        throw errorWithDiagnostics(error, diagnostics.summary());
-    }
-
-    return { checkpointId, result, assembly, diagnostics: diagnostics.summary() };
 }

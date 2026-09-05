@@ -17,7 +17,7 @@ Use this workflow to create, modify, or beautify schematics without continuing t
 8. Run one project-level `analyze_schematic` with only relevant fields, then native ERC from the root schematic.
 9. Stop. Do not create, synchronize, place, or route a PCB unless requested.
 
-`beautify_schematic` preserves intended electrical connections but removes and rebuilds the physical symbols, wires, and labels for the listed components. Their schematic positions can change. Components not listed in `blocks` remain in place. A checkpoint is created immediately before beautifying.
+`beautify_schematic` uses the same extraction path for selected symbols and sheet inclusions. Their positions can change; native UUIDs, symbol properties, footprints, and sheet interfaces are retained. Unselected objects stay in place. A checkpoint is created before the operation. Connectivity is checked after writing, including an independent root KiCad netlist export; a failed mutation rolls back all schematic files changed by that operation.
 
 ## Beautify only
 

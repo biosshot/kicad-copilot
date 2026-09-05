@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { getSupportedKicadCli } from './cli';
@@ -9,6 +10,30 @@ export type SourceEdit = {
     end: number;
     text: string;
 };
+
+const transaction = new AsyncLocalStorage<Map<string, { before: string; after: string }>>();
+export async function withSchematicChanges<T>(action: () => Promise<T>): Promise<T> {
+    if (transaction.getStore()) return action();
+    const changes = new Map<string, { before: string; after: string }>();
+    return transaction.run(changes, async () => {
+        try { return await action(); }
+        catch (error) {
+            const failures: unknown[] = [];
+            for (const [path, change] of [...changes].reverse()) {
+                try {
+                    if (await readFile(path, 'utf8') !== change.after) throw new Error(`file changed externally; rollback left it intact: ${path}`);
+                    const temporary = temporarySiblingPath(path);
+                    try {
+                        await writeFile(temporary, change.before, { flag: 'wx' });
+                        await rename(temporary, path);
+                    } finally { await rm(temporary, { force: true }); }
+                } catch (rollbackError) { failures.push(rollbackError); }
+            }
+            if (failures.length) throw new AggregateError([error, ...failures], 'schematic operation failed; rollback incomplete');
+            throw error;
+        }
+    });
+}
 
 function sourceHash(source: string) {
     return createHash('sha256').update(source).digest('hex');
@@ -59,6 +84,8 @@ export async function mutateSchematic(
     try {
         await writeFile(temporary, candidate, { encoding: 'utf8', flag: 'wx' });
         await rename(temporary, target);
+        const changes = transaction.getStore();
+        if (changes) changes.set(target, { before: changes.get(target)?.before ?? original, after: candidate });
     } finally {
         await rm(temporary, { force: true });
     }

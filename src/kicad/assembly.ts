@@ -1,7 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { basename } from 'node:path';
+import { getSchematicContext } from './schematic-reader';
+import { children, nativeAsset, nativeProperty, position, scalar, SchematicAsset, sheetFilePath as resolveSheetFile } from './schematic-assets';
+import { placeLocalSymbol } from './local-symbol-writer';
+import { parseSignal } from './scoped-signals';
 import { ConvertedComponent, convertComponent } from '../components/converter';
-import { getPowerSymbol } from '../components/kicad-library';
 import { projectFootprintId, writeProjectLibraries } from '../components/project-library';
 import { CircuitAssembly, ExplainCircuit } from '../types/circuit';
 import { DiagnosticReporter } from '../utils/diagnostics';
@@ -13,6 +16,7 @@ import {
     parseSExpression,
     printSExpression,
     SExpression,
+    token,
 } from './sexpr/ast';
 import {
     findLists,
@@ -25,7 +29,6 @@ import {
     embeddedLibrarySymbol,
     LibraryPin,
     LibraryPropertyPosition,
-    librarySymbolPins,
     normalizedComponentSymbol,
 } from './symbol';
 import { applySourceEdits, mutateSchematic, SourceEdit } from './schematic-writer';
@@ -155,78 +158,6 @@ function uniquePins(pins: LibraryPin[]) {
     return output;
 }
 
-function renamedPowerSymbol(source: SExpression[], signal: string) {
-    const cloned = structuredClone(source) as SExpression[];
-    const replace = (node: SExpression) => {
-        if (!isSExpressionList(node)) {
-            if (node.value === 'VCC') node.value = signal;
-            else if (node.value.startsWith('VCC_')) node.value = `${signal}${node.value.slice(3)}`;
-            else if (node.quoted && node.value.includes('VCC')) {
-                node.value = node.value.replaceAll('VCC', signal);
-            }
-            return;
-        }
-        for (const item of node) replace(item);
-    };
-    replace(cloned);
-    return cloned;
-}
-
-function powerPortSymbol(source: SExpression[], signal: string) {
-    const cloned = renamedPowerSymbol(source, signal);
-    const graphicHeads = new Set(['arc', 'bezier', 'circle', 'polyline', 'rectangle', 'text', 'text_box']);
-    const replaceGraphic = (node: SExpression) => {
-        if (!isSExpressionList(node)) return;
-        if (listHead(node) === 'symbol' && atom(node[1])?.endsWith('_0_1')) {
-            for (let index = node.length - 1; index >= 2; index -= 1) {
-                const item = node[index];
-                const head = isSExpressionList(item) ? listHead(item) : undefined;
-                if (head && graphicHeads.has(head)) {
-                    node.splice(index, 1);
-                }
-            }
-            node.push(parseSExpression(`(polyline
-                (pts (xy 0 0) (xy 0 2.54))
-                (stroke (width 0) (type default)) (fill (type none)))`));
-            node.push(parseSExpression(`(polyline
-                (pts (xy -1.27 2.54) (xy 1.27 2.54))
-                (stroke (width 0) (type default)) (fill (type none)))`));
-            return;
-        }
-        for (const item of node) replaceGraphic(item);
-    };
-    replaceGraphic(cloned);
-    return cloned;
-}
-
-function signalPortSymbol(source: SExpression[], signal: string) {
-    const cloned = renamedPowerSymbol(source, signal);
-    const normalize = (node: SExpression) => {
-        if (!isSExpressionList(node)) return;
-        if (listHead(node) === 'property' && atom(node[1]) === 'Reference'
-            && !isSExpressionList(node[2])) {
-            node[2].value = '#PORT';
-        }
-        for (const item of node) normalize(item);
-    };
-    normalize(cloned);
-    return cloned;
-}
-
-function isPowerSignal(signalName: string) {
-    if (!signalName) return false;
-    const signal = signalName.toUpperCase();
-    if (signal.includes('GND')) return false;
-    if (signal === 'BATTERY') return true;
-    if (/^USB_[V\d]/i.test(signalName)) return true;
-    if (/^V(?:CC|DD|BAT|IN|OUT|REF|REG|PP|SS|EE|BUS|[0-9])/i.test(signalName)) return true;
-    if (/^[AVDG]?V(?:DD|CC)/i.test(signalName)) return true;
-    if (/^[+-]?V[+-]?$|^V$/i.test(signalName)) return true;
-    if (/^[+-]?\d+(?:\.\d+)?V/i.test(signalName)) return true;
-    if (/^\d+V\d+$/i.test(signalName)) return true;
-    return false;
-}
-
 function embeddedSymbols(source: string) {
     const range = findLists(source, 'lib_symbols')[0];
     if (!range) throw new Error('invalid KiCad schematic: lib_symbols not found');
@@ -251,16 +182,16 @@ function instanceData(range: SExpressionRange, symbols: Map<string, SExpression[
     if (!symbol) return undefined;
 
     const rotation = normalizeRotation(Number(atom(at?.[3]) || 0));
-    const mirror = Boolean(findChild(value, 'mirror'));
+    const native = nativeAsset(symbol, value);
     const pins = new Map<string, Point>();
     const pinLabelAngles = new Map<string, number>();
-    for (const pin of uniquePins(librarySymbolPins(symbol)).values()) {
-        pins.set(pin.number, transformedPin(pin, anchor, rotation, mirror));
-        pinLabelAngles.set(pin.number, transformedPinLabelAngle(pin, rotation, mirror));
+    for (const pin of uniquePins(native.pins).values()) {
+        pins.set(pin.number, transformedPin(pin, anchor, rotation, false));
+        pinLabelAngles.set(pin.number, transformedPinLabelAngle(pin, rotation, false));
     }
     return {
         range,
-        reference: baseDesignator(reference),
+        reference: native.multiUnit ? `${baseDesignator(reference)}.${native.unit}` : baseDesignator(reference),
         anchor,
         pins,
         pinLabelAngles,
@@ -269,9 +200,17 @@ function instanceData(range: SExpressionRange, symbols: Map<string, SExpression[
 }
 
 function existingSymbols(source: string, symbols: Map<string, SExpression[]>) {
-    return findLists(source, 'symbol')
+    const nativeSymbols = findLists(source, 'symbol')
         .map((range) => instanceData(range, symbols))
         .filter((value): value is ExistingSymbol => Boolean(value));
+    const sheets: ExistingSymbol[] = findLists(source, 'sheet').map(range => {
+        const sheet = parseSExpression(range.text);
+        const pins = children(sheet, 'pin');
+        return { range, reference: nativeProperty(sheet, 'Sheetname'), anchor: position(sheet), service: false,
+            pins: new Map(pins.map(p => [atom(p[1])!, position(p)])),
+            pinLabelAngles: new Map(pins.map(p => [atom(p[1])!, Number(atom(findChild(p, 'at')?.[3]) ?? 0)])) };
+    });
+    return [...nativeSymbols, ...sheets];
 }
 
 function xyPoints(range: SExpressionRange) {
@@ -388,6 +327,7 @@ function placementOffset(
         bottom: anchor.y + 10,
     }));
     for (const range of findLists(source, 'sheet')) {
+        if (removed.some(item => item.range.start === range.start)) continue;
         const value = parseSExpression(range.text);
         const at = atPoint(findChild(value, 'at'));
         const size = atPoint(findChild(value, 'size'));
@@ -832,22 +772,11 @@ function insertionOffset(source: string) {
     return root.end - 1;
 }
 
-function nextPowerReference(source: string) {
-    const numbers = [...source.matchAll(/#PWR0*(\d+)/g)].map((match) => Number(match[1]));
-    let value = (numbers.length ? Math.max(...numbers) : 0) + 1;
-    return () => `#PWR${String(value++).padStart(4, '0')}`;
-}
-
-function nextPortReference(source: string) {
-    const numbers = [...source.matchAll(/#PORT0*(\d+)/g)].map((match) => Number(match[1]));
-    let value = (numbers.length ? Math.max(...numbers) : 0) + 1;
-    return () => `#PORT${String(value++).padStart(4, '0')}`;
-}
-
 async function preparedRealAssets(
     assembly: CircuitAssembly,
     input: ExplainCircuit,
     report: DiagnosticReporter,
+    localAssets: Map<string, SchematicAsset>,
 ) {
     const uuids = [...new Set([
         ...assembly.components
@@ -859,7 +788,7 @@ async function preparedRealAssets(
             .map((component) => component.part_uuid!),
         ...input.components.flatMap((component) => component.part_uuid ? [component.part_uuid] : []),
     ])];
-    const entries = await Promise.all(uuids.map(async (partUuid) => {
+    const entries = await Promise.all(uuids.filter(id => !localAssets.has(id)).map(async (partUuid) => {
         try {
             return [partUuid, await convertComponent(partUuid)] as const;
         } catch (error) {
@@ -875,7 +804,8 @@ async function preparedRealAssets(
 
 function inputSignal(input: ExplainCircuit, designator: string, pinNumber: string | number) {
     return input.components
-        .find((component) => component.designator === baseDesignator(designator))
+        .find((component) => baseDesignator(component.designator) === baseDesignator(designator)
+            && component.pins.some(pin => String(pin.pin_number) === String(pinNumber)))
         ?.pins.find((pin) => String(pin.pin_number) === String(pinNumber))
         ?.signal_name || '';
 }
@@ -892,36 +822,48 @@ export async function applyCircuitAssembly(
         const message = warning instanceof Error ? warning.message : String(warning);
         console.error(`[schematic assembly warning] ${context ? `${context}: ` : ''}${message}`);
     },
+    context?: Awaited<ReturnType<typeof getSchematicContext>>,
 ) {
     if (!Array.isArray(assembly.components) || !Array.isArray(assembly.edges)) {
         throw new Error('invalid CircuitAssembly response');
     }
 
-    const realAssets = await preparedRealAssets(assembly, input, report);
-    const fallbackSignals = assembly.components.flatMap((component) => component.pins
-        .map((pin) => pin.signal_name.trim())
-        .filter((signal) => signal && signal.toUpperCase() !== 'NC'));
-    const needsGround = assembly.components.some((component) => component.part_uuid === 'GND')
-        || assembly.added_net?.some((net) => net.net === 'GND')
-        || fallbackSignals.some((signal) => signal.toUpperCase() === 'GND');
-    const needsPort = assembly.components.some((component) => component.part_uuid === 'VCC'
-        || component.value === 'unknown_shortsym'
-        || component.designator.includes('|'))
-        || Boolean(assembly.added_net?.some((net) => net.net !== 'GND'))
-        || fallbackSignals.some((signal) => signal.toUpperCase() !== 'GND');
-    const loadPowerSymbol = async (name: string, needed: boolean) => {
-        if (!needed) return undefined;
-        try {
-            return await getPowerSymbol(name);
-        } catch (error) {
-            report(error, `${name} service symbol unavailable`);
-            return undefined;
+    const localContext = context ?? await getSchematicContext(path);
+    const realAssets = await preparedRealAssets(assembly, input, report, localContext.assets);
+    const parentInstancePaths: string[] = [];
+    const collectPaths = (file: string, instancePath: string, ancestors = new Set<string>()) => {
+        if (ancestors.has(file)) throw new Error('cyclic schematic hierarchy');
+        if (file === localContext.page.path) parentInstancePaths.push(instancePath);
+        const source = localContext.files.get(file);
+        if (!source) return;
+        for (const sheet of children(parseSExpression(source), 'sheet')) {
+            const asset = [...localContext.assets.values()].find(a => a.kind === 'sheet'
+                && a.path === resolveSheetFile(file, sheet, localContext.projectDirectory));
+            if (asset?.kind === 'sheet') collectPaths(asset.path, `${instancePath}/${scalar(sheet, 'uuid')}`, new Set(ancestors).add(file));
         }
     };
-    const [groundSource, portSource] = await Promise.all([
-        loadPowerSymbol('GND', Boolean(needsGround)),
-        loadPowerSymbol('VCC', needsPort),
-    ]);
+    collectPaths(localContext.rootPath, `/${scalar(parseSExpression(localContext.files.get(localContext.rootPath)!), 'uuid')}`);
+    const namedLabel = (signal: string, point: Point, angle = 0) => {
+        const ref = parseSignal(signal);
+        if (ref.kind === 'empty' || ref.kind === 'nc') throw new Error(`invalid label signal: ${signal}`);
+        if (ref.kind === 'global') return globalLabel(ref.name, point, angle);
+        if (ref.kind === 'local') {
+            if (ref.sheet !== localContext.page.scope) throw new Error(`local signal belongs to another sheet: ${signal}`);
+            return localLabel(ref.name, point);
+        }
+        if (ref.sheet !== localContext.page.scope) {
+            const alias = `${ref.sheet}:${ref.name}`;
+            const collision = localContext.page.labels.find(l => l.name === alias);
+            if (collision && localContext.page.groupAt(collision.point) !== localContext.page.pinGroup(ref.sheet!, ref.name)) {
+                throw new Error(`sheet port label collision: ${alias}`);
+            }
+            return localLabel(alias, point);
+        }
+        const existing = localContext.page.labels.find(l => l.kind === 'hier' && l.name === ref.name);
+        const shape = existing ? scalar(existing.node, 'shape', 'bidirectional') : 'bidirectional';
+        return `(hierarchical_label ${quoteSExpression(ref.name)} (shape ${shape}) (at ${point.x} ${point.y} ${canonicalDirectionAngle(angle)})
+            ${effects()} (uuid ${quoteSExpression(randomUUID())}))`;
+    };
 
     return mutateSchematic(path, async (source) => {
         const version = targetVersion(source);
@@ -932,19 +874,21 @@ export async function applyCircuitAssembly(
         const removalDesignators = new Set([
             ...(assembly.rm_components || []),
             ...(assembly.replace_components || []),
-        ].map(baseDesignator));
+        ]);
         if (assembly.replace_components?.length) {
             console.error(`In-place replacement fallback: ${assembly.replace_components.join(', ')}`);
         }
-        const removed = allExisting.filter((item) => removalDesignators.has(item.reference));
-        const retained = allExisting.filter((item) => !removalDesignators.has(item.reference));
+        const isRemoved = (item: ExistingSymbol) => removalDesignators.has(item.reference) || removalDesignators.has(baseDesignator(item.reference));
+        const removed = allExisting.filter(isRemoved);
+        const retained = allExisting.filter(item => !isRemoved(item));
         for (const designator of removalDesignators) {
-            if (!allExisting.some((item) => item.reference === designator)) {
+            if (!allExisting.some((item) => item.reference === designator || baseDesignator(item.reference) === designator)) {
                 report(`component not found: ${designator}`, 'component removal skipped');
             }
         }
         const retainedReal = retained.filter((item) => !item.service);
-        const fullPhysicalRebuild = removed.length > 0 && retainedReal.length === 0;
+        const interfacePoints = findLists(source, 'hierarchical_label').map(rangeAtPoint).filter((p): p is Point => Boolean(p));
+        const fullPhysicalRebuild = removed.length > 0 && retainedReal.length === 0 && !interfacePoints.length;
         const edits: SourceEdit[] = removed.map(({ range }) => ({
             start: range.start,
             end: range.end,
@@ -977,6 +921,8 @@ export async function applyCircuitAssembly(
             for (const [pin, point] of item.pins) {
                 const shape = `${item.reference}_pin_${pin}`;
                 existingPinPoints.set(shape, point);
+                const baseShape = `${baseDesignator(item.reference)}_pin_${pin}`;
+                if (!existingPinPoints.has(baseShape)) existingPinPoints.set(baseShape, point);
                 const labelAngle = item.pinLabelAngles.get(pin);
                 if (labelAngle !== undefined) pinLabelAngles.set(shape, labelAngle);
                 pinOwners.set(shape, item.anchor);
@@ -998,9 +944,9 @@ export async function applyCircuitAssembly(
                 'net removal skipped',
             );
         }
-        const retainedPinPoints = retainedReal
+        const retainedPinPoints = [...interfacePoints, ...retainedReal
             .flatMap((item) => [...item.pins.values()])
-            .filter((point) => !disconnectPoints.has(pointKey(point)));
+            .filter((point) => !disconnectPoints.has(pointKey(point)))];
         const parsedDisconnectPoints = [...disconnectPoints].map((key) => {
             const [x, y] = key.split(',').map(Number);
             return { x, y };
@@ -1032,8 +978,10 @@ export async function applyCircuitAssembly(
             }
         }
         for (const head of ['no_connect', 'global_label', 'hierarchical_label', 'label']) {
+            if (head === 'hierarchical_label') continue;
             for (const range of findLists(source, head)) {
                 const point = rangeAtPoint(range);
+                if (head !== 'no_connect' && point && !touchedByRemoval(point)) continue;
                 if (fullPhysicalRebuild
                     || (point && touchedByRemoval(point) && !remainsConnected(point))) {
                     edits.push({ start: range.start, end: range.end, text: '' });
@@ -1069,6 +1017,7 @@ export async function applyCircuitAssembly(
         }
 
         const definitions = new Map<string, EmbeddedSymbol>();
+        const nativeDefinitions = new Map<string, SExpression[]>();
         const embeddedAssets = new Map<string, EmbeddedSymbol>();
         const representativeDesignators = new Map<string, string>();
         for (const component of input.components) {
@@ -1096,8 +1045,6 @@ export async function applyCircuitAssembly(
         const placed: PlacedComponent[] = [];
         const edgePins = new Map(existingPinPoints);
         const edgeSignals = new Map<string, string>();
-        const powerReference = nextPowerReference(source);
-        const portReference = nextPortReference(source);
 
         for (const component of input.components) {
             for (const pin of component.pins) {
@@ -1106,26 +1053,6 @@ export async function applyCircuitAssembly(
             }
         }
 
-        const groundEmbedded = groundSource
-            ? embeddedLibrarySymbol(groundSource, 'power', version)
-            : undefined;
-        if (groundEmbedded) definitions.set(groundEmbedded.id, groundEmbedded);
-
-        const portDefinitions = new Map<string, EmbeddedSymbol>();
-        const portEmbedded = (signal: string, power: boolean) => {
-            if (!portSource) throw new Error('VCC service symbol unavailable');
-            const key = `${power ? 'power' : 'signal'}:${signal}`;
-            const existing = portDefinitions.get(key);
-            if (existing) return existing;
-            const embedded = embeddedLibrarySymbol(
-                power ? powerPortSymbol(portSource, signal) : signalPortSymbol(portSource, signal),
-                'kicad-copilot',
-                version,
-            );
-            portDefinitions.set(key, embedded);
-            definitions.set(embedded.id, embedded);
-            return embedded;
-        };
         const paper = pageSize(source);
         for (const component of assembly.components) {
             const objectCount = objects.length;
@@ -1146,51 +1073,23 @@ export async function applyCircuitAssembly(
                 const componentPinLabelAngles = new Map<string, number>();
                 let kind: PlacedComponent['kind'];
 
-                if (component.part_uuid === 'GND') {
-                    if (!groundEmbedded) throw new Error('GND symbol not prepared');
-                    kind = 'gnd';
-                    const reference = powerReference();
-                    objects.push(symbolInstance({
-                        embedded: groundEmbedded,
-                        component,
-                        anchor,
-                        projectName,
-                        documentUuid,
-                        reference,
-                        value: 'GND',
-                        power: 'ground',
-                        rotation,
-                    }));
-                    for (const pin of uniquePins(groundEmbedded.pins).values()) {
-                        componentPins.set(pin.number, transformedPin(pin, anchor, rotation, false));
-                        componentPinLabelAngles.set(
-                            pin.number,
-                            transformedPinLabelAngle(pin, rotation, false),
-                        );
-                    }
-                } else if (component.part_uuid === 'VCC'
-                    || component.value === 'unknown_shortsym'
-                    || component.designator.includes('|')) {
+                const localAsset = component.part_uuid ? localContext.assets.get(component.part_uuid) : undefined;
+                if (localAsset) {
+                    kind = 'real';
+                    const original = removed.find(item => item.reference === exact);
+                    const local = placeLocalSymbol(localAsset, component, anchor, path, localContext.rootPath,
+                        parentInstancePaths, original ? parseSExpression(original.range.text) : undefined);
+                    objects.push(local.text);
+                    for (const [number, point] of local.pins) componentPins.set(number, point);
+                    for (const [number, angle] of local.pinLabelAngles) componentPinLabelAngles.set(number, angle);
+                    if (local.library) nativeDefinitions.set(atom(local.library[1])!, local.library);
+                } else if (component.part_uuid === 'GND' || component.part_uuid === 'VCC'
+                    || component.value === 'unknown_shortsym' || component.designator.includes('|')) {
                     kind = 'port';
-                    const signal = component.pins.find((pin) => pin.signal_name.trim())?.signal_name.trim();
-                    if (!signal) throw new Error(`port signal missing: ${component.designator}`);
-                    const power = component.part_uuid === 'VCC' || isPowerSignal(signal);
-                    const embedded = portEmbedded(signal, power);
-                    const reference = power ? powerReference() : portReference();
-                    objects.push(symbolInstance({
-                        embedded,
-                        component,
-                        anchor,
-                        projectName,
-                        documentUuid,
-                        reference,
-                        value: signal,
-                        power: 'port',
-                        rotation,
-                    }));
-                    for (const pin of component.pins) {
-                        componentPins.set(String(pin.pin_number), anchor);
-                    }
+                    const signal = component.pins.find(p => p.signal_name)?.signal_name;
+                    if (!signal) throw new Error(`port signal missing: ${exact}`);
+                    objects.push(namedLabel(signal, anchor));
+                    for (const pin of component.pins) componentPins.set(String(pin.pin_number), anchor);
                 } else {
                     kind = 'real';
                     if (!component.part_uuid) throw new Error(`part_uuid missing: ${component.designator}`);
@@ -1254,6 +1153,7 @@ export async function applyCircuitAssembly(
                 }
             } catch (error) {
                 objects.length = objectCount;
+                if (component.part_uuid && localContext.assets.has(component.part_uuid)) throw error;
                 report(error, `component skipped (${component.designator})`);
             }
         }
@@ -1321,7 +1221,7 @@ export async function applyCircuitAssembly(
         }
         const normalizedSegments = normalizedNetSegments(generatedSegments);
         for (const segment of normalizedSegments) objects.push(wireSegment(segment.start, segment.end));
-        for (const label of edgeLabels) objects.push(localLabel(label.signal, label.point));
+        for (const label of edgeLabels) objects.push(namedLabel(label.signal, label.point));
 
         const addedJunctions = new Set<string>();
         for (const point of [...requestedJunctions, ...calculatedJunctions(normalizedSegments)]) {
@@ -1384,6 +1284,7 @@ export async function applyCircuitAssembly(
             signal: string,
             preferLabel: boolean,
         ) => {
+            preferLabel = true;
             const base = baseDesignator(designator);
             const shape = `${base}_pin_${pinNumber}`;
             const exactShape = `${designator}_pin_${pinNumber}`;
@@ -1472,12 +1373,6 @@ export async function applyCircuitAssembly(
             if (!selected) {
                 throw new Error(`no free connection path: ${designator}.${pinNumber} (${signal})`);
             }
-            if (selected.port && signal === 'GND' && !groundEmbedded) {
-                throw new Error('GND symbol not prepared');
-            }
-            if (selected.port && signal !== 'GND' && !portSource) {
-                throw new Error('VCC service symbol unavailable');
-            }
             removeNoConnectAt(pin);
             for (const segment of selected.segments) {
                 objects.push(wireSegment(segment.start, segment.end));
@@ -1485,72 +1380,14 @@ export async function applyCircuitAssembly(
             }
             connectionTerminals.push(selected.terminal);
 
-            if (!selected.port) {
-                objects.push(globalLabel(signal, selected.terminal, selected.terminalAngle));
-                return;
-            }
-            if (signal === 'GND') {
-                const service: CircuitAssemblyComponent = {
-                    designator: powerReference(),
-                    value: 'GND',
-                    pins: [{ pin_number: '1', name: 'GND', signal_name: 'GND' }],
-                    block_name: '',
-                    search_query: '',
-                    part_uuid: 'GND',
-                    pos: {
-                        x: 0,
-                        y: 0,
-                        center: { x: 0, y: 0 },
-                        width: 0,
-                        height: 0,
-                        rotate: normalizeRotation(selected.terminalAngle - 270),
-                    },
-                };
-                objects.push(symbolInstance({
-                    embedded: groundEmbedded!,
-                    component: service,
-                    anchor: selected.terminal,
-                    projectName,
-                    documentUuid,
-                    reference: service.designator,
-                    value: 'GND',
-                    power: 'ground',
-                }));
-            } else {
-                const power = isPowerSignal(signal);
-                const service: CircuitAssemblyComponent = {
-                    designator: power ? powerReference() : portReference(),
-                    value: signal,
-                    pins: [{ pin_number: '1', name: signal, signal_name: signal }],
-                    block_name: '',
-                    search_query: '',
-                    part_uuid: power ? 'VCC' : '7523d33c197549a39030c4ac7fddee68',
-                    pos: {
-                        x: 0,
-                        y: 0,
-                        center: { x: 0, y: 0 },
-                        width: 0,
-                        height: 0,
-                        rotate: normalizeRotation(selected.terminalAngle - 90),
-                    },
-                };
-                objects.push(symbolInstance({
-                    embedded: portEmbedded(signal, power),
-                    component: service,
-                    anchor: selected.terminal,
-                    projectName,
-                    documentUuid,
-                    reference: service.designator,
-                    value: signal,
-                    power: 'port',
-                }));
-            }
+            objects.push(namedLabel(signal, selected.terminal, selected.terminalAngle));
         };
 
         for (const item of assembly.added_net || []) {
             const oldSignal = inputSignal(input, item.designator, item.pin_number);
             if (oldSignal === item.net) continue;
-            if (oldSignal && oldSignal.trim().toUpperCase() !== 'NC' && oldSignal !== item.net) {
+            if (oldSignal && oldSignal.trim().toUpperCase() !== 'NC' && oldSignal !== item.net
+                && !assembly.rm_net?.some(n => n.designator === item.designator && String(n.pin_number) === String(item.pin_number))) {
                 report(
                     `pin already connected to ${oldSignal}`,
                     `connection signal mismatch (${item.designator}.${item.pin_number}, ${item.net})`,
@@ -1577,35 +1414,58 @@ export async function applyCircuitAssembly(
             }
         }
 
-        const connectionCounts = new Map<string, number>();
-        for (const item of placed) {
-            if (item.kind !== 'real') continue;
-            const designator = baseDesignator(item.source.designator);
-            const namedPins = item.source.pins.filter((pin) => pin.signal_name.trim()).length;
-            connectionCounts.set(designator, namedPins);
-        }
-        const pendingCounts = new Map<string, number>();
         for (const connection of pendingConnections) {
-            const designator = baseDesignator(connection.designator);
-            pendingCounts.set(designator, (pendingCounts.get(designator) || 0) + 1);
-        }
-        for (const [designator, count] of pendingCounts) {
-            connectionCounts.set(designator, Math.max(connectionCounts.get(designator) || 0, count));
-        }
-        for (const connection of pendingConnections) {
-            const useLabel = (connectionCounts.get(baseDesignator(connection.designator)) || 0) >= 5;
             try {
                 addNamedConnection(
                     connection.designator,
                     connection.pinNumber,
                     connection.signal,
-                    useLabel,
+                    true,
                 );
             } catch (error) {
                 report(
                     error,
                     `connection skipped (${connection.designator}.${connection.pinNumber}, ${connection.signal})`,
                 );
+            }
+        }
+
+        // Keep native net aliases when their old wire branch was removed. Attach
+        // them to a surviving pin, without changing the label's scope or text.
+        const markers = new Set<string>();
+        for (const object of objects) {
+            const node = parseSExpression(object);
+            if (['label', 'global_label', 'hierarchical_label'].includes(listHead(node) ?? '')) markers.add(`${listHead(node)}\u0000${atom(node[1])}`);
+        }
+        for (const head of ['label', 'global_label']) {
+            const ranges = findLists(source, head);
+            for (const range of ranges.filter(r => !edits.some(e => e.start === r.start && e.end === r.end && !e.text))) {
+                markers.add(`${head}\u0000${atom(parseSExpression(range.text)[1])}`);
+            }
+            for (const range of ranges.filter(r => edits.some(e => e.start === r.start && e.end === r.end && !e.text))) {
+                const node = parseSExpression(range.text);
+                const marker = `${head}\u0000${atom(node[1])}`;
+                if (markers.has(marker)) continue;
+                const group = localContext.page.groupAt(position(node));
+                let terminal: Point | undefined;
+                for (const pin of localContext.page.pins.filter(p => localContext.page.groupAt(p.point) === group)) {
+                    const originalSignal = inputSignal(input, pin.designator, pin.number);
+                    const replacement = placed.find(p => p.source.designator === pin.designator);
+                    if (replacement) {
+                        if (replacement.source.pins.find(p => String(p.pin_number) === pin.number)?.signal_name === originalSignal) terminal = replacement.pins.get(pin.number);
+                    } else if (!removed.some(item => item.reference === pin.designator)
+                        && !assembly.rm_net?.some(n => n.designator === pin.designator && String(n.pin_number) === pin.number)) {
+                        terminal = pin.point;
+                    }
+                    if (terminal) break;
+                }
+                if (!terminal) continue;
+                const at = findChild(node, 'at')!;
+                at[1] = token(String(terminal.x)); at[2] = token(String(terminal.y));
+                const uuid = findChild(node, 'uuid');
+                if (uuid) uuid[1] = token(randomUUID(), true);
+                objects.push(printSExpression(node));
+                markers.add(marker);
             }
         }
 
@@ -1628,8 +1488,13 @@ export async function applyCircuitAssembly(
             }
         }
 
-        if (definitions.size) {
+        if (definitions.size || nativeDefinitions.size) {
             const root = parseSExpression(library.range.text);
+            for (const [id, definition] of nativeDefinitions) {
+                const existing = root.find(item => isSExpressionList(item) && listHead(item) === 'symbol' && atom(item[1]) === id);
+                if (existing && printSExpression(existing) !== printSExpression(definition)) throw new Error(`conflicting native symbol definition: ${id}`);
+                if (!existing) root.push(definition);
+            }
             for (const definition of definitions.values()) {
                 const index = root.findIndex((item) => isSExpressionList(item)
                     && listHead(item) === 'symbol'

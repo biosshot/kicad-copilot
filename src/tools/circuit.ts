@@ -8,6 +8,8 @@ import { diagnosticToolResult } from '../utils/diagnostics';
 import { enqueueMutation } from '../utils/mutation-queue';
 import { postJson } from '../utils/server';
 import { runTool, textResult } from '../utils/tool-result';
+import { registeredAsset, nativeProperty } from '../kicad/schematic-assets';
+import { basename } from 'node:path';
 
 export function registerCircuitTools(server: McpServer) {
     server.registerTool(
@@ -25,7 +27,19 @@ export function registerCircuitTools(server: McpServer) {
                 return textResult('Fill one: part_uuid or MPN');
             }
 
-            return runTool(() => postJson('/v1/mcp-tools/component-search', { part_uuid, MPN }));
+            return runTool(async () => {
+                const asset = part_uuid ? await registeredAsset(part_uuid) : undefined;
+                if (!asset) return postJson('/v1/mcp-tools/component-search', { part_uuid, MPN });
+                return { bestComponent: {
+                    part_uuid: asset.partUuid,
+                    name: asset.kind === 'sheet' ? basename(asset.path, '.kicad_sch') : nativeProperty(asset.instance, 'Value'),
+                    description: asset.kind === 'sheet' ? asset.path : nativeProperty(asset.instance, 'Description'),
+                    manufacturer: '', price: 0, datasheet: '',
+                    designatorPattern: asset.kind === 'sheet' ? 'SH' : nativeProperty(asset.library, 'Reference'),
+                    footprintName: asset.kind === 'sheet' ? null : nativeProperty(asset.instance, 'Footprint') || null,
+                    pins: asset.symbol.pins.map(p => ({ pin_number: p.num, name: p.name })),
+                } };
+            });
         },
     );
 

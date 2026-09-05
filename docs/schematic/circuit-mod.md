@@ -2,6 +2,8 @@
 
 ## Component search
 
+For a native symbol or reusable sheet, use its `part_uuid` returned by `get_schematic` or `get_project_info`. `component_search({ part_uuid })` resolves registered local assets before querying the catalogue. Reuse the returned ID; no LCSC equivalent is required.
+
 Prefer the exact manufacturer MPN:
 
 ```ts
@@ -49,7 +51,7 @@ risk. Do not combine unrelated changes merely to reduce the call count.
 
 The modification contains:
 
-- `add_components`: real components to add;
+- `add_components`: components or hierarchical sheet inclusions to add;
 - `add_reused_blocks`: reusable circuit blocks to add;
 - `rm_components`: designators to remove, or `null`;
 - `external_rm_connect`: external pin connections to break, or `null`;
@@ -70,16 +72,29 @@ Use one identical `signal_name` for all pins that belong to the same net.
 Leave it empty only when the pin should remain unconnected. Use `NC` for a pin
 that should receive an explicit KiCad no-connect marker.
 
-GND becomes a KiCad GND power symbol. VCC and other named short symbols become
-KiCad global-label ports.
+| Signal | Meaning |
+| --- | --- |
+| `GND` or `global:GND` | Project-wide net named `GND` |
+| `local:ROOT:FB` | Root-page local net named `FB` |
+| `local:power:FB` | Local net in `power.kicad_sch` |
+| `hier:power:AIN` while editing `power.kicad_sch` | Hierarchical label `AIN` inside this file |
+| `hier:ADC_A:AIN` on a page containing `ADC_A` | Pin `AIN` of that sheet inclusion |
+| `global:NC` | Real net named `NC`, distinct from the no-connect marker |
 
-Edge sections become real KiCad wires. GND and named short-symbol ports
-use KiCad power-style symbols at the wire endpoints. A global label is added
-only when a named external or otherwise free pin cannot use a short symbol.
+Copy scoped names from `get_schematic`. A file's scope is `ROOT` for the project root, otherwise its path relative to the project directory without `.kicad_sch`, using `/` (for example `blocks/adc`). A scope identifies the edited file definition; native instance paths keep repeated inclusions electrically separate. A file used outside a project is its own `ROOT`.
+
+The first two colons separate `local`/`hier`, the sheet, and the name. The rest of the string is the literal name, including `/`, `~`, or further colons. There is no additional escaping. Explicit `global:` consumes only its first colon.
+
+The adapter validates and resolves these references before layout. It strips the addressing prefix when writing native labels. Local references to another file are errors, never global fallbacks. Hierarchical references on a parent must identify an existing pin (or a pin of a sheet added in the same call). Connecting within a child can create a new hierarchical label; existing inclusions receive matching pins. New ports default to bidirectional; existing port directions are retained.
+
+Wire sections remain native wires. Generated net markers use the resolved native label type, including when the server proposes a power-style service component. Existing power symbols keep their native meaning. Local and global labels with the same literal name on one page cannot represent independent nets; conflicting requests are rejected.
+
+Schematic buses currently require expansion before using component layout; unsupported bus wiring is rejected rather than silently flattened.
 
 ## Removal and replacement
 
 Remove components by base designator. Removing `U1` affects all its units.
+An exact unit designator such as `U1.2` selects only that unit. For a sheet, use its returned designator; the source file is not deleted.
 Request an explicit replacement by putting the old designator in
 `rm_components` and the new component with the same designator in
 `add_components`.
