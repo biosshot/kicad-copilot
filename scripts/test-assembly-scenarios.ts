@@ -711,8 +711,10 @@ async function main() {
             const initialSource = await readFile(path, 'utf8');
             expect(initialSource.includes('(global_label "MID"'),
                 'a bare signal must be global even when connected by a local wire');
-            expect(initialSource.includes('(global_label "VCC_5V"'),
+            expect(initialSource.includes('(lib_id "power:VCC")') && initialSource.includes('(property "Value" "VCC_5V"'),
                 'power-like signals must keep their requested net name');
+            expect(initialSource.includes('(lib_id "power:GNDREF")') && !initialSource.includes('(global_label "GND"'),
+                'global ground must use the three-bar power symbol');
             const initialErc = await ercReport(path);
             expect(!/\[(lib_symbol_issues|footprint_link_issues)\]/.test(initialErc),
                 'project library: ERC still reports missing symbol or footprint libraries');

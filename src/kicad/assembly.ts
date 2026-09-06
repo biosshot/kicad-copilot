@@ -5,6 +5,7 @@ import { children, nativeAsset, nativeProperty, position, scalar, SchematicAsset
 import { placeLocalSymbol } from './local-symbol-writer';
 import { parseSignal } from './scoped-signals';
 import { ConvertedComponent, convertComponent } from '../components/converter';
+import { getPowerSymbol } from '../components/kicad-library';
 import { projectFootprintId, writeProjectLibraries } from '../components/project-library';
 import { CircuitAssembly, ExplainCircuit } from '../types/circuit';
 import { DiagnosticReporter } from '../utils/diagnostics';
@@ -317,6 +318,7 @@ function placementOffset(
     assembly: CircuitAssembly,
     retained: ExistingSymbol[],
     removed: ExistingSymbol[],
+    centerOnPage = false,
 ) {
     const paper = pageSize(source);
     const bounds = serverRect(assembly);
@@ -327,7 +329,7 @@ function placementOffset(
         bottom: anchor.y + 10,
     }));
     for (const range of findLists(source, 'sheet')) {
-        if (removed.some(item => item.range.start === range.start)) continue;
+        if (removed.some(item => item.range?.start === range.start)) continue;
         const value = parseSExpression(range.text);
         const at = atPoint(findChild(value, 'at'));
         const size = atPoint(findChild(value, 'size'));
@@ -339,7 +341,7 @@ function placementOffset(
         });
     }
 
-    const target = removed.length
+    const target = removed.length && !centerOnPage
         ? {
             x: removed.reduce((sum, item) => sum + item.anchor.x, 0) / removed.length,
             y: removed.reduce((sum, item) => sum + item.anchor.y, 0) / removed.length,
@@ -504,7 +506,7 @@ function globalLabel(name: string, point: Point, angle = 0) {
 
 function localLabel(name: string, point: Point) {
     return `(label ${quoteSExpression(name)} (at ${point.x} ${point.y} 0)
-        ${effects()}
+        (effects (font (size 1.27 1.27)) (justify left bottom))
         (uuid ${quoteSExpression(randomUUID())}))`;
 }
 
@@ -843,10 +845,34 @@ export async function applyCircuitAssembly(
         }
     };
     collectPaths(localContext.rootPath, `/${scalar(parseSExpression(localContext.files.get(localContext.rootPath)!), 'uuid')}`);
-    const namedLabel = (signal: string, point: Point, angle = 0) => {
+    const definitions = new Map<string, EmbeddedSymbol>();
+    const namedMarkers: { signal: string; point: Point }[] = [];
+    let powerIndex = 0;
+    const usedReferences = new Set(localContext.page.source.match(/#PWR\d+/g));
+    const namedLabel = async (signal: string, point: Point, angle = 0) => {
         const ref = parseSignal(signal);
         if (ref.kind === 'empty' || ref.kind === 'nc') throw new Error(`invalid label signal: ${signal}`);
-        if (ref.kind === 'global') return globalLabel(ref.name, point, angle);
+        namedMarkers.push({ signal, point });
+        if (ref.kind === 'global') {
+            const ground = /^(?:[ADP]?GND|GNDA|GNDD|GNDPWR)(?:$|_)/i.test(ref.name);
+            const supply = /^(?:(?:VCC|VDD|VSS|VEE|VIN|VOUT|VBAT)(?:$|[_0-9])|[+-]?\d+(?:\.\d+)?V(?:\d+)?(?:$|_))/i.test(ref.name);
+            if (!ground && !supply) return globalLabel(ref.name, point, angle);
+            const libraryName = ground ? 'GNDREF' : 'VCC';
+            const id = `power:${libraryName}`;
+            if (!definitions.has(id)) definitions.set(id, embeddedLibrarySymbol(
+                await getPowerSymbol(libraryName), 'power', targetVersion(localContext.page.source)));
+            let reference: string;
+            do { reference = `#PWR${++powerIndex}`; } while (usedReferences.has(reference));
+            usedReferences.add(reference);
+            const projectName = basename(localContext.rootPath, '.kicad_sch');
+            return `(symbol (lib_id ${quoteSExpression(id)}) (at ${point.x} ${point.y} 0) (unit 1)
+                (in_bom no) (on_board yes) (dnp no) (uuid ${quoteSExpression(randomUUID())})
+                ${property('Reference', reference, point.x, point.y, true)}
+                ${property('Value', ref.name, point.x, point.y + (ground ? 3.81 : -3.556), false)}
+                (pin "1" (uuid ${quoteSExpression(randomUUID())}))
+                (instances (project ${quoteSExpression(projectName)} ${parentInstancePaths.map(p =>
+                    `(path ${quoteSExpression(p)} (reference ${quoteSExpression(reference)}) (unit 1))`).join(' ')})))`;
+        }
         if (ref.kind === 'local') {
             if (ref.sheet !== localContext.page.scope) throw new Error(`local signal belongs to another sheet: ${signal}`);
             return localLabel(ref.name, point);
@@ -861,8 +887,10 @@ export async function applyCircuitAssembly(
         }
         const existing = localContext.page.labels.find(l => l.kind === 'hier' && l.name === ref.name);
         const shape = existing ? scalar(existing.node, 'shape', 'bidirectional') : 'bidirectional';
-        return `(hierarchical_label ${quoteSExpression(ref.name)} (shape ${shape}) (at ${point.x} ${point.y} ${canonicalDirectionAngle(angle)})
-            ${effects()} (uuid ${quoteSExpression(randomUUID())}))`;
+        const rotation = canonicalDirectionAngle(angle);
+        return `(hierarchical_label ${quoteSExpression(ref.name)} (shape ${shape}) (at ${point.x} ${point.y} ${rotation})
+            (effects (font (size 1.27 1.27)) (justify ${rotation === 0 || rotation === 90 ? 'left' : 'right'}))
+            (uuid ${quoteSExpression(randomUUID())}))`;
     };
 
     return mutateSchematic(path, async (source) => {
@@ -1010,7 +1038,8 @@ export async function applyCircuitAssembly(
             source,
             assembly,
             retained.filter((item) => !removedServices.has(item)),
-            fullPhysicalRebuild ? [] : removed,
+            removed,
+            fullPhysicalRebuild,
         );
         if (placement.warning) warn(placement.warning, 'schematic placement');
         const serverShapePoints = new Map<string, Point>();
@@ -1025,7 +1054,6 @@ export async function applyCircuitAssembly(
             }
         }
 
-        const definitions = new Map<string, EmbeddedSymbol>();
         const nativeDefinitions = new Map<string, SExpression[]>();
         const embeddedAssets = new Map<string, EmbeddedSymbol>();
         const representativeDesignators = new Map<string, string>();
@@ -1052,6 +1080,7 @@ export async function applyCircuitAssembly(
         }
         const objects: string[] = [];
         const placed: PlacedComponent[] = [];
+        const sheetLeads: RoutedSegment[] = [];
         const edgePins = new Map(existingPinPoints);
         const edgeSignals = new Map<string, string>();
 
@@ -1089,6 +1118,8 @@ export async function applyCircuitAssembly(
                     const local = placeLocalSymbol(localAsset, component, anchor, path, localContext.rootPath,
                         parentInstancePaths, original ? parseSExpression(original.range.text) : undefined);
                     objects.push(local.text);
+                    for (const lead of local.leads) sheetLeads.push({ start: lead.start, end: lead.end,
+                        signal: component.pins.find(p => String(p.pin_number) === lead.number)?.signal_name });
                     for (const [number, point] of local.pins) componentPins.set(number, point);
                     for (const [number, angle] of local.pinLabelAngles) componentPinLabelAngles.set(number, angle);
                     if (local.library) nativeDefinitions.set(atom(local.library[1])!, local.library);
@@ -1097,7 +1128,7 @@ export async function applyCircuitAssembly(
                     kind = 'port';
                     const signal = component.pins.find(p => p.signal_name)?.signal_name;
                     if (!signal) throw new Error(`port signal missing: ${exact}`);
-                    objects.push(namedLabel(signal, anchor));
+                    objects.push(await namedLabel(signal, anchor));
                     for (const pin of component.pins) componentPins.set(String(pin.pin_number), anchor);
                 } else {
                     kind = 'real';
@@ -1168,7 +1199,7 @@ export async function applyCircuitAssembly(
         }
 
         const usedShapes = new Set<string>();
-        const generatedSegments: RoutedSegment[] = [];
+        const generatedSegments: RoutedSegment[] = [...sheetLeads];
         const edgeLabels: { signal: string; point: Point; segments: RoutedSegment[] }[] = [];
         const requestedJunctions: Point[] = [];
         for (const edge of assembly.edges) {
@@ -1231,13 +1262,57 @@ export async function applyCircuitAssembly(
         }
         const normalizedSegments = normalizedNetSegments(generatedSegments);
         for (const segment of normalizedSegments) objects.push(wireSegment(segment.start, segment.end));
+        // One name per connected wire group. In particular, do not put a second
+        // ground symbol on the component pin when the route already ends in one.
+        const routeKey = (signal: string | undefined, point: Point) => `${signal}\u0000${pointKey(point)}`;
+        const neighbors = new Map<string, Set<string>>();
+        for (const segment of normalizedSegments) {
+            const a = routeKey(segment.signal, segment.start), b = routeKey(segment.signal, segment.end);
+            if (!neighbors.has(a)) neighbors.set(a, new Set());
+            if (!neighbors.has(b)) neighbors.set(b, new Set());
+            neighbors.get(a)!.add(b); neighbors.get(b)!.add(a);
+        }
+        const namedRoutes = new Set<string>();
+        const markNamedRoute = ({ signal, point }: { signal: string; point: Point }) => {
+            const pending = normalizedSegments.filter(s => s.signal === signal && pointOnSegment(point, s.start, s.end))
+                .map(s => routeKey(signal, s.start));
+            while (pending.length) {
+                const key = pending.pop()!;
+                if (namedRoutes.has(key)) continue;
+                namedRoutes.add(key);
+                pending.push(...neighbors.get(key) ?? []);
+            }
+        };
+        namedMarkers.forEach(markNamedRoute);
+        const pinXs = [...edgePins.values()].map(p => p.x);
+        const centerX = (Math.min(...pinXs) + Math.max(...pinXs)) / 2;
         for (const label of edgeLabels) {
-            const candidates = [label.point, ...label.segments.flatMap(segment => [segment.start, segment.end,
-                { x: snapped((segment.start.x + segment.end.x) / 2), y: snapped((segment.start.y + segment.end.y) / 2) }])];
+            if (namedRoutes.has(routeKey(label.signal, label.point))) continue;
+            const connected = new Set<string>();
+            const pending = [routeKey(label.signal, label.point)];
+            while (pending.length) {
+                const key = pending.pop()!;
+                if (connected.has(key)) continue;
+                connected.add(key);
+                pending.push(...neighbors.get(key) ?? []);
+            }
+            const segments = normalizedSegments.filter(s => connected.has(routeKey(s.signal, s.start)));
+            const signal = parseSignal(label.signal);
+            const hierarchical = signal.kind === 'hier' && signal.sheet === localContext.page.scope;
+            const vertical = hierarchical ? segments.filter(s => nearlyEqual(s.start.x, s.end.x))
+                .sort((a, b) => Math.abs(b.end.y - b.start.y) - Math.abs(a.end.y - a.start.y)) : [];
+            const horizontal = segments.filter(s => nearlyEqual(s.start.y, s.end.y))
+                .sort((a, b) => Math.abs(b.end.x - b.start.x) - Math.abs(a.end.x - a.start.x));
+            const candidates = [...vertical.map(segment => ({ x: segment.start.x, y: snapped((segment.start.y + segment.end.y) / 2) })),
+                ...horizontal.map(segment => ({ x: snapped(Math.min(segment.start.x, segment.end.x)
+                    + Math.min(GRID_MM, Math.abs(segment.end.x - segment.start.x) / 2)), y: segment.start.y })),
+                label.point, ...label.segments.flatMap(segment => [segment.start, segment.end,
+                    { x: snapped((segment.start.x + segment.end.x) / 2), y: snapped((segment.start.y + segment.end.y) / 2) }])];
             const point = candidates.find(point => !normalizedSegments.some(segment => segment.signal !== label.signal
                 && pointOnSegment(point, segment.start, segment.end)));
             if (!point) throw new Error(`no safe label position on routed net: ${label.signal}`);
-            objects.push(namedLabel(label.signal, point));
+            objects.push(await namedLabel(label.signal, point, hierarchical && point.x < centerX ? 180 : 0));
+            markNamedRoute({ signal: label.signal, point });
         }
 
         const addedJunctions = new Set<string>();
@@ -1295,7 +1370,7 @@ export async function applyCircuitAssembly(
             pendingConnections.push({ designator, pinNumber, signal });
             return true;
         };
-        const addNamedConnection = (
+        const addNamedConnection = async (
             designator: string,
             pinNumber: string | number,
             signal: string,
@@ -1397,7 +1472,7 @@ export async function applyCircuitAssembly(
             }
             connectionTerminals.push(selected.terminal);
 
-            objects.push(namedLabel(signal, selected.terminal, selected.terminalAngle));
+            objects.push(await namedLabel(signal, selected.terminal, selected.terminalAngle));
         };
 
         for (const item of assembly.added_net || []) {
@@ -1433,7 +1508,7 @@ export async function applyCircuitAssembly(
 
         for (const connection of pendingConnections) {
             try {
-                addNamedConnection(
+                await addNamedConnection(
                     connection.designator,
                     connection.pinNumber,
                     connection.signal,

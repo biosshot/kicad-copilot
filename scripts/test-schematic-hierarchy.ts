@@ -9,12 +9,13 @@ import { extractCircuit } from '../src/circuit/extract';
 import { beautifySchematic } from '../src/circuit/beautify';
 import { prepareSchematicInput } from '../src/circuit/schematic-input';
 import { projectConnections } from '../src/kicad/schematic-connectivity';
-import { filePartUuid, nativeInstances, children, scalar, nativeProperty } from '../src/kicad/schematic-assets';
-import { parseSExpression } from '../src/kicad/sexpr/ast';
+import { filePartUuid, nativeInstances, children, scalar, nativeProperty, sheetSymbolData, position, SheetAsset } from '../src/kicad/schematic-assets';
+import { atom, parseSExpression } from '../src/kicad/sexpr/ast';
+import { placeLocalSymbol } from '../src/kicad/local-symbol-writer';
 import { parseSignal } from '../src/kicad/scoped-signals';
 import { schematicTemplate } from '../src/kicad/schematic-template';
 import { createDocument } from '../src/kicad/create-document';
-import type { CircuitMod } from '../src/types/circuit';
+import type { CircuitAssembly, CircuitMod } from '../src/types/circuit';
 
 const output = resolve('.test-output/hierarchy');
 await mkdir(output, { recursive: true });
@@ -22,6 +23,30 @@ const directory = await mkdtemp(join(output, 'run-'));
 const main = join(directory, 'main.kicad_sch');
 const adc = join(directory, 'adc.kicad_sch');
 const rootUuid = randomUUID(), childUuid = randomUUID();
+const ports = [{ name: 'IN', direction: 'input' }, { name: 'OUT', direction: 'output' }];
+const sheetAsset: SheetAsset = { kind: 'sheet', partUuid: childUuid.replaceAll('-', ''), path: adc, source: '',
+    ports, symbol: sheetSymbolData(ports) };
+for (const rotate of [0, 90, 180, 270]) for (const mirror of [false, true]) {
+    const component: CircuitAssembly['components'][number] = {
+        designator: 'SHEET', part_uuid: sheetAsset.partUuid, block_name: '', value: '', search_query: '',
+        pins: ports.map(p => ({ pin_number: p.name, name: p.name, signal_name: p.name })),
+        pos: { x: 0, y: 0, ...sheetAsset.symbol, rotate, mirror },
+    };
+    const placed = placeLocalSymbol(sheetAsset, component, { x: 100, y: 100 }, main, main, [`/${rootUuid}`]);
+    const sheet = parseSExpression(placed.text), at = position(sheet), size = position(sheet, 'size');
+    assert.ok(Math.abs(at.x + size.x / 2 - 100) < 0.001 && Math.abs(at.y + size.y / 2 - 100) < 0.001,
+        'rotating or mirroring a sheet must not move its center');
+    for (const lead of placed.leads) {
+        const port = children(sheet, 'pin').find(p => atom(p[1]) === lead.number)!;
+        assert.equal(atom(port[2]), ports.find(p => p.name === lead.number)!.direction);
+        assert.ok(Math.abs(Math.hypot(lead.end.x - lead.start.x, lead.end.y - lead.start.y) - 2.54) < 0.001);
+        assert.ok(lead.end.x < at.x || lead.end.x > at.x + size.x || lead.end.y < at.y || lead.end.y > at.y + size.y,
+            'routing terminals must be outside the visible sheet body');
+    }
+    component.pins.forEach(p => { p.signal_name = 'NC'; });
+    assert.equal(placeLocalSymbol(sheetAsset, component, { x: 100, y: 100 }, main, main, [`/${rootUuid}`]).leads.length, 0,
+        'no-connect markers must stay on physical pins, without wire stubs');
+}
 const empty = (uuid: string) => schematicTemplate({ uuid, major: 9 });
 const resistor = `(symbol "Device:R" (pin_names (offset 0)) (in_bom yes) (on_board yes)
     (property "Reference" "R" (at 0 2.54 0) (effects (font (size 1.27 1.27))))

@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { openMcpClient } from '../src/mcp-client';
 import { getProjectNetlist } from '../src/kicad/schematic-reader';
+import { getSupportedKicadCli } from '../src/kicad/cli';
+import { runProcess } from '../src/utils/process';
+import { children, nativeProperty, position, scalar } from '../src/kicad/schematic-assets';
+import { atom, parseSExpression } from '../src/kicad/sexpr/ast';
 import type { CircuitMod, ExplainCircuit } from '../src/types/circuit';
 
 const output = resolve('.test-output/mcp-ldo');
@@ -88,6 +92,30 @@ try {
     assert.notEqual(outputs[0], outputs[1]);
     assert.deepEqual(new Set(outputs), new Set([pin(netlist, 'J2', '1'), pin(netlist, 'J3', '1')]));
     for (const c of regulators) assert.equal(pin(netlist, c.designator, '1'), pin(netlist, 'J1', '1'));
+    for (const c of regulators) assert.equal(pin(netlist, c.designator, '2'), 'GND');
+    for (const [path, expectedGrounds] of [[main, 3], [child, 1]] as const) {
+        const source = parseSExpression(await readFile(path, 'utf8'));
+        const grounds = children(source, 'symbol').filter(s => scalar(s, 'lib_id') === 'power:GNDREF');
+        assert.equal(grounds.length, expectedGrounds, 'one three-bar ground per connected wire group');
+        assert.ok(grounds.every(s => nativeProperty(s, 'Value') === 'GND'));
+        assert.ok(!children(source, 'global_label').some(s => atom(s[1]) === 'GND'));
+        for (const sheet of children(source, 'sheet')) {
+            const size = position(sheet, 'size');
+            assert.ok(Math.max(size.x, size.y) <= 15.24 && Math.min(size.x, size.y) <= 10.16,
+                'two short ports must produce a compact sheet body');
+            const wires = children(source, 'wire').flatMap(w => children(w, 'pts').map(pts => children(pts, 'xy')
+                .map(p => ({ x: Number(atom(p[1])), y: Number(atom(p[2])) }))));
+            for (const port of children(sheet, 'pin')) {
+                const p = position(port);
+                const lead = wires.find(w => w.some(q => Math.hypot(q.x - p.x, q.y - p.y) < 0.001));
+                assert.ok(lead && Math.hypot(lead[0].x - lead[1].x, lead[0].y - lead[1].y) >= 2.54 - 0.001,
+                    'each connected sheet port needs a wire lead outside the body');
+            }
+        }
+    }
     await writeFile(join(directory, 'netlist.json'), JSON.stringify(netlist, null, 2));
+    const cli = await getSupportedKicadCli();
+    const preview = await runProcess(cli.path, ['sch', 'export', 'svg', '-o', join(directory, 'preview'), main]);
+    assert.equal(preview.exitCode, 0, preview.stderr);
     console.log('MCP LDO integration passed: two reusable LDOs, three catalogue connectors, beautification, native KiCad connectivity.');
 } finally { await client.close(); }

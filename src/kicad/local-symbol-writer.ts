@@ -2,8 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { basename, dirname, relative } from 'node:path';
 import { CircuitAssembly } from '../types/circuit';
 import { atom, findChild, parseSExpression, printSExpression, SExpression, token } from './sexpr/ast';
-import { children, nativeProperty, Point, position, scalar, SchematicAsset, SYMBOL_UNIT_MM } from './schematic-assets';
+import { children, nativeProperty, Point, position, scalar, SchematicAsset, SHEET_PADDING, SYMBOL_UNIT_MM } from './schematic-assets';
 import { quoteSExpression as q } from './sexpr/scan';
+import { parseSignal } from './scoped-signals';
 
 function set(node: SExpression[], head: string, values: string[], quoted = false) {
     const field = findChild(node, head);
@@ -29,32 +30,42 @@ export function placeLocalSymbol(
 ) {
     const pins = new Map<string, Point>();
     const pinLabelAngles = new Map<string, number>();
+    const leads: { number: string; start: Point; end: Point }[] = [];
     const rotation = component.pos.rotate ?? 0;
     const mirror = Boolean(component.pos.mirror);
     const reference = asset.kind === 'native' ? component.designator.replace(/\.\d+$/, '') : component.designator;
     const projectName = basename(rootPath, '.kicad_sch');
     if (asset.kind === 'sheet') {
-        const transformed = asset.symbol.pins.map(p => ({ p, point: transform({ x: p.x * SYMBOL_UNIT_MM, y: -p.y * SYMBOL_UNIT_MM }, anchor, rotation, mirror) }));
+        const sheetPoint = (x: number, y: number) => transform({
+            x: (x - asset.symbol.center.x) * SYMBOL_UNIT_MM,
+            y: -(y - asset.symbol.center.y) * SYMBOL_UNIT_MM,
+        }, anchor, rotation, mirror);
+        const transformed = asset.symbol.pins.map(p => ({ p,
+            terminal: sheetPoint(p.x, p.y),
+            point: sheetPoint(p.x === 0 ? SHEET_PADDING : asset.symbol.width - SHEET_PADDING, p.y) }));
         const corners = [
-            transform({ x: 0, y: 0 }, anchor, rotation, mirror),
-            transform({ x: asset.symbol.width * SYMBOL_UNIT_MM, y: -asset.symbol.height * SYMBOL_UNIT_MM }, anchor, rotation, mirror),
+            sheetPoint(SHEET_PADDING, SHEET_PADDING),
+            sheetPoint(asset.symbol.width - SHEET_PADDING, asset.symbol.height - SHEET_PADDING),
         ];
         const x = Math.min(...corners.map(p => p.x)), y = Math.min(...corners.map(p => p.y));
         const w = Math.abs(corners[1].x - corners[0].x), h = Math.abs(corners[1].y - corners[0].y);
+        const topPorts = transformed.some(p => Math.abs(p.point.y - y) < 0.0001);
+        const nameY = topPorts ? y + h + 1.27 : y - 1.27;
+        const fileY = y + h + (topPorts ? 3.81 : 1.27);
         const node = original ? structuredClone(original) : parseSExpression(`(sheet (uuid ${q(randomUUID())})
             (stroke (width 0) (type solid)) (fill (color 0 0 0 0)))`);
         set(node, 'at', [String(x), String(y)]);
         set(node, 'size', [String(rounded(w)), String(rounded(h))]);
-        setProperty(node, 'Sheetname', reference, { x, y: y - 1.27 }, false);
-        setProperty(node, 'Sheetfile', relative(dirname(parentPath), asset.path).replaceAll('\\', '/'), { x, y: y + h + 1.27 }, false);
+        setProperty(node, 'Sheetname', reference, { x: x + w / 2, y: nameY }, false);
+        setProperty(node, 'Sheetfile', relative(dirname(parentPath), asset.path).replaceAll('\\', '/'), { x: x + w / 2, y: fileY }, false);
         setProperty(node, 'Block Name', component.block_name, { x, y });
         for (const property of children(node, 'property')) {
             const name = atom(property[1]);
-            set(property, 'at', [String(x), String(name === 'Sheetname' ? y - 1.27 : y + h + 1.27), '0']);
+            set(property, 'at', [String(rounded(x + w / 2)), String(rounded(name === 'Sheetname' ? nameY : fileY)), '0']);
         }
         const oldPins = new Map(children(node, 'pin').map(p => [atom(p[1]), p]));
         for (const pin of children(node, 'pin')) node.splice(node.indexOf(pin), 1);
-        for (const { p, point } of transformed) {
+        for (const { p, point, terminal } of transformed) {
             const port = asset.ports.find(port => port.name === p.num)!;
             const angle = Math.abs(point.x - x) < 0.0001 ? 180 : Math.abs(point.x - x - w) < 0.0001 ? 0
                 : Math.abs(point.y - y) < 0.0001 ? 90 : 270;
@@ -62,12 +73,15 @@ export function placeLocalSymbol(
                 (uuid ${q(randomUUID())}) (effects (font (size 1.27 1.27))))`);
             set(pin, 'at', [String(point.x), String(point.y), String(angle)]);
             node.push(pin);
-            pins.set(p.num, point);
+            const signal = parseSignal(component.pins.find(pin => String(pin.pin_number) === p.num)?.signal_name ?? '');
+            const connected = signal.kind !== 'empty' && signal.kind !== 'nc';
+            pins.set(p.num, connected ? terminal : point);
+            if (connected) leads.push({ number: p.num, start: point, end: terminal });
             pinLabelAngles.set(p.num, angle);
         }
         const existingInstances = findChild(node, 'instances');
         if (!existingInstances) node.push(parseSExpression(`(instances (project ${q(projectName)} ${parentInstancePaths.map(p => `(path ${q(p)} (page "1"))`).join(' ')}))`));
-        return { text: printSExpression(node), pins, pinLabelAngles };
+        return { text: printSExpression(node), pins, pinLabelAngles, leads };
     }
     const instance = structuredClone(original ?? asset.instance);
     const originalProperties = children(instance, 'property');
@@ -108,5 +122,5 @@ export function placeLocalSymbol(
         pins.set(pin.number, transform(pin, anchor, rotation, mirror));
         pinLabelAngles.set(pin.number, (rotation + 180 + (mirror ? -pin.angle : pin.angle) + 360) % 360);
     }
-    return { text: printSExpression(instance), pins, pinLabelAngles, library: asset.library };
+    return { text: printSExpression(instance), pins, pinLabelAngles, leads, library: asset.library };
 }

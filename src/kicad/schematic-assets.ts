@@ -6,6 +6,8 @@ import { librarySymbolPins, LibraryPin } from './symbol';
 import { readCacheJson, writeCacheJson } from '../components/cache';
 
 export const SYMBOL_UNIT_MM = 0.254;
+// Same 10-unit clearance as catalogue symbols; the visible sheet body is inset.
+export const SHEET_PADDING = 10;
 export type SymbolData = {
     width: number; height: number; center: { x: number; y: number };
     pins: { num: string; name: string; x: number; y: number; signal_name: string; part: string }[];
@@ -59,12 +61,15 @@ export function sheetPorts(source: string): SheetPort[] {
 export function sheetSymbolData(ports: SheetPort[]): SymbolData {
     const left = ports.filter(p => p.direction !== 'output');
     const right = ports.filter(p => p.direction === 'output');
-    const width = Math.max(200, Math.ceil(Math.max(0, ...ports.map(p => p.name.length)) * 5 / 10) * 20 + 80);
-    const height = Math.max(100, (Math.max(left.length, right.length) + 1) * 20);
+    const textWidth = (side: SheetPort[]) => Math.max(0, ...side.map(p => [...p.name].length * 4));
+    const bodyWidth = Math.max(50, Math.ceil((textWidth(left) + textWidth(right) + 30) / 10) * 10);
+    const bodyHeight = Math.max(30, (Math.max(left.length, right.length) + 1) * 10);
+    const width = bodyWidth + SHEET_PADDING * 2;
+    const height = bodyHeight + SHEET_PADDING * 2;
     return {
-        width, height, center: { x: 0, y: 0 },
-        pins: [...left.map((p, i) => ({ p, x: 0, y: (i + 1) * 20 })),
-            ...right.map((p, i) => ({ p, x: width, y: (i + 1) * 20 }))]
+        width, height, center: { x: width / 2, y: height / 2 },
+        pins: [...left.map((p, i) => ({ p, x: 0, y: SHEET_PADDING + (i + 1) * 10 })),
+            ...right.map((p, i) => ({ p, x: width, y: SHEET_PADDING + (i + 1) * 10 }))]
             .map(({ p, x, y }) => ({ num: p.name, name: p.name, x, y, signal_name: '', part: '1' })),
     };
 }
