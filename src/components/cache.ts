@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import { CACHE_DIR } from '../utils/dirs';
 
 export function validatePartUuid(partUuid: string) {
@@ -35,7 +36,14 @@ export async function writeCacheJson(partUuid: string, filename: string, value: 
 
     try {
         await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, { flag: 'wx' });
-        await rename(temporary, target);
+        for (let attempt = 0; ; attempt++) {
+            try { await rename(temporary, target); break; }
+            catch (error) {
+                // Another MCP process can briefly hold the destination open on Windows.
+                if (process.platform !== 'win32' || !['EPERM', 'EACCES', 'EBUSY'].includes((error as NodeJS.ErrnoException).code ?? '') || attempt >= 5) throw error;
+                await delay(20 * 2 ** attempt);
+            }
+        }
     } finally {
         await rm(temporary, { force: true });
     }

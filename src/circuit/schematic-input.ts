@@ -2,7 +2,7 @@ import { CircuitMod } from '../types/circuit';
 import { getSchematicContext } from '../kicad/schematic-reader';
 import { assetSymbols, children, loadSchematicAssets, nativeProperty, registeredAsset, sheetFilePath } from '../kicad/schematic-assets';
 import { parseSExpression } from '../kicad/sexpr/ast';
-import { globalSignal, parseSignal } from '../kicad/scoped-signals';
+import { globalSignal, parseSignal, HierarchicalDirection } from '../kicad/scoped-signals';
 
 export async function prepareSchematicInput(path: string, input: CircuitMod) {
     const context = await getSchematicContext(path);
@@ -74,6 +74,26 @@ export async function prepareSchematicInput(path: string, input: CircuitMod) {
             }
         }
     }
+    const labelDirections = new Map<string, HierarchicalDirection>();
+    for (const pin of [...circuit.add_components.flatMap(c => c.pins), ...(circuit.external_connect ?? []),
+        ...circuit.add_reused_blocks.flatMap(b => b.ports)]) {
+        const ref = parseSignal(pin.signal_name);
+        if (ref.kind !== 'hier' || !ref.direction) continue;
+        if (ref.sheet === context.page.scope) {
+            const previous = labelDirections.get(ref.name);
+            if (previous && previous !== ref.direction) throw new Error(`conflicting hierarchical directions: ${ref.name}`);
+            labelDirections.set(ref.name, ref.direction);
+        } else {
+            const sheet = [...circuit.add_components, ...context.target.components].find(c => c.designator === ref.sheet);
+            const asset = sheet?.part_uuid ? context.assets.get(sheet.part_uuid) : undefined;
+            if (asset?.kind !== 'sheet') throw new Error(`hierarchical sheet is not on this page: ${ref.sheet}`);
+            const port = asset.ports.find(p => p.name === ref.name);
+            if (!port) throw new Error(`unknown sheet pin: ${ref.sheet}.${ref.name}`);
+            if (port.direction !== ref.direction) throw new Error(`hierarchical direction mismatch: ${ref.sheet}.${ref.name}; change its type on the defining sheet`);
+        }
+        // Direction is KiCad metadata. The layout server sees the existing net format.
+        pin.signal_name = `hier:${ref.sheet}:${ref.name}`;
+    }
     const connectPort = (signal: string, resolving: string[] = []): string => {
         const ref = parseSignal(signal);
         if (ref.kind !== 'hier' || ref.sheet === context.page.scope) return context.page.signalFor(signal);
@@ -120,5 +140,5 @@ export async function prepareSchematicInput(path: string, input: CircuitMod) {
     for (const designator of circuit.rm_components ?? []) if (!context.target.components.some(c =>
         c.designator === designator || c.designator.replace(/\.\d+$/, '') === designator)) throw new Error(`component not on target page: ${designator}`);
     const ids = [...context.target.components.map(c => c.part_uuid), ...circuit.add_components.map(c => c.part_uuid)].filter((id): id is string => Boolean(id));
-    return { ...context, circuit, symbols: assetSymbols(context.assets, ids) };
+    return { ...context, circuit, labelDirections, symbols: assetSymbols(context.assets, ids) };
 }

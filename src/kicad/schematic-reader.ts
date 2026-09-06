@@ -4,7 +4,8 @@ import { basename, dirname, extname, join, resolve } from 'node:path';
 import { XMLParser } from 'fast-xml-parser';
 import { ExplainCircuit } from '../types/circuit';
 import { TEMP_DIR } from '../utils/dirs';
-import { loadSchematicAssets } from './schematic-assets';
+import { children, loadSchematicAssets, nativeProperty, scalar } from './schematic-assets';
+import { parseSignal } from './scoped-signals';
 import { readPage } from './schematic-connectivity';
 import { runProcessChecked } from '../utils/process';
 import { getSupportedKicadCli } from './cli';
@@ -244,7 +245,17 @@ async function exportKicadXmlNetlist(path: string) {
 }
 
 export async function getSchematic(path: string) {
-    return (await getSchematicContext(path)).target;
+    const { target, page } = await getSchematicContext(path);
+    for (const component of target.components) for (const pin of component.pins) {
+        const ref = parseSignal(pin.signal_name);
+        if (ref.kind !== 'hier') continue;
+        const label = ref.sheet === page.scope ? page.labels.find(l => l.kind === 'hier' && l.name === ref.name) : undefined;
+        const sheet = page.sheets.find(s => nativeProperty(s, 'Sheetname') === ref.sheet);
+        const port = sheet && children(sheet, 'pin').find(p => sexprAtom(p[1]) === ref.name);
+        const direction = label ? scalar(label.node, 'shape', 'bidirectional') : port ? sexprAtom(port[2]) : 'bidirectional';
+        pin.signal_name = `hier_${direction}:${ref.sheet}:${ref.name}`;
+    }
+    return target;
 }
 
 export async function getProjectNetlist(path: string) {

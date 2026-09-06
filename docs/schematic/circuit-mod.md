@@ -79,9 +79,17 @@ that should receive an explicit KiCad no-connect marker.
 | `local:power:FB` | Local net in `power.kicad_sch` |
 | `hier:power:AIN` while editing `power.kicad_sch` | Hierarchical label `AIN` inside this file |
 | `hier:ADC_A:AIN` on a page containing `ADC_A` | Pin `AIN` of that sheet inclusion |
+| `hier_input:power:AIN` | Hierarchical input port `AIN` |
+| `hier_output:power:OUT` | Hierarchical output port `OUT` |
 | `global:NC` | Real net named `NC`, distinct from the no-connect marker |
 
 Copy scoped names from `get_schematic`. A file's scope is `ROOT` for the project root, otherwise its path relative to the project directory without `.kicad_sch`, using `/` (for example `blocks/adc`). A scope identifies the edited file definition; native instance paths keep repeated inclusions electrically separate. A file used outside a project is its own `ROOT`.
+
+Typed prefixes are `hier_input`, `hier_output`, `hier_bidirectional`, `hier_tri_state`, and `hier_passive`.
+`get_schematic` includes the native port type in hierarchical references. Set a type on the defining child sheet;
+all its parent inclusions receive the same type. A typed reference to a child port must match that port's type.
+Plain `hier:` remains valid: it preserves an existing type, or creates a bidirectional port. Types do not create
+separate nets. Conflicting types for one port in a request are rejected. The layout server receives the original untyped net format.
 
 The first two colons separate `local`/`hier`, the sheet, and the name. The rest of the string is the literal name, including `/`, `~`, or further colons. There is no additional escaping. Explicit `global:` consumes only its first colon.
 

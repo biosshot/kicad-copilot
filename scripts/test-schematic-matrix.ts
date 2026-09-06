@@ -9,6 +9,7 @@ import { getSupportedKicadCli } from '../src/kicad/cli';
 import { runProcessChecked } from '../src/utils/process';
 import { atom, findChild, parseSExpression, printSExpression } from '../src/kicad/sexpr/ast';
 import { children, nativeInstances, nativeProperty, position, scalar } from '../src/kicad/schematic-assets';
+import { planWireRemoval, wireDirectionsAtPoint } from '../src/kicad/wire-removal';
 import type { CircuitMod, ExplainCircuit } from '../src/types/circuit';
 
 const base = resolve('.test-output/schematic-matrix');
@@ -111,7 +112,20 @@ class Project {
         return uuid;
     }
     async pretty(page: string, blocks?: Record<string, string[]>) {
+        const before = nativeInstances(await readFile(this.path(page), 'utf8')).filter(i => !i.reference.startsWith('#'));
         await this.call('beautify_schematic', { path: this.path(page), blocks: blocks ?? { Circuit: this.pages.get(page)!.parts.map(p => p.ref) } });
+        const after = nativeInstances(await readFile(this.path(page), 'utf8'));
+        for (const old of before) {
+            const current = after.find(i => i.designator === old.designator)!;
+            assert.equal(scalar(current.instance, 'uuid'), scalar(old.instance, 'uuid'), 'beautify changed a component UUID');
+            for (const project of children(findChild(old.instance, 'instances') ?? [], 'project')) {
+                const updated = children(findChild(current.instance, 'instances') ?? [], 'project').find(p => atom(p[1]) === atom(project[1]));
+                for (const record of children(project, 'path')) {
+                    const match = children(updated ?? [], 'path').find(p => atom(p[1]) === atom(record[1]));
+                    assert.equal(scalar(match ?? [], 'reference'), scalar(record, 'reference'), 'beautify changed an instance reference');
+                }
+            }
+        }
     }
     async files() {
         return Object.fromEntries(await Promise.all([...this.pages.keys()].map(async page => [page, await readFile(this.path(page), 'utf8')])));
@@ -142,7 +156,7 @@ class Project {
         const signal = (page: string, instance: string, value: string) => {
             if (!value || value === 'NC') return undefined;
             if (value.startsWith('global:')) return `global:${value.slice(7)}`;
-            const match = /^(local|hier):([^:]+):(.+)$/.exec(value);
+            const match = /^(local|hier(?:_[a-z_]+)?):([^:]+):(.+)$/.exec(value);
             if (!match) return `global:${value}`;
             if (match[1] === 'local') { assert.equal(match[2], this.scope(page)); return `${instance}local:${match[3]}`; }
             return match[2] === this.scope(page) ? `${instance}port:${match[3]}` : `${instance}${match[2]}/port:${match[3]}`;
@@ -193,6 +207,12 @@ class Project {
         const layoutErrors: string[] = [];
         for (const [page, source] of Object.entries(await this.files())) {
             const root = parseSExpression(source);
+            const wires = planWireRemoval(source, [], []).retained;
+            const pointKey = (p: { x: number; y: number }) => `${p.x.toFixed(4)},${p.y.toFixed(4)}`;
+            const dots = new Set(children(root, 'junction').map(j => pointKey(position(j))));
+            for (const [key, p] of new Map(wires.flatMap(w => [w.start, w.end]).map(p => [pointKey(p), p]))) {
+                if (wireDirectionsAtPoint(p, wires) >= 3 && !dots.has(key)) layoutErrors.push(`${page}: missing junction at ${key}`);
+            }
             const paper = scalar(root, 'paper', 'A4');
             const papers: Record<string, [number, number]> = { A0: [1189, 841], A1: [841, 594], A2: [594, 420], A3: [420, 297], A4: [297, 210] };
             const [width, height] = papers[paper] ?? papers.A4;
@@ -276,6 +296,26 @@ async function scenario(name: string, run: (p: Project) => Promise<void>) {
 }
 
 try {
+    await scenario('buck-controller-vin', async p => {
+        await p.child('buck', 'main');
+        await p.modify('buck', [
+            add('U1', '2e6cd0fdb8d74fc78dfca927dec3a2fb', {
+                '1': 'hier_passive:buck:GND', '2': 'local:buck:SW', '3': 'hier_input:buck:VIN',
+                '4': 'local:buck:FB', '5': 'hier:buck:VIN', '6': 'local:buck:BOOT',
+            }, 'Controller', 'TPS54302DDCR'),
+            add('C1', ids.cap, { '1': 'hier:buck:VIN', '2': 'hier:buck:GND' }, 'Input'),
+            add('C2', ids.cap, { '1': 'local:buck:BOOT', '2': 'local:buck:SW' }, 'Bootstrap'),
+            add('C3', ids.cap, { '1': 'local:buck:FB', '2': 'hier:buck:GND' }, 'Feedback'),
+        ]);
+        await p.modify('main', [p.sheet('CH1', 'buck', { VIN: 'VIN', GND: 'GND' }),
+            p.sheet('CH2', 'buck', { VIN: 'VIN', GND: 'GND' })], { rm_components: ['buck'] });
+        await p.verify('01-created');
+        await p.pretty('buck'); await p.verify('02-full-rebuild');
+        await p.pretty('buck', { Controller: ['U1'] }); await p.verify('03-controller-only-rebuild');
+        const result = await p.call('get_schematic', { path: p.path('buck') });
+        assert.equal(result.components.find((c: any) => c.designator === 'U1').pins.find((p: any) => p.pin_number === '3').signal_name,
+            'hier_input:buck:VIN', 'controller VIN must never become an automatically named disconnected net');
+    });
     await scenario('nested-ldo', async p => {
         await p.child('power', 'main');
         await p.ldo('ldo', 'power');

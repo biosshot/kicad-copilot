@@ -7,7 +7,7 @@ import { postJson } from '../utils/server';
 import { targetCircuitAssembly } from './target-assembly';
 import { prepareSchematicInput } from './schematic-input';
 import { withSchematicChanges } from '../kicad/schematic-writer';
-import { synchronizeHierarchy } from '../kicad/schematic-hierarchy';
+import { setHierarchicalLabelDirections, synchronizeHierarchy } from '../kicad/schematic-hierarchy';
 import { projectConnections, SchematicPage, validateKiCadConnectivity, validateRetainedConnections } from '../kicad/schematic-connectivity';
 import { readFile } from 'node:fs/promises';
 import { parseSignal } from '../kicad/scoped-signals';
@@ -128,6 +128,7 @@ export async function extractCircuit(
             if (applyResult === 'unchanged' && changesComponents) {
                 throw new Error('circuit assembly did not change the schematic');
             }
+            await setHierarchicalLabelDirections(path, context.labelDirections);
             const changedInterfaces = await synchronizeHierarchy(context.rootPath);
             // Reuse component placement when a shared sheet gains or changes ports.
             // Merely appending pins leaves long names and new ports inside old wiring.

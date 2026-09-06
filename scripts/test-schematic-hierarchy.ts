@@ -12,7 +12,7 @@ import { projectConnections } from '../src/kicad/schematic-connectivity';
 import { filePartUuid, nativeInstances, children, scalar, nativeProperty, sheetSymbolData, position, SheetAsset } from '../src/kicad/schematic-assets';
 import { atom, parseSExpression } from '../src/kicad/sexpr/ast';
 import { placeLocalSymbol } from '../src/kicad/local-symbol-writer';
-import { parseSignal } from '../src/kicad/scoped-signals';
+import { HIERARCHICAL_DIRECTIONS, globalSignal, parseSignal } from '../src/kicad/scoped-signals';
 import { schematicTemplate } from '../src/kicad/schematic-template';
 import { createDocument } from '../src/kicad/create-document';
 import type { CircuitAssembly, CircuitMod } from '../src/types/circuit';
@@ -149,7 +149,7 @@ try {
     assert.ok((await getSchematic(nested)).components.some(c => c.designator === 'ADC_C'));
     const expose = mod();
     expose.external_rm_connect = [{ designator: 'R1', pin_number: '2' }];
-    expose.external_connect = [{ designator: 'R1', pin_number: '2', signal_name: 'hier:adc:OUT/SENSE:A~B' }];
+    expose.external_connect = [{ designator: 'R1', pin_number: '2', signal_name: 'hier_output:adc:OUT/SENSE:A~B' }];
     await extractCircuit(adc, expose);
     assert.ok((await getSchematic(main)).components.find(c => c.designator === 'ADC_B')!.pins.some(p => p.name === 'OUT/SENSE:A~B'));
     assert.ok((await getSchematic(nested)).components.find(c => c.designator === 'ADC_C')!.pins.some(p => p.name === 'OUT/SENSE:A~B'));
@@ -161,6 +161,38 @@ try {
     const outputSignal = connectedParent.components.find(c => c.designator === 'ADC_B')!.pins.find(p => p.name === 'OUT/SENSE:A~B')!.signal_name;
     assert.ok(outputSignal);
     assert.equal(connectedParent.components.find(c => c.designator === 'R20')!.pins.find(p => String(p.pin_number) === '1')!.signal_name, outputSignal);
+    for (const direction of HIERARCHICAL_DIRECTIONS) {
+        const signal = `hier_${direction}:adc:OUT/SENSE:A~B`;
+        assert.deepEqual(parseSignal(signal), { kind: 'hier', sheet: 'adc', name: 'OUT/SENSE:A~B', direction });
+        const change = mod();
+        change.external_connect = [{ designator: 'R1', pin_number: '2', signal_name: signal }];
+        await extractCircuit(adc, change);
+        assert.equal((await getSchematic(adc)).components.find(c => c.designator === 'R1')!.pins.find(p => p.pin_number === '2')!.signal_name, signal);
+        for (const parent of [main, nested]) {
+            const root = parseSExpression(await readFile(parent, 'utf8'));
+            for (const sheet of children(root, 'sheet').filter(s => nativeProperty(s, 'Sheetfile') === 'adc.kicad_sch')) {
+                assert.equal(atom(children(sheet, 'pin').find(p => atom(p[1]) === 'OUT/SENSE:A~B')![2]), direction);
+            }
+        }
+        const prepared = await prepareSchematicInput(adc, change);
+        assert.equal(prepared.circuit.external_connect![0].signal_name, 'hier:adc:OUT/SENSE:A~B');
+    }
+    const preserveType = mod();
+    preserveType.external_connect = [{ designator: 'R1', pin_number: '2', signal_name: 'hier:adc:OUT/SENSE:A~B' }];
+    await extractCircuit(adc, preserveType);
+    assert.equal((await getSchematic(adc)).components.find(c => c.designator === 'R1')!.pins.find(p => p.pin_number === '2')!.signal_name,
+        'hier_passive:adc:OUT/SENSE:A~B');
+    const beforeTypeErrors = await Promise.all([main, adc, nested].map(p => readFile(p, 'utf8')));
+    await assert.rejects(extractCircuit(main, mod([part('BAD_TYPE', native.part_uuid!, '1', 'hier_input:ADC_B:OUT/SENSE:A~B')])), /direction mismatch/);
+    const conflictingTypes = mod();
+    conflictingTypes.external_connect = [
+        { designator: 'R1', pin_number: '1', signal_name: 'hier_input:adc:OUT/SENSE:A~B' },
+        { designator: 'R1', pin_number: '2', signal_name: 'hier_output:adc:OUT/SENSE:A~B' },
+    ];
+    await assert.rejects(extractCircuit(adc, conflictingTypes), /conflicting hierarchical directions/);
+    assert.deepEqual(await Promise.all([main, adc, nested].map(p => readFile(p, 'utf8'))), beforeTypeErrors);
+    assert.throws(() => parseSignal('hier_unknown:adc:AIN'), /invalid hierarchical direction/);
+    assert.equal(globalSignal('hier_input:adc:AIN'), 'global:hier_input:adc:AIN');
     assert.deepEqual(parseSignal('local:ROOT:VIN/SENSE:A~B'), { kind: 'local', sheet: 'ROOT', name: 'VIN/SENSE:A~B' });
     assert.deepEqual(parseSignal('global:NC'), { kind: 'global', name: 'NC' });
     assert.equal(parseSignal('NC').kind, 'nc');

@@ -18,7 +18,9 @@ import { getSupportedKicadCli } from '../src/kicad/cli';
 import { createDocument } from '../src/kicad/create-document';
 import { getProjectInfo } from '../src/kicad/project-tree';
 import { getSchematic, getSchematicContext } from '../src/kicad/schematic-reader';
-import { parseSExpression, printSExpression } from '../src/kicad/sexpr/ast';
+import { atom, findChild, parseSExpression, printSExpression, token } from '../src/kicad/sexpr/ast';
+import { children, nativeInstances, position } from '../src/kicad/schematic-assets';
+import { layoutSymbolFields } from '../src/kicad/schematic-field-layout';
 import { findLists } from '../src/kicad/sexpr/scan';
 import { normalizedComponentSymbol } from '../src/kicad/symbol';
 import {
@@ -92,11 +94,10 @@ function expectComponent(
     return actual;
 }
 
-function placedObjectUuids(source: string) {
+function routingObjectUuids(source: string) {
     const output = new Set<string>();
-    for (const head of ['symbol', 'wire', 'junction', 'label', 'global_label', 'hierarchical_label', 'no_connect']) {
+    for (const head of ['wire', 'junction', 'label', 'global_label', 'hierarchical_label', 'no_connect']) {
         for (const range of findLists(source, head)) {
-            if (head === 'symbol' && !range.text.includes('(lib_id ')) continue;
             const uuid = range.text.match(/\(uuid\s+"([^"]+)"\)/)?.[1];
             if (uuid) output.add(uuid);
         }
@@ -550,6 +551,28 @@ async function main() {
                 + (reference.y - anchor.y) * (value.y - anchor.y);
             expect(dot < 0, 'component fields: Reference and Value were forced onto the same side');
         });
+        await runScenario('overlapping rotated fields move together without changing connections', async () => {
+            const source = parseSExpression(await readFile(join(root, 'component-fields', 'test.kicad_sch'), 'utf8'));
+            const instance = children(source, 'symbol')[0], anchor = position(instance);
+            for (const field of children(instance, 'property').filter(p => ['Reference', 'Value'].includes(atom(p[1]) ?? ''))) {
+                findChild(field, 'at')!.splice(1, 3, token(String(anchor.x)), token(String(anchor.y)), token('90'));
+            }
+            const crowded = printSExpression(source);
+            const result = layoutSymbolFields(crowded, new Set(['R95']), [], { x: 297, y: 210 });
+            expect(result !== crowded, 'colliding fields were not moved');
+            const fields = children(nativeInstances(result)[0].instance, 'property').filter(p => ['Reference', 'Value'].includes(atom(p[1]) ?? ''));
+            const points = fields.map(p => position(p));
+            expect(Math.abs(points[0].x - points[1].x) < .01 && Math.abs(points[0].y - points[1].y) >= 2.5,
+                'reference and value should remain grouped and readable');
+            expect(fields.every(p => atom(findChild(p, 'at')?.[3]) === '90'), 'rotated symbol fields must render horizontally');
+            const withoutFields = (text: string) => {
+                const root = parseSExpression(text);
+                for (const symbol of children(root, 'symbol')) for (const field of children(symbol, 'property')
+                    .filter(p => ['Reference', 'Value'].includes(atom(p[1]) ?? ''))) symbol.splice(symbol.indexOf(field), 1);
+                return printSExpression(root);
+            };
+            expect(withoutFields(result) === withoutFields(crowded), 'field layout changed electrical or library data');
+        });
         const fixture = await copySchematic(blank, join(root, 'fixture'));
         await extractCircuit(fixture, modification({
             add_components: [resistor('R1'), resistor('R2')],
@@ -718,15 +741,20 @@ async function main() {
             const initialErc = await ercReport(path);
             expect(!/\[(lib_symbol_issues|footprint_link_issues)\]/.test(initialErc),
                 'project library: ERC still reports missing symbol or footprint libraries');
-            const oldObjects = placedObjectUuids(await readFile(path, 'utf8'));
+            const oldObjects = routingObjectUuids(await readFile(path, 'utf8'));
             expect(oldObjects.size > 2, 'beautify topology: connected fixture has no physical topology');
 
             await beautifySchematic(path, { Divider: ['R10', 'R11'] });
             const beautifiedSource = await readFile(path, 'utf8');
-            const currentObjects = placedObjectUuids(beautifiedSource);
+            const currentObjects = routingObjectUuids(beautifiedSource);
             const leftovers = [...oldObjects].filter((uuid) => currentObjects.has(uuid));
             expect(leftovers.length === 0,
                 `beautify topology: ${leftovers.length} old physical objects remain`);
+            for (const old of nativeInstances(initialSource).filter(i => !i.reference.startsWith('#'))) {
+                const current = nativeInstances(beautifiedSource).find(i => i.designator === old.designator)!;
+                expect(atom(findChild(current.instance, 'uuid')?.[1]) === atom(findChild(old.instance, 'uuid')?.[1]),
+                    `beautify changed ${old.designator} UUID`);
+            }
             expectSignal(await getSchematic(path), 'R10', '2', 'MID');
             expectSignal(await getSchematic(path), 'R11', '1', 'MID');
 

@@ -5,6 +5,7 @@ import { children, nativeAsset, nativeProperty, position, scalar, SchematicAsset
 import { placeLocalSymbol } from './local-symbol-writer';
 import { parseSignal } from './scoped-signals';
 import { readPage } from './schematic-connectivity';
+import { layoutSymbolFields } from './schematic-field-layout';
 import { ConvertedComponent, convertComponent } from '../components/converter';
 import { getPowerSymbol } from '../components/kicad-library';
 import { projectFootprintId, writeProjectLibraries } from '../components/project-library';
@@ -1200,7 +1201,7 @@ export async function applyCircuitAssembly(
                     const converted = realAssets.get(component.part_uuid) as ConvertedComponent | undefined;
                     const embedded = embeddedAssets.get(component.part_uuid);
                     if (!converted || !embedded) throw new Error(`component conversion missing: ${component.designator}`);
-                    objects.push(symbolInstance({
+                    const instance = parseSExpression(symbolInstance({
                         embedded,
                         component,
                         anchor,
@@ -1208,6 +1209,16 @@ export async function applyCircuitAssembly(
                         documentUuid,
                         rotation,
                     }));
+                    const original = removed.find(item => item.reference === exact);
+                    if (original && inputByDesignator.get(exact)?.part_uuid === component.part_uuid) {
+                        const previous = parseSExpression(original.range.text);
+                        for (const head of ['uuid', 'instances']) {
+                            const saved = findChild(previous, head), current = findChild(instance, head);
+                            if (saved && current) instance[instance.indexOf(current)] = saved;
+                            else if (saved) instance.push(saved);
+                        }
+                    }
+                    objects.push(printSExpression(instance));
                     const requestedPins = new Set(component.pins.map((pin) => String(pin.pin_number)));
                     for (const pin of uniquePins(embedded.pins).values()) {
                         if (!requestedPins.has(pin.number)) continue;
@@ -1265,9 +1276,10 @@ export async function applyCircuitAssembly(
         // Reference/value text and sheet captions also occupy drawing space.
         const captionRects: Rect[] = [];
         const propertyRects: Rect[] = [];
+        const physicalPinPoints = [...placed.filter(c => c.kind === 'real').flatMap(c => [...c.pins.values()]),
+            ...retained.filter(c => !c.service).flatMap(c => [...c.pins.values()])];
         // Pin numbers extend outside the symbol body. Keep net text off them too.
-        for (const point of [...placed.filter(c => c.kind === 'real').flatMap(c => [...c.pins.values()]),
-            ...retained.filter(c => !c.service).flatMap(c => [...c.pins.values()])]) {
+        for (const point of physicalPinPoints) {
             captionRects.push({ left: point.x - 1.6, right: point.x + 1.6, top: point.y - 1.6, bottom: point.y + 1.6 });
         }
         for (const text of [...objects, ...retained.filter(c => !removedServices.has(c)).map(c => c.range.text)]) {
@@ -1277,7 +1289,8 @@ export async function applyCircuitAssembly(
                 if (!fx || scalar(p, 'hide') === 'yes' || scalar(fx, 'hide') === 'yes' || fx.some(item => atom(item) === 'hide')) continue;
                 const font = findChild(fx, 'font'), size = font ? position(font, 'size') : { x: 1.27, y: 1.27 };
                 const name = atom(p[2]) ?? '', caption = atom(p[1]) === 'Sheetfile' ? `File: ${name}` : name;
-                const vertical = Math.abs(Number(atom(findChild(p, 'at')?.[3]) ?? 0)) % 180 === 90;
+                const rotatedSymbol = listHead(node) === 'symbol' && Math.abs(Number(atom(findChild(node, 'at')?.[3]) ?? 0)) % 180 === 90;
+                const vertical = (Math.abs(Number(atom(findChild(p, 'at')?.[3]) ?? 0)) % 180 === 90) !== rotatedSymbol;
                 const w = caption.length * size.x * .8, h = size.y * 1.5, at = position(p);
                 propertyRects.push({ left: at.x - (vertical ? h : w) / 2, right: at.x + (vertical ? h : w) / 2,
                     top: at.y - (vertical ? w : h) / 2, bottom: at.y + (vertical ? w : h) / 2 });
@@ -1288,6 +1301,7 @@ export async function applyCircuitAssembly(
         const generatedSegments: RoutedSegment[] = [...sheetLeads];
         const requestedJunctions: Point[] = [];
         for (const edge of assembly.edges) {
+            const edgeSignal = [...edge.sources, ...edge.targets].map(shape => edgeSignals.get(shape)).find(Boolean);
             const segmentStart = generatedSegments.length;
             let edgeApplied = false;
             let edgeLabel: { signal: string; point: Point } | undefined;
@@ -1321,7 +1335,7 @@ export async function applyCircuitAssembly(
                     );
                 }
                 const signal = (section.incomingShape && edgeSignals.get(section.incomingShape))
-                    || (section.outgoingShape && edgeSignals.get(section.outgoingShape));
+                    || (section.outgoingShape && edgeSignals.get(section.outgoingShape)) || edgeSignal;
                 try {
                     const points = routedSectionPoints(section, start, end, placement);
                     for (let index = 1; index < points.length; index += 1) {
@@ -1345,7 +1359,22 @@ export async function applyCircuitAssembly(
             }
             if (edgeApplied && edgeLabel) edgeLabels.push({ ...edgeLabel, segments: generatedSegments.slice(segmentStart) });
         }
-        const normalizedSegments = normalizedNetSegments(generatedSegments);
+        // Correcting server endpoints to retained KiCad pins can route through a
+        // different retained net. Use the existing named-connection fallback there.
+        const unsafeSignals = new Set<string | undefined>();
+        for (const segment of generatedSegments) for (const wire of wirePlan.retained) {
+            const existingSignal = localContext.page.groups.get(localContext.page.groupAt(wire.start));
+            if (segment.signal && existingSignal === segment.signal) continue;
+            if (perpendicularIntersection(segment, wire) || [segment.start, segment.end].some(p => pointTouchesWire(p, wire))
+                || [wire.start, wire.end].some(p => pointOnSegment(p, segment.start, segment.end))) unsafeSignals.add(segment.signal);
+        }
+        const unsafeMarkerPoints = new Set(namedMarkers.filter(m => unsafeSignals.has(m.signal)).map(m => pointKey(m.point)));
+        for (let i = objects.length - 1; i >= 0; i--) {
+            const node = parseSExpression(objects[i]);
+            if (unsafeMarkerPoints.has(pointKey(position(node))) && (['label', 'global_label', 'hierarchical_label'].includes(listHead(node) ?? '')
+                || (listHead(node) === 'symbol' && nativeProperty(node, 'Reference').startsWith('#')))) objects.splice(i, 1);
+        }
+        const normalizedSegments = normalizedNetSegments(generatedSegments.filter(s => sheetLeads.includes(s) || !unsafeSignals.has(s.signal)));
         for (const segment of normalizedSegments) objects.push(wireSegment(segment.start, segment.end));
         // One name per connected wire group. In particular, do not put a second
         // ground symbol on the component pin when the route already ends in one.
@@ -1372,6 +1401,7 @@ export async function applyCircuitAssembly(
         const pinXs = [...edgePins.values()].map(p => p.x);
         const centerX = (Math.min(...pinXs) + Math.max(...pinXs)) / 2;
         for (const label of edgeLabels) {
+            if (unsafeSignals.has(label.signal)) continue;
             if (namedRoutes.has(routeKey(label.signal, label.point))) continue;
             const connected = new Set<string>();
             const pending = [routeKey(label.signal, label.point)];
@@ -1407,12 +1437,12 @@ export async function applyCircuitAssembly(
                         top: Math.min(s.start.y, s.end.y) - .1, bottom: Math.max(s.start.y, s.end.y) + .1,
                     })).length;
             };
-            const point = candidates.filter(point => !normalizedSegments.some(segment => segment.signal !== label.signal
+            const point = candidates.filter(point => !physicalPinPoints.some(pin => Math.hypot(pin.x - point.x, pin.y - point.y) < 2.54 - 1e-6))
+                .filter(point => !normalizedSegments.some(segment => segment.signal !== label.signal
                 && pointOnSegment(point, segment.start, segment.end))).sort((a, b) => score(a) - score(b))[0];
-            if (!point) throw new Error(`no safe label position on routed net: ${label.signal}`);
             // A long label may not fit on any wire segment. Give the connected
             // pin a short branch below, instead of printing over a component.
-            if (score(point) > 0) continue;
+            if (!point || score(point) > 0) continue;
             objects.push(await namedLabel(label.signal, point, hierarchical && point.x < centerX ? 180 : 0));
             markNamedRoute({ signal: label.signal, point });
         }
@@ -1562,6 +1592,7 @@ export async function applyCircuitAssembly(
                                     y: snapped(elbow.y + (vector.x !== 0 ? offset : 0)),
                                 };
                                 const terminal = { x: snapped(turn.x + vector.x * extension), y: snapped(turn.y + vector.y * extension) };
+                                if (physicalPinPoints.some(pin => Math.hypot(pin.x - terminal.x, pin.y - terminal.y) < 2.54 - 1e-6)) continue;
                                 const points = [pin, elbow, turn, terminal];
                                 if (points.some((point) => point.x < 0 || point.y < 0
                                     || point.x > paper.x || point.y > paper.y)) continue;
@@ -1593,7 +1624,9 @@ export async function applyCircuitAssembly(
                                     && intersects(segmentRect(s), r)))) continue;
 
                                 const preferred = port && !extension ? (vector.x !== 0 ? (offset < 0 ? 90 : 270) : (offset < 0 ? 180 : 0)) : angle;
-                                const labelAngles = [preferred, normalizeRotation(preferred + 90), normalizeRotation(preferred - 90)].filter(candidate => {
+                                const ref = parseSignal(signal);
+                                const horizontalFirst = ref.kind === 'hier' && ref.sheet === localContext.page.scope ? [angle === 180 ? 180 : 0, angle === 180 ? 0 : 180] : [];
+                                const labelAngles = [...new Set([...horizontalFirst, preferred, normalizeRotation(preferred + 90), normalizeRotation(preferred - 90)])].filter(candidate => {
                                     const text = labelRect(signal, terminal, candidate);
                                     return text.left >= 10 && text.top >= 10 && text.right <= paper.x - 10 && text.bottom <= paper.y - 10;
                                 });
@@ -1821,6 +1854,43 @@ export async function applyCircuitAssembly(
         const dead = planWireRemoval(candidate, leaves, protectedPoints).removed
             .filter(w => generatedWires.has(scalar(parseSExpression(w.range.text), 'uuid')));
         candidate = applySourceEdits(candidate, dead.map(w => ({ start: w.range.start, end: w.range.end, text: '' })));
+        // A moved interface label used to protect its old lead during removal.
+        // Once the new labels exist, trim abandoned leads from the old terminals.
+        candidate = applySourceEdits(candidate, redundantJunctionRanges(candidate).map(r => ({ start: r.start, end: r.end, text: '' })));
+        const rebuiltPage = readPage(candidate, path, localContext.rootPath, localContext.assets);
+        const terminals = [...rebuiltPage.pins.map(p => p.point), ...rebuiltPage.labels.map(l => l.point)];
+        const remainingWires = planWireRemoval(candidate, [], []).retained;
+        const abandoned = [...parsedDisconnectPoints, ...interfacePoints,
+            ...localContext.page.labels.map(l => l.point),
+            ...wirePlan.removed.flatMap(w => [w.start, w.end]),
+            ...allExisting.filter(c => c.service).flatMap(c => [...c.pins.values()])].filter(p =>
+            !terminals.some(t => pointKey(t) === pointKey(p)) && wireDirectionsAtPoint(p, remainingWires) === 1);
+        const abandonedWires = planWireRemoval(candidate, abandoned, terminals).removed;
+        candidate = applySourceEdits(candidate, abandonedWires.map(w => ({ start: w.range.start, end: w.range.end, text: '' })));
+        // Named fallback branches are added after the server's junction pass.
+        // Add dots from the final geometry only when all crossing wires already
+        // belong to one electrical group; crossing unrelated nets stays isolated.
+        const finalPage = readPage(candidate, path, localContext.rootPath, localContext.assets);
+        let finalWires = planWireRemoval(candidate, [], []).retained;
+        const overlapping = finalWires.filter(w => finalWires.some(other => other !== w
+            && finalPage.groupAt(w.start) === finalPage.groupAt(other.start) && collinearSegmentsOverlap(w, other)));
+        if (overlapping.length) {
+            const segments = normalizedNetSegments(overlapping.map(w => ({ start: w.start, end: w.end, signal: finalPage.groupAt(w.start) })));
+            candidate = applySourceEdits(candidate, [
+                ...overlapping.map(w => ({ start: w.range.start, end: w.range.end, text: '' })),
+                { start: candidate.lastIndexOf(')'), end: candidate.lastIndexOf(')'), text: segments.map(s => wireSegment(s.start, s.end)).join('\n') + '\n' },
+            ]);
+            finalWires = planWireRemoval(candidate, [], []).retained;
+        }
+        const finalSegments = finalWires.map(w => ({ start: w.start, end: w.end, signal: finalPage.groupAt(w.start) }));
+        const junctionKeys = new Set(findLists(candidate, 'junction').map(rangeAtPoint).filter((p): p is Point => Boolean(p)).map(pointKey));
+        const missingJunctions = calculatedJunctions(normalizedNetSegments(finalSegments)).filter(p => !junctionKeys.has(pointKey(p))
+            && new Set(finalSegments.filter(s => pointOnSegment(p, s.start, s.end)).map(s => s.signal)).size === 1);
+        if (missingJunctions.length) {
+            const end = candidate.lastIndexOf(')');
+            candidate = applySourceEdits(candidate, [{ start: end, end, text: missingJunctions.map(junction).join('\n') + '\n' }]);
+        }
+        candidate = layoutSymbolFields(candidate, new Set(placed.filter(c => c.kind === 'real').map(c => c.source.designator)), labelRects, paper);
         return applySourceEdits(candidate, redundantJunctionRanges(candidate).map((range) => ({
             start: range.start,
             end: range.end,

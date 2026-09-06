@@ -4,6 +4,24 @@ import { atom, findChild, parseSExpression, printSExpression, SExpression, token
 import { children, loadSchematicAssets, nativeProperty, position, scalar, sheetFilePath, sheetPorts } from './schematic-assets';
 import { mutateSchematic } from './schematic-writer';
 import { quoteSExpression as q } from './sexpr/scan';
+import { HierarchicalDirection } from './scoped-signals';
+
+export async function setHierarchicalLabelDirections(path: string, directions: Map<string, HierarchicalDirection>) {
+    if (!directions.size) return;
+    await mutateSchematic(path, source => {
+        const root = parseSExpression(source);
+        let changed = false;
+        for (const [name, direction] of directions) {
+            const labels = children(root, 'hierarchical_label').filter(l => atom(l[1]) === name);
+            if (!labels.length) throw new Error(`hierarchical port was not created: ${name}`);
+            for (const label of labels) {
+                const shape = findChild(label, 'shape')!;
+                if (atom(shape[1]) !== direction) { shape[1] = token(direction); changed = true; }
+            }
+        }
+        return changed ? `${printSExpression(root)}\n` : source;
+    });
+}
 
 // Only instance metadata and interfaces are synchronized. Shared sheet contents stay shared.
 export async function synchronizeHierarchy(rootPath: string) {

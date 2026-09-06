@@ -5,7 +5,7 @@ import { ReusedCategory, ReusedTags } from './reused';
 export const PinSchema = () => z.object({
     pin_number: z.union([z.number(), z.string()]).describe('Pin number.'),
     name: z.string().describe('Pin name (e.g., "VCC").'),
-    signal_name: z.string().describe('Signal reference: bare name or global:<name>, local:<file-scope>:<name>, hier:<file-scope-or-sheet-designator>:<port>. Copy scoped references from get_schematic; foreign local scopes are errors. Empty means disconnected; NC is a no-connect marker; global:NC is a net.'),
+    signal_name: z.string().describe('Signal reference: bare/global:<name>, local:<file-scope>:<name>, hier:<scope-or-sheet>:<port>. Optional typed prefixes: hier_input, hier_output, hier_bidirectional, hier_tri_state, hier_passive. Set port type on its defining sheet; a typed child-port reference must match its type. Plain hier preserves the existing type (new ports default to bidirectional). Copy references from get_schematic; foreign local scopes are errors. Empty means disconnected; NC is a no-connect marker; global:NC is a net.'),
 });
 
 export const BaseComponentSchema = () => z.object({
@@ -133,7 +133,7 @@ export const CircuitAssemblyStruct = () => z.object({
 const ExplainPinSchema = () => z.object({
     pin_number: z.union([z.number(), z.string()]).describe('Pin number.'),
     name: z.string().describe('Pin name (e.g., "VCC").'),
-    signal_name: z.string().describe('Signal reference: bare name or global:<name>, local:<file-scope>:<name>, hier:<file-scope-or-sheet-designator>:<port>. Copy scoped references from get_schematic; foreign local scopes are errors. Empty means disconnected; NC is a no-connect marker; global:NC is a net.'),
+    signal_name: z.string().describe('Signal reference: bare/global:<name>, local:<file-scope>:<name>, hier:<scope-or-sheet>:<port>. Optional typed prefixes: hier_input, hier_output, hier_bidirectional, hier_tri_state, hier_passive. Set port type on its defining sheet; a typed child-port reference must match its type. Plain hier preserves the existing type (new ports default to bidirectional). Copy references from get_schematic; foreign local scopes are errors. Empty means disconnected; NC is a no-connect marker; global:NC is a net.'),
 });
 
 export const ExplainComponentSchema = () => z.object({
