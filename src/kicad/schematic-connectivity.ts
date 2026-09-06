@@ -90,8 +90,10 @@ export function readPage(source: string, path: string, rootPath: string, assets:
     }
     const junctions = children(root, 'junction').map(j => position(j));
     points.push(...pins.map(p => p.point), ...labels.map(l => l.point), ...junctions);
-    for (const point of points) {
-        graph.find(key(point));
+    for (const point of points) graph.find(key(point));
+    // Wire endpoints and pins connect by their shared coordinate. A wire passing
+    // through another pin/end does not connect in KiCad without a junction.
+    for (const point of [...junctions, ...labels.map(l => l.point)]) {
         for (const [a, b] of wires) if (onSegment(point, a, b)) graph.join(key(point), key(a));
     }
     // Equal label text connects on a page even when the label types differ.

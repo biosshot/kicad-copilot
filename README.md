@@ -256,6 +256,20 @@ Other major versions are rejected because their file formats and CLI behavior ar
 
 ## Development
 
+Call the actual MCP tools from a terminal after `npm run build`:
+
+```sh
+node dist/cli.js list
+node dist/cli.js call get_schematic @request.json
+node dist/cli.js batch @calls.json
+```
+
+`request.json` contains the tool arguments, for example `{ "path": "D:/board/main.kicad_sch" }`.
+`calls.json` contains an array of `{ "name": "get_schematic", "arguments": { "path": "..." } }` requests.
+Use `-` instead of `@file.json` to read JSON from stdin. A batch uses one stdio MCP session and stops on the first error. Results are MCP JSON; tool errors produce exit code 1. Installed packages expose the same commands as `kicad-copilot-cli`.
+
+Run `npm run test:mcp-ldo` to reproduce creation and beautification of two reusable AP2112 LDO sheets connected to three catalogue headers. It uses the configured Copilot Server and native KiCad CLI, saves requests/results under `.test-output/mcp-ldo`, and also verifies local sheet lookup after an MCP restart with an unreachable server.
+
 ```bash
 git clone https://github.com/biosshot/kicad-copilot.git
 cd kicad-copilot

@@ -10,7 +10,8 @@
     "type": "git"
   },
   "bin": {
-    "kicad-copilot-mcp": "./dist/index.js"
+    "kicad-copilot-mcp": "./dist/index.js",
+    "kicad-copilot-cli": "./dist/cli.js"
   },
   "exports": {
     ".": "./dist/index.js"
@@ -24,6 +25,7 @@
   ],
   "scripts": {
     "build": "tsup",
+    "mcp": "node dist/cli.js",
     "clean": "rimraf dist",
     "typecheck": "tsc --noEmit",
     "inspect": "npm run build && npx @modelcontextprotocol/inspector node dist/index.js",
@@ -37,6 +39,7 @@
     "test:routing-integration": "npm run build && node dist/test-routing-integration.js",
     "test:analysis": "npm run build && node dist/test-analysis.js",
     "test:schematic-hierarchy": "npm run build && node dist/test-schematic-hierarchy.js",
+    "test:mcp-ldo": "npm run build && node dist/test-mcp-ldo.js",
     "check": "npm run typecheck && npm run build",
     "prepack": "npm run build",
     "start": "node dist/index.js"

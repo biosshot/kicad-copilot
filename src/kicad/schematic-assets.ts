@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { dirname, relative, resolve } from 'node:path';
 import { atom, findChild, isSExpressionList, listHead, parseSExpression, printSExpression, SExpression, visitSExpression } from './sexpr/ast';
 import { librarySymbolPins, LibraryPin } from './symbol';
+import { readCacheJson, writeCacheJson } from '../components/cache';
 
 export const SYMBOL_UNIT_MM = 0.254;
 export type SymbolData = {
@@ -18,7 +19,8 @@ export type NativeAsset = {
     path?: string;
 };
 export type SchematicAsset = SheetAsset | NativeAsset;
-const knownAssets = new Map<string, SchematicAsset>();
+type AssetSource = { path: string; rootPath: string };
+const knownSources = new Map<string, AssetSource>();
 
 export function children(node: SExpression[], head: string) {
     return node.filter((item): item is SExpression[] => isSExpressionList(item) && listHead(item) === head);
@@ -150,18 +152,25 @@ export async function loadSchematicAssets(rootPath: string, additional: string[]
     };
     await walk(rootPath, new Set());
     for (const path of additional) await walk(path, new Set());
-    for (const [id, asset] of assets) knownAssets.set(id, asset);
+    for (const [id, asset] of assets) if (asset.path) {
+        const source = { path: asset.path, rootPath: resolve(rootPath) };
+        const previous = knownSources.get(id);
+        if (previous?.path === source.path && previous.rootPath === source.rootPath) continue;
+        await writeCacheJson(id, 'schematic-source.json', source);
+        knownSources.set(id, source);
+    }
     return { assets, files, rootPath: resolve(rootPath), projectDirectory };
 }
 export async function registeredAsset(partUuid: string) {
-    const cached = knownAssets.get(partUuid);
-    if (cached?.path) {
-        const refreshed = await loadSchematicAssets(cached.path);
-        const asset = refreshed.assets.get(partUuid);
-        if (!asset) throw new Error('local asset changed; refresh get_project_info or get_schematic');
-        return asset;
-    }
-    return cached;
+    if (!/^[0-9a-f]{32}$/i.test(partUuid)) return undefined;
+    partUuid = partUuid.toLowerCase();
+    const source = knownSources.get(partUuid) ?? await readCacheJson<AssetSource>(partUuid, 'schematic-source.json');
+    if (!source) return undefined;
+    // The source remains local across MCP restarts; never send a known local UUID to the catalogue.
+    const refreshed = await loadSchematicAssets(source.rootPath, [source.path]);
+    const asset = refreshed.assets.get(partUuid);
+    if (!asset) throw new Error('local asset changed; refresh get_project_info or get_schematic');
+    return asset;
 }
 export function assetSymbols(assets: Map<string, SchematicAsset>, ids: Iterable<string>) {
     const result: Record<string, SymbolData> = {};

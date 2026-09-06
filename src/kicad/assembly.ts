@@ -888,7 +888,7 @@ export async function applyCircuitAssembly(
         }
         const retainedReal = retained.filter((item) => !item.service);
         const interfacePoints = findLists(source, 'hierarchical_label').map(rangeAtPoint).filter((p): p is Point => Boolean(p));
-        const fullPhysicalRebuild = removed.length > 0 && retainedReal.length === 0 && !interfacePoints.length;
+        const fullPhysicalRebuild = removed.length > 0 && retainedReal.length === 0;
         const edits: SourceEdit[] = removed.map(({ range }) => ({
             start: range.start,
             end: range.end,
@@ -978,9 +978,18 @@ export async function applyCircuitAssembly(
             }
         }
         for (const head of ['no_connect', 'global_label', 'hierarchical_label', 'label']) {
-            if (head === 'hierarchical_label') continue;
             for (const range of findLists(source, head)) {
                 const point = rangeAtPoint(range);
+                // A kept interface label at an old coordinate can short a newly routed
+                // net. Move connected labels with the rebuilt circuit; restore aliases below.
+                const rebuiltLabel = fullPhysicalRebuild && head !== 'no_connect' && point
+                    && localContext.page.pins.some(pin => localContext.page.groupAt(pin.point) === localContext.page.groupAt(point)
+                        && removed.some(item => item.reference === pin.designator));
+                if (rebuiltLabel) {
+                    edits.push({ start: range.start, end: range.end, text: '' });
+                    continue;
+                }
+                if (head === 'hierarchical_label') continue;
                 if (head !== 'no_connect' && point && !touchedByRemoval(point)) continue;
                 if (fullPhysicalRebuild
                     || (point && touchedByRemoval(point) && !remainsConnected(point))) {
@@ -1160,9 +1169,10 @@ export async function applyCircuitAssembly(
 
         const usedShapes = new Set<string>();
         const generatedSegments: RoutedSegment[] = [];
-        const edgeLabels: { signal: string; point: Point }[] = [];
+        const edgeLabels: { signal: string; point: Point; segments: RoutedSegment[] }[] = [];
         const requestedJunctions: Point[] = [];
         for (const edge of assembly.edges) {
+            const segmentStart = generatedSegments.length;
             let edgeApplied = false;
             let edgeLabel: { signal: string; point: Point } | undefined;
             for (const section of edge.sections || []) {
@@ -1217,11 +1227,18 @@ export async function applyCircuitAssembly(
             for (const point of edgeApplied ? junctionPoints || [] : []) {
                 requestedJunctions.push(serverPoint(point, placement));
             }
-            if (edgeApplied && edgeLabel) edgeLabels.push(edgeLabel);
+            if (edgeApplied && edgeLabel) edgeLabels.push({ ...edgeLabel, segments: generatedSegments.slice(segmentStart) });
         }
         const normalizedSegments = normalizedNetSegments(generatedSegments);
         for (const segment of normalizedSegments) objects.push(wireSegment(segment.start, segment.end));
-        for (const label of edgeLabels) objects.push(namedLabel(label.signal, label.point));
+        for (const label of edgeLabels) {
+            const candidates = [label.point, ...label.segments.flatMap(segment => [segment.start, segment.end,
+                { x: snapped((segment.start.x + segment.end.x) / 2), y: snapped((segment.start.y + segment.end.y) / 2) }])];
+            const point = candidates.find(point => !normalizedSegments.some(segment => segment.signal !== label.signal
+                && pointOnSegment(point, segment.start, segment.end)));
+            if (!point) throw new Error(`no safe label position on routed net: ${label.signal}`);
+            objects.push(namedLabel(label.signal, point));
+        }
 
         const addedJunctions = new Set<string>();
         for (const point of [...requestedJunctions, ...calculatedJunctions(normalizedSegments)]) {
@@ -1437,7 +1454,7 @@ export async function applyCircuitAssembly(
             const node = parseSExpression(object);
             if (['label', 'global_label', 'hierarchical_label'].includes(listHead(node) ?? '')) markers.add(`${listHead(node)}\u0000${atom(node[1])}`);
         }
-        for (const head of ['label', 'global_label']) {
+        for (const head of ['label', 'global_label', 'hierarchical_label']) {
             const ranges = findLists(source, head);
             for (const range of ranges.filter(r => !edits.some(e => e.start === r.start && e.end === r.end && !e.text))) {
                 markers.add(`${head}\u0000${atom(parseSExpression(range.text)[1])}`);
