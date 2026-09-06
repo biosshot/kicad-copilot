@@ -4,6 +4,7 @@ import { getSchematicContext } from './schematic-reader';
 import { children, nativeAsset, nativeProperty, position, scalar, SchematicAsset, sheetFilePath as resolveSheetFile } from './schematic-assets';
 import { placeLocalSymbol } from './local-symbol-writer';
 import { parseSignal } from './scoped-signals';
+import { readPage } from './schematic-connectivity';
 import { ConvertedComponent, convertComponent } from '../components/converter';
 import { getPowerSymbol } from '../components/kicad-library';
 import { projectFootprintId, writeProjectLibraries } from '../components/project-library';
@@ -243,7 +244,8 @@ function pageSize(source: string) {
         Letter: { x: 279.4, y: 215.9 },
         Legal: { x: 355.6, y: 215.9 },
     };
-    return sizes[name] || sizes.A4;
+    const size = sizes[name] || sizes.A4;
+    return /\bportrait\b/.test(paper) ? { x: size.y, y: size.x } : size;
 }
 
 function serviceComponent(component: CircuitAssemblyComponent) {
@@ -319,8 +321,8 @@ function placementOffset(
     retained: ExistingSymbol[],
     removed: ExistingSymbol[],
     centerOnPage = false,
+    paper = pageSize(source),
 ) {
-    const paper = pageSize(source);
     const bounds = serverRect(assembly);
     const occupied: Rect[] = retained.map(({ anchor }) => ({
         left: anchor.x - 15,
@@ -504,9 +506,10 @@ function globalLabel(name: string, point: Point, angle = 0) {
         ${property('Intersheetrefs', '${INTERSHEET_REFS}', point.x, point.y, true)})`;
 }
 
-function localLabel(name: string, point: Point) {
+function localLabel(name: string, point: Point, angle = 0) {
+    const justify = canonicalDirectionAngle(angle) === 180 ? 'right' : 'left';
     return `(label ${quoteSExpression(name)} (at ${point.x} ${point.y} 0)
-        (effects (font (size 1.27 1.27)) (justify left bottom))
+        (effects (font (size 1.27 1.27)) (justify ${justify} bottom))
         (uuid ${quoteSExpression(randomUUID())}))`;
 }
 
@@ -847,12 +850,34 @@ export async function applyCircuitAssembly(
     collectPaths(localContext.rootPath, `/${scalar(parseSExpression(localContext.files.get(localContext.rootPath)!), 'uuid')}`);
     const definitions = new Map<string, EmbeddedSymbol>();
     const namedMarkers: { signal: string; point: Point }[] = [];
+    const sheetBodies = new Map<string, Rect>();
+    const labelRects: Rect[] = [];
+    const labelRect = (signal: string, point: Point, angle: number): Rect => {
+        const ref = parseSignal(signal);
+        const name = ref.kind === 'hier' && ref.sheet !== localContext.page.scope ? `${ref.sheet}:${ref.name}` : ref.name;
+        const width = (name?.length ?? 0) * 1.27 + 2;
+        if (ref.kind === 'global' && /^(?:[ADP]?GND|GNDA|GNDD|GNDPWR)(?:$|_)/i.test(ref.name)) {
+            return { left: point.x - width / 2, right: point.x + width / 2, top: point.y + .5, bottom: point.y + 5 };
+        }
+        if (ref.kind === 'global' && /^(?:(?:VCC|VDD|VSS|VEE|VIN|VOUT|VBAT)(?:$|[_0-9])|[+-]?\d+(?:\.\d+)?V(?:\d+)?(?:$|_))/i.test(ref.name)) {
+            return { left: point.x - width / 2, right: point.x + width / 2, top: point.y - 5, bottom: point.y - .5 };
+        }
+        if (ref.kind === 'local' || (ref.kind === 'hier' && ref.sheet !== localContext.page.scope)) {
+            if (canonicalDirectionAngle(angle) === 180) return { left: point.x - width, right: point.x, top: point.y - 2, bottom: point.y - .15 };
+            return { left: point.x, right: point.x + width, top: point.y - 2, bottom: point.y - .15 };
+        }
+        const vector = directionVector(angle);
+        const end = { x: point.x + vector.x * width, y: point.y + vector.y * width };
+        return { left: Math.min(point.x, end.x) - (vector.x ? 0 : 1), right: Math.max(point.x, end.x) + (vector.x ? 0 : 1),
+            top: Math.min(point.y, end.y) - (vector.y ? 0 : 1), bottom: Math.max(point.y, end.y) + (vector.y ? 0 : 1) };
+    };
     let powerIndex = 0;
     const usedReferences = new Set(localContext.page.source.match(/#PWR\d+/g));
     const namedLabel = async (signal: string, point: Point, angle = 0) => {
         const ref = parseSignal(signal);
         if (ref.kind === 'empty' || ref.kind === 'nc') throw new Error(`invalid label signal: ${signal}`);
         namedMarkers.push({ signal, point });
+        labelRects.push(labelRect(signal, point, angle));
         if (ref.kind === 'global') {
             const ground = /^(?:[ADP]?GND|GNDA|GNDD|GNDPWR)(?:$|_)/i.test(ref.name);
             const supply = /^(?:(?:VCC|VDD|VSS|VEE|VIN|VOUT|VBAT)(?:$|[_0-9])|[+-]?\d+(?:\.\d+)?V(?:\d+)?(?:$|_))/i.test(ref.name);
@@ -875,7 +900,7 @@ export async function applyCircuitAssembly(
         }
         if (ref.kind === 'local') {
             if (ref.sheet !== localContext.page.scope) throw new Error(`local signal belongs to another sheet: ${signal}`);
-            return localLabel(ref.name, point);
+            return localLabel(ref.name, point, angle);
         }
         if (ref.sheet !== localContext.page.scope) {
             const alias = `${ref.sheet}:${ref.name}`;
@@ -883,7 +908,7 @@ export async function applyCircuitAssembly(
             if (collision && localContext.page.groupAt(collision.point) !== localContext.page.pinGroup(ref.sheet!, ref.name)) {
                 throw new Error(`sheet port label collision: ${alias}`);
             }
-            return localLabel(alias, point);
+            return localLabel(alias, point, angle);
         }
         const existing = localContext.page.labels.find(l => l.kind === 'hier' && l.name === ref.name);
         const shape = existing ? scalar(existing.node, 'shape', 'bidirectional') : 'bidirectional';
@@ -1017,7 +1042,13 @@ export async function applyCircuitAssembly(
                     edits.push({ start: range.start, end: range.end, text: '' });
                     continue;
                 }
-                if (head === 'hierarchical_label') continue;
+                if (head === 'hierarchical_label') {
+                    if (point && touchedByRemoval(point) && !wirePlan.retained.some(w => pointTouchesWire(point, w))
+                        && !retainedReal.some(c => [...c.pins.values()].some(p => pointKey(p) === pointKey(point)))) {
+                        edits.push({ start: range.start, end: range.end, text: '' });
+                    }
+                    continue;
+                }
                 if (head !== 'no_connect' && point && !touchedByRemoval(point)) continue;
                 if (fullPhysicalRebuild
                     || (point && touchedByRemoval(point) && !remainsConnected(point))) {
@@ -1033,13 +1064,36 @@ export async function applyCircuitAssembly(
                 edits.push({ start: range.start, end: range.end, text: '' });
             }
         }
+        for (const head of ['label', 'global_label', 'hierarchical_label']) {
+            for (const range of findLists(source, head).filter(r => !edits.some(e => e.start === r.start && e.end === r.end && !e.text))) {
+                const node = parseSExpression(range.text);
+                const prefix = head === 'global_label' ? 'global:' : `${head === 'label' ? 'local' : 'hier'}:${localContext.page.scope}:`;
+                const right = head === 'label' && /\(justify right bottom\)/.test(range.text);
+                labelRects.push(labelRect(prefix + atom(node[1]), position(node), Number(atom(findChild(node, 'at')?.[3]) ?? 0) + (right ? 180 : 0)));
+            }
+        }
 
+        let paper = pageSize(source);
+        const bounds = serverRect(assembly);
+        const needed = { x: bounds.right - bounds.left + 50.8, y: bounds.bottom - bounds.top + 50.8 };
+        if (needed.x > paper.x || needed.y > paper.y) {
+            const range = findLists(source, 'paper')[0];
+            const portrait = /\bportrait\b/.test(range?.text ?? '') ? ' portrait' : '';
+            const candidates = ['A4', 'A3', 'A2', 'A1', 'A0'].map(name => `(paper "${name}"${portrait})`);
+            const next = candidates.find(text => { const size = pageSize(text); return size.x >= Math.max(paper.x, needed.x) && size.y >= Math.max(paper.y, needed.y); })
+                ?? `(paper "User" ${Math.ceil(Math.max(paper.x, needed.x) / 10) * 10} ${Math.ceil(Math.max(paper.y, needed.y) / 10) * 10})`;
+            if (!range) throw new Error('schematic paper definition is missing');
+            edits.push({ start: range.start, end: range.end, text: next });
+            paper = pageSize(next);
+            warn(`page enlarged to ${paper.x}x${paper.y} mm to fit the circuit`, 'schematic placement');
+        }
         const placement = placementOffset(
             source,
             assembly,
             retained.filter((item) => !removedServices.has(item)),
             removed,
             fullPhysicalRebuild,
+            paper,
         );
         if (placement.warning) warn(placement.warning, 'schematic placement');
         const serverShapePoints = new Map<string, Point>();
@@ -1060,6 +1114,7 @@ export async function applyCircuitAssembly(
         for (const component of input.components) {
             if (component.part_uuid) representativeDesignators.set(component.part_uuid, component.designator);
         }
+        const edgeLabels: { signal: string; point: Point; segments: RoutedSegment[] }[] = [];
         for (const component of assembly.components) {
             if (component.part_uuid) representativeDesignators.set(component.part_uuid, component.designator);
         }
@@ -1091,7 +1146,6 @@ export async function applyCircuitAssembly(
             }
         }
 
-        const paper = pageSize(source);
         for (const component of assembly.components) {
             const objectCount = objects.length;
             try {
@@ -1118,6 +1172,10 @@ export async function applyCircuitAssembly(
                     const local = placeLocalSymbol(localAsset, component, anchor, path, localContext.rootPath,
                         parentInstancePaths, original ? parseSExpression(original.range.text) : undefined);
                     objects.push(local.text);
+                    if (localAsset.kind === 'sheet') {
+                        const node = parseSExpression(local.text), at = position(node), size = position(node, 'size');
+                        sheetBodies.set(exact, { left: at.x, top: at.y, right: at.x + size.x, bottom: at.y + size.y });
+                    }
                     for (const lead of local.leads) sheetLeads.push({ start: lead.start, end: lead.end,
                         signal: component.pins.find(p => String(p.pin_number) === lead.number)?.signal_name });
                     for (const [number, point] of local.pins) componentPins.set(number, point);
@@ -1128,7 +1186,13 @@ export async function applyCircuitAssembly(
                     kind = 'port';
                     const signal = component.pins.find(p => p.signal_name)?.signal_name;
                     if (!signal) throw new Error(`port signal missing: ${exact}`);
-                    objects.push(await namedLabel(signal, anchor));
+                    const connected = assembly.components.filter(c => !serviceComponent(c) && c.pins.some(p => p.signal_name === signal))
+                        .map(c => componentAnchor(c, placement));
+                    const center = connected.length ? { x: connected.reduce((n, p) => n + p.x, 0) / connected.length,
+                        y: connected.reduce((n, p) => n + p.y, 0) / connected.length } : anchor;
+                    const ref = parseSignal(signal);
+                    if (ref.kind === 'global') objects.push(await namedLabel(signal, anchor, outwardLabelAngle(anchor, center)));
+                    else edgeLabels.push({ signal, point: anchor, segments: [] });
                     for (const pin of component.pins) componentPins.set(String(pin.pin_number), anchor);
                 } else {
                     kind = 'real';
@@ -1198,9 +1262,30 @@ export async function applyCircuitAssembly(
             }
         }
 
+        // Reference/value text and sheet captions also occupy drawing space.
+        const captionRects: Rect[] = [];
+        const propertyRects: Rect[] = [];
+        // Pin numbers extend outside the symbol body. Keep net text off them too.
+        for (const point of [...placed.filter(c => c.kind === 'real').flatMap(c => [...c.pins.values()]),
+            ...retained.filter(c => !c.service).flatMap(c => [...c.pins.values()])]) {
+            captionRects.push({ left: point.x - 1.6, right: point.x + 1.6, top: point.y - 1.6, bottom: point.y + 1.6 });
+        }
+        for (const text of [...objects, ...retained.filter(c => !removedServices.has(c)).map(c => c.range.text)]) {
+            const node = parseSExpression(text);
+            for (const p of children(node, 'property')) {
+                const fx = findChild(p, 'effects');
+                if (!fx || scalar(p, 'hide') === 'yes' || scalar(fx, 'hide') === 'yes' || fx.some(item => atom(item) === 'hide')) continue;
+                const font = findChild(fx, 'font'), size = font ? position(font, 'size') : { x: 1.27, y: 1.27 };
+                const name = atom(p[2]) ?? '', caption = atom(p[1]) === 'Sheetfile' ? `File: ${name}` : name;
+                const vertical = Math.abs(Number(atom(findChild(p, 'at')?.[3]) ?? 0)) % 180 === 90;
+                const w = caption.length * size.x * .8, h = size.y * 1.5, at = position(p);
+                propertyRects.push({ left: at.x - (vertical ? h : w) / 2, right: at.x + (vertical ? h : w) / 2,
+                    top: at.y - (vertical ? w : h) / 2, bottom: at.y + (vertical ? w : h) / 2 });
+            }
+        }
+        captionRects.push(...propertyRects);
         const usedShapes = new Set<string>();
         const generatedSegments: RoutedSegment[] = [...sheetLeads];
-        const edgeLabels: { signal: string; point: Point; segments: RoutedSegment[] }[] = [];
         const requestedJunctions: Point[] = [];
         for (const edge of assembly.edges) {
             const segmentStart = generatedSegments.length;
@@ -1299,18 +1384,35 @@ export async function applyCircuitAssembly(
             const segments = normalizedSegments.filter(s => connected.has(routeKey(s.signal, s.start)));
             const signal = parseSignal(label.signal);
             const hierarchical = signal.kind === 'hier' && signal.sheet === localContext.page.scope;
-            const vertical = hierarchical ? segments.filter(s => nearlyEqual(s.start.x, s.end.x))
-                .sort((a, b) => Math.abs(b.end.y - b.start.y) - Math.abs(a.end.y - a.start.y)) : [];
+            const vertical = segments.filter(s => nearlyEqual(s.start.x, s.end.x))
+                .sort((a, b) => Math.abs(b.end.y - b.start.y) - Math.abs(a.end.y - a.start.y));
             const horizontal = segments.filter(s => nearlyEqual(s.start.y, s.end.y))
                 .sort((a, b) => Math.abs(b.end.x - b.start.x) - Math.abs(a.end.x - a.start.x));
-            const candidates = [...vertical.map(segment => ({ x: segment.start.x, y: snapped((segment.start.y + segment.end.y) / 2) })),
-                ...horizontal.map(segment => ({ x: snapped(Math.min(segment.start.x, segment.end.x)
-                    + Math.min(GRID_MM, Math.abs(segment.end.x - segment.start.x) / 2)), y: segment.start.y })),
+            const verticalPoints = vertical.flatMap(segment => [.5, .33, .67].map(fraction => ({ x: segment.start.x,
+                y: snapped(segment.start.y + (segment.end.y - segment.start.y) * fraction) })));
+            const horizontalPoints = horizontal.map(segment => ({ x: snapped(Math.min(segment.start.x, segment.end.x)
+                + Math.min(GRID_MM, Math.abs(segment.end.x - segment.start.x) / 2)), y: segment.start.y }));
+            const candidates = [...(hierarchical ? [...verticalPoints, ...horizontalPoints] : [...horizontalPoints, ...verticalPoints]),
                 label.point, ...label.segments.flatMap(segment => [segment.start, segment.end,
                     { x: snapped((segment.start.x + segment.end.x) / 2), y: snapped((segment.start.y + segment.end.y) / 2) }])];
-            const point = candidates.find(point => !normalizedSegments.some(segment => segment.signal !== label.signal
-                && pointOnSegment(point, segment.start, segment.end)));
+            const score = (point: Point) => {
+                const rect = labelRect(label.signal, point, hierarchical && point.x < centerX ? 180 : 0);
+                const bodies = placed.filter(c => c.kind === 'real').map(c => sheetBodies.get(c.source.designator) ?? translated({
+                    left: c.source.pos.x * SERVER_UNIT_MM, right: (c.source.pos.x + c.source.pos.width) * SERVER_UNIT_MM,
+                    top: c.source.pos.y * SERVER_UNIT_MM, bottom: (c.source.pos.y + c.source.pos.height) * SERVER_UNIT_MM,
+                }, placement.offset));
+                return [...labelRects, ...captionRects, ...bodies].filter(r => intersects(rect, r)).length
+                    + normalizedSegments.filter(s => intersects(rect, {
+                        left: Math.min(s.start.x, s.end.x) - .1, right: Math.max(s.start.x, s.end.x) + .1,
+                        top: Math.min(s.start.y, s.end.y) - .1, bottom: Math.max(s.start.y, s.end.y) + .1,
+                    })).length;
+            };
+            const point = candidates.filter(point => !normalizedSegments.some(segment => segment.signal !== label.signal
+                && pointOnSegment(point, segment.start, segment.end))).sort((a, b) => score(a) - score(b))[0];
             if (!point) throw new Error(`no safe label position on routed net: ${label.signal}`);
+            // A long label may not fit on any wire segment. Give the connected
+            // pin a short branch below, instead of printing over a component.
+            if (score(point) > 0) continue;
             objects.push(await namedLabel(label.signal, point, hierarchical && point.x < centerX ? 180 : 0));
             markNamedRoute({ signal: label.signal, point });
         }
@@ -1328,10 +1430,36 @@ export async function applyCircuitAssembly(
             ...wirePlan.retained.map((wire) => ({ start: wire.start, end: wire.end })),
             ...normalizedSegments,
         ];
+        const labelObstacles: (Rect & { owner: string })[] = [
+            ...placed.filter(c => c.kind === 'real').map(c => ({ owner: c.source.designator, ...(sheetBodies.get(c.source.designator) ?? translated({
+                left: c.source.pos.x * SERVER_UNIT_MM, top: c.source.pos.y * SERVER_UNIT_MM,
+                right: (c.source.pos.x + c.source.pos.width) * SERVER_UNIT_MM,
+                bottom: (c.source.pos.y + c.source.pos.height) * SERVER_UNIT_MM,
+            }, placement.offset)) })),
+            ...retained.filter(c => !c.service).map(c => {
+                if (listHead(parseSExpression(c.range.text)) === 'sheet') {
+                    const sheet = parseSExpression(c.range.text), size = position(sheet, 'size');
+                    return { owner: c.reference, left: c.anchor.x, top: c.anchor.y, right: c.anchor.x + size.x, bottom: c.anchor.y + size.y };
+                }
+                return {
+                owner: c.reference,
+                left: Math.min(c.anchor.x, ...[...c.pins.values()].map(p => p.x)) - 1.27,
+                right: Math.max(c.anchor.x, ...[...c.pins.values()].map(p => p.x)) + 1.27,
+                top: Math.min(c.anchor.y, ...[...c.pins.values()].map(p => p.y)) - 1.27,
+                bottom: Math.max(c.anchor.y, ...[...c.pins.values()].map(p => p.y)) + 1.27,
+                };
+            }),
+        ].map(rect => ({ ...rect, ...translated(rect, { x: 0, y: 0 }, GRID_MM) }));
         const allPinPoints = [...new Map(
             [...edgePins.values()].map((point) => [pointKey(point), point]),
         ).values()];
-        const connectionTerminals: Point[] = [];
+        const connectionTerminals: Point[] = [
+            ...namedMarkers.map(m => m.point),
+            ...['label', 'global_label', 'hierarchical_label', 'junction'].flatMap(head => findLists(source, head)
+                .filter(r => !edits.some(e => e.start === r.start && e.end === r.end && !e.text))
+                .map(rangeAtPoint).filter((p): p is Point => Boolean(p))),
+            ...[...addedJunctions].map(key => { const [x, y] = key.split(',').map(Number); return { x, y }; }),
+        ];
 
         const connectionKeys = new Set<string>();
         const removedNoConnects = new Set<number>(
@@ -1386,13 +1514,14 @@ export async function applyCircuitAssembly(
             const owner = pinOwners.get(resolvedShape) || ownerAnchors.get(base) || pin;
             const ownerPinPoints = ownerPins.get(designator) || ownerPins.get(base) || [];
             const primaryAngle = pinLabelAngles.get(resolvedShape) ?? outwardLabelAngle(pin, owner);
-            const variants = preferLabel ? [false] : [true, false];
+            const variants = preferLabel ? [false, true] : [true, false];
             let selected: {
                 segments: RoutedSegment[];
                 terminal: Point;
                 terminalAngle: number;
                 port: boolean;
             } | undefined;
+            let labelScore = Infinity;
 
             const angles = preferLabel
                 ? directionAngles(primaryAngle, ownerPinPoints.length || 10)
@@ -1409,54 +1538,89 @@ export async function applyCircuitAssembly(
                 for (const port of variants) {
                     const lengths = preferLabel
                         ? [...CONNECTION_LENGTHS_MM, 0]
-                        : CONNECTION_LENGTHS_MM;
+                        : [...CONNECTION_LENGTHS_MM];
+                    if (port) lengths.sort((a, b) => a - b);
                     for (const length of lengths) {
                         const elbow = {
                             x: snapped(pin.x + vector.x * length),
                             y: snapped(pin.y + vector.y * length),
                         };
-                        const offsets = port ? portOffsetCandidates(angle) : [0];
+                        const offsets = port ? PORT_OFFSET_LENGTHS_MM.flatMap(length => [-length / 2, length / 2]) : [0];
+                        const sheetBody = sheetBodies.get(designator);
+                        if (port && sheetBody) {
+                            // Fan bent leads outside the pin rows before using the
+                            // gaps between ports, leaving straight exits available.
+                            const outside = (offset: number) => vector.x !== 0
+                                ? elbow.y + offset < sheetBody.top - GRID_MM || elbow.y + offset > sheetBody.bottom + GRID_MM
+                                : elbow.x + offset < sheetBody.left - GRID_MM || elbow.x + offset > sheetBody.right + GRID_MM;
+                            offsets.sort((a, b) => Number(outside(b)) - Number(outside(a)));
+                        }
                         for (const offset of offsets) {
-                            const terminal = {
-                                x: elbow.x,
-                                y: snapped(elbow.y + offset),
-                            };
-                            const points = [pin, elbow, terminal];
-                            if (points.some((point) => point.x < 0 || point.y < 0
-                                || point.x > paper.x || point.y > paper.y)) continue;
-                            if (port && vector.x !== 0 && ownerPinPoints.some((point) => (
-                                pointKey(point) !== pointKey(pin) && nearlyEqual(point.y, terminal.y)
-                            ))) continue;
-                            const segments = points.slice(1).flatMap((point, index): RoutedSegment[] => (
-                                pointKey(points[index]) === pointKey(point)
-                                    ? []
-                                    : [{ start: points[index], end: point, signal }]
-                            ));
+                            for (const extension of port ? [0, 5.08, 10.16, 20.32] : [0]) {
+                                const turn = {
+                                    x: snapped(elbow.x + (vector.y !== 0 ? offset : 0)),
+                                    y: snapped(elbow.y + (vector.x !== 0 ? offset : 0)),
+                                };
+                                const terminal = { x: snapped(turn.x + vector.x * extension), y: snapped(turn.y + vector.y * extension) };
+                                const points = [pin, elbow, turn, terminal];
+                                if (points.some((point) => point.x < 0 || point.y < 0
+                                    || point.x > paper.x || point.y > paper.y)) continue;
+                                const segments = points.slice(1).flatMap((point, index): RoutedSegment[] => (
+                                    pointKey(points[index]) === pointKey(point)
+                                        ? []
+                                        : [{ start: points[index], end: point, signal }]
+                                ));
 
-                            const otherPins = allPinPoints.filter((point) => pointKey(point) !== pointKey(pin));
-                            if (otherPins.some((point) => segments.some((segment) => (
-                                pointOnSegment(point, segment.start, segment.end)
-                            )))) continue;
-                            if (connectionTerminals.some((point) => segments.some((segment) => (
-                                pointOnSegment(point, segment.start, segment.end)
-                            )))) continue;
-                            if (routingObstacles.some((obstacle) => {
-                                if (obstacle.signal === signal) return false;
-                                return segments.some((segment) => segmentsConflict(segment, obstacle));
-                            })) continue;
-                            if (segments.length && routingObstacles.some((obstacle) => (
-                                pointOnSegment(terminal, obstacle.start, obstacle.end)
-                            ))) continue;
+                                const otherPins = allPinPoints.filter((point) => pointKey(point) !== pointKey(pin));
+                                if (otherPins.some((point) => segments.some((segment) => (
+                                    pointOnSegment(point, segment.start, segment.end)
+                                )))) continue;
+                                if (connectionTerminals.some((point) => segments.some((segment) => (
+                                    pointOnSegment(point, segment.start, segment.end)
+                                )))) continue;
+                                if (routingObstacles.some((obstacle) => {
+                                    if (obstacle.signal === signal) return false;
+                                    return segments.some((segment) => segmentsConflict(segment, obstacle));
+                                })) continue;
+                                if (segments.length && routingObstacles.some((obstacle) => (
+                                    pointOnSegment(terminal, obstacle.start, obstacle.end)
+                                ))) continue;
+                                const segmentRect = (s: RoutedSegment): Rect => ({ left: Math.min(s.start.x, s.end.x), right: Math.max(s.start.x, s.end.x),
+                                    top: Math.min(s.start.y, s.end.y), bottom: Math.max(s.start.y, s.end.y) });
+                                const crossedLabels = segments.reduce((n, s) => n + [...labelRects, ...propertyRects]
+                                    .filter(r => intersects(segmentRect(s), r)).length, 0);
+                                if (segments.some(s => labelObstacles.some(r => r.owner !== designator
+                                    && intersects(segmentRect(s), r)))) continue;
 
-                            selected = {
-                                segments,
-                                terminal,
-                                terminalAngle: port && vector.x !== 0
-                                    ? (offset < 0 ? 90 : 270)
-                                    : angle,
-                                port,
-                            };
-                            break search;
+                                const preferred = port && !extension ? (vector.x !== 0 ? (offset < 0 ? 90 : 270) : (offset < 0 ? 180 : 0)) : angle;
+                                const labelAngles = [preferred, normalizeRotation(preferred + 90), normalizeRotation(preferred - 90)].filter(candidate => {
+                                    const text = labelRect(signal, terminal, candidate);
+                                    return text.left >= 10 && text.top >= 10 && text.right <= paper.x - 10 && text.bottom <= paper.y - 10;
+                                });
+                                const overlaps = (candidate: number) => {
+                                    const text = labelRect(signal, terminal, candidate);
+                                    const inPinRows = port && sheetBody && (vector.x !== 0
+                                        ? terminal.y >= sheetBody.top - GRID_MM && terminal.y <= sheetBody.bottom + GRID_MM
+                                        : terminal.x >= sheetBody.left - GRID_MM && terminal.x <= sheetBody.right + GRID_MM);
+                                    return labelObstacles.filter(rect => intersects(text, rect)).length * 1000
+                                        + labelRects.filter(rect => intersects(text, rect)).length * 100
+                                        + crossedLabels * 10
+                                        + routingObstacles.filter(s => intersects(text, segmentRect(s))).length * 5
+                                        + captionRects.filter(rect => intersects(text, rect)).length + (inPinRows ? .01 : 0);
+                                };
+                                const terminalAngle = labelAngles.sort((a, b) => overlaps(a) - overlaps(b))[0];
+                                if (terminalAngle === undefined) continue;
+                                if (overlaps(terminalAngle) >= labelScore) continue;
+
+                                selected = {
+                                    segments,
+                                    terminal,
+                                    terminalAngle,
+                                    port,
+                                };
+                                labelScore = overlaps(terminalAngle);
+                                if (!labelScore) break search;
+                            }
                         }
                     }
                 }
@@ -1465,6 +1629,7 @@ export async function applyCircuitAssembly(
             if (!selected) {
                 throw new Error(`no free connection path: ${designator}.${pinNumber} (${signal})`);
             }
+            if (labelScore >= 1) warn(`limited space around label ${signal}`, `${designator}.${pinNumber}`);
             removeNoConnectAt(pin);
             for (const segment of selected.segments) {
                 objects.push(wireSegment(segment.start, segment.end));
@@ -1475,9 +1640,12 @@ export async function applyCircuitAssembly(
             objects.push(await namedLabel(signal, selected.terminal, selected.terminalAngle));
         };
 
+        const retainedCircuit = readPage(applySourceEdits(source, edits), path, localContext.rootPath, localContext.assets).circuit;
         for (const item of assembly.added_net || []) {
             const oldSignal = inputSignal(input, item.designator, item.pin_number);
-            if (oldSignal === item.net) continue;
+            // A partial rebuild can remove the shared wire or its label. The
+            // original net name alone does not mean the retained pin is still connected.
+            if (oldSignal === item.net && inputSignal(retainedCircuit, item.designator, item.pin_number) === item.net) continue;
             if (oldSignal && oldSignal.trim().toUpperCase() !== 'NC' && oldSignal !== item.net
                 && !assembly.rm_net?.some(n => n.designator === item.designator && String(n.pin_number) === String(item.pin_number))) {
                 report(
@@ -1493,15 +1661,16 @@ export async function applyCircuitAssembly(
             for (const pin of item.source.pins) {
                 const exactShape = `${item.source.designator}_pin_${pin.pin_number}`;
                 const baseShape = `${baseDesignator(item.source.designator)}_pin_${pin.pin_number}`;
-                if (usedShapes.has(exactShape) || usedShapes.has(baseShape)) continue;
                 const point = item.pins.get(String(pin.pin_number));
                 if (!point) {
                     report(`pin not found: ${baseShape}`, `unused pin skipped (${item.source.designator})`);
                     continue;
                 }
+                if ((usedShapes.has(exactShape) || usedShapes.has(baseShape)) && namedRoutes.has(routeKey(pin.signal_name, point))) continue;
                 if (pin.signal_name.trim().toUpperCase() === 'NC') objects.push(noConnect(point));
                 else if (pin.signal_name.trim()) {
                     queueNamedConnection(item.source.designator, pin.pin_number, pin.signal_name.trim());
+                    markNamedRoute({ signal: pin.signal_name, point });
                 }
             }
         }
@@ -1540,6 +1709,7 @@ export async function applyCircuitAssembly(
                 if (markers.has(marker)) continue;
                 const group = localContext.page.groupAt(position(node));
                 let terminal: Point | undefined;
+                let target: { designator: string; number: string } | undefined;
                 for (const pin of localContext.page.pins.filter(p => localContext.page.groupAt(p.point) === group)) {
                     const originalSignal = inputSignal(input, pin.designator, pin.number);
                     const replacement = placed.find(p => p.source.designator === pin.designator);
@@ -1549,14 +1719,15 @@ export async function applyCircuitAssembly(
                         && !assembly.rm_net?.some(n => n.designator === pin.designator && String(n.pin_number) === pin.number)) {
                         terminal = pin.point;
                     }
-                    if (terminal) break;
+                    if (terminal) { target = pin; break; }
                 }
-                if (!terminal) continue;
-                const at = findChild(node, 'at')!;
-                at[1] = token(String(terminal.x)); at[2] = token(String(terminal.y));
-                const uuid = findChild(node, 'uuid');
-                if (uuid) uuid[1] = token(randomUUID(), true);
-                objects.push(printSExpression(node));
+                if (!terminal) {
+                    // Removing the last internal component must not erase a sheet's public port.
+                    if (head === 'hierarchical_label') objects.push(range.text);
+                    continue;
+                }
+                const prefix = head === 'global_label' ? 'global:' : `${head === 'label' ? 'local' : 'hier'}:${localContext.page.scope}:`;
+                await addNamedConnection(target!.designator, target!.number, prefix + atom(node[1]), true);
                 markers.add(marker);
             }
         }
@@ -1610,13 +1781,46 @@ export async function applyCircuitAssembly(
         }
 
         await writeProjectLibraries(
-            path,
+            localContext.rootPath,
             [...definitions.values()]
                 .filter((definition) => definition.id.startsWith('kicad-copilot:'))
                 .map((definition) => definition.symbol),
             realAssets.values(),
         );
-        const candidate = applySourceEdits(source, edits);
+        let candidate = applySourceEdits(source, edits);
+        // Moving a service label can leave its old server lead without a terminal.
+        // Trim only newly generated dead branches; retained drawing stays intact.
+        const protectedPoints = [
+            ...placed.filter(c => c.kind === 'real').flatMap(c => [...c.pins.values()]),
+            ...findLists(candidate, 'sheet').flatMap(range => children(parseSExpression(range.text), 'pin').map(pin => position(pin))),
+            ...retained.filter(c => !removedServices.has(c)).flatMap(c => [...c.pins.values()]),
+            ...namedMarkers.map(m => m.point),
+            ...['label', 'global_label', 'hierarchical_label'].flatMap(head => findLists(candidate, head)
+                .map(rangeAtPoint).filter((p): p is Point => Boolean(p))),
+            ...wirePlan.retained.flatMap(w => [w.start, w.end]),
+        ];
+        const generatedWires = new Set(objects.filter(text => listHead(parseSExpression(text)) === 'wire')
+            .map(text => scalar(parseSExpression(text), 'uuid')));
+        let allWires = planWireRemoval(candidate, [], []).retained;
+        const splits: SourceEdit[] = [];
+        for (const wire of allWires.filter(w => generatedWires.has(scalar(parseSExpression(w.range.text), 'uuid')))) {
+            const points = [...new Map([wire.start, wire.end, ...protectedPoints.filter(p => pointTouchesWire(p, wire))]
+                .map(p => [pointKey(p), p])).values()].sort((a, b) => Math.abs(a.x - wire.start.x) + Math.abs(a.y - wire.start.y)
+                    - Math.abs(b.x - wire.start.x) - Math.abs(b.y - wire.start.y));
+            if (points.length <= 2) continue;
+            const pieces = points.slice(1).map((p, i) => wireSegment(points[i], p));
+            for (const piece of pieces) generatedWires.add(scalar(parseSExpression(piece), 'uuid'));
+            splits.push({ start: wire.range.start, end: wire.range.end, text: pieces.join('\n') });
+        }
+        candidate = applySourceEdits(candidate, splits);
+        if (splits.length) allWires = planWireRemoval(candidate, [], []).retained;
+        const leaves = allWires.filter(w => generatedWires.has(scalar(parseSExpression(w.range.text), 'uuid')))
+            .flatMap(w => [w.start, w.end]).filter(point => !protectedPoints.some(p => pointKey(p) === pointKey(point))
+                && !wirePlan.retained.some(w => pointTouchesWire(point, w))
+                && wireDirectionsAtPoint(point, allWires) === 1);
+        const dead = planWireRemoval(candidate, leaves, protectedPoints).removed
+            .filter(w => generatedWires.has(scalar(parseSExpression(w.range.text), 'uuid')));
+        candidate = applySourceEdits(candidate, dead.map(w => ({ start: w.range.start, end: w.range.end, text: '' })));
         return applySourceEdits(candidate, redundantJunctionRanges(candidate).map((range) => ({
             start: range.start,
             end: range.end,

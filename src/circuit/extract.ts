@@ -10,6 +10,7 @@ import { withSchematicChanges } from '../kicad/schematic-writer';
 import { synchronizeHierarchy } from '../kicad/schematic-hierarchy';
 import { projectConnections, SchematicPage, validateKiCadConnectivity, validateRetainedConnections } from '../kicad/schematic-connectivity';
 import { readFile } from 'node:fs/promises';
+import { parseSignal } from '../kicad/scoped-signals';
 
 type ExtractCircuitOptions = {
     onAssembly?: (assembly: CircuitAssembly) => void | Promise<void>;
@@ -63,6 +64,7 @@ function validateRequestedNets(circuit: CircuitMod, result: ExplainCircuit, page
             signal: item.signal_name,
         });
     }
+    const requestedGroups = new Map<string, string>();
     for (const item of expected.values()) {
         const actual = pinSignal(result, item.designator, item.pinNumber);
         if (actual !== page.signalFor(item.signal)) {
@@ -71,6 +73,15 @@ function validateRequestedNets(circuit: CircuitMod, result: ExplainCircuit, page
                 + `${item.signal || 'disconnected'}, got ${actual || 'disconnected'}`,
             );
         }
+        const ref = parseSignal(item.signal);
+        if (ref.kind === 'empty' || ref.kind === 'nc') continue;
+        const wanted = ref.kind === 'global' ? `global:${ref.name}`
+            : ref.kind === 'local' || ref.sheet === page.scope ? `page:${ref.name}` : `port:${ref.sheet}:${ref.name}`;
+        const group = page.pinGroup(item.designator, item.pinNumber)!;
+        if (requestedGroups.has(group) && requestedGroups.get(group) !== wanted) {
+            throw new Error(`unrequested short between ${requestedGroups.get(group)} and ${wanted} at ${item.designator}.${item.pinNumber}`);
+        }
+        requestedGroups.set(group, wanted);
     }
 }
 
@@ -112,8 +123,23 @@ export async function extractCircuit(
                 diagnostics.warn,
                 context,
             );
-            if (applyResult === 'unchanged') throw new Error('circuit assembly did not change the schematic');
-            await synchronizeHierarchy(context.rootPath);
+            const changesComponents = circuit.add_components.length > 0
+                || circuit.add_reused_blocks.length > 0 || Boolean(circuit.rm_components?.length);
+            if (applyResult === 'unchanged' && changesComponents) {
+                throw new Error('circuit assembly did not change the schematic');
+            }
+            const changedInterfaces = await synchronizeHierarchy(context.rootPath);
+            // Reuse component placement when a shared sheet gains or changes ports.
+            // Merely appending pins leaves long names and new ports inside old wiring.
+            for (const [parentPath, designators] of changedInterfaces) {
+                const parent = await getSchematicContext(parentPath);
+                await extractCircuit(parentPath, {
+                    add_components: parent.target.components.filter(c => designators.includes(c.designator)).map(c => ({
+                        ...c, part_uuid: c.part_uuid!, block_name: c.block_name || 'Circuit', search_query: c.value,
+                    })),
+                    rm_components: designators, add_reused_blocks: [], external_connect: null, external_rm_connect: null,
+                });
+            }
             const after = await getSchematicContext(path);
             const result = after.target;
             validateRequestedNets(circuit, result, after.page);

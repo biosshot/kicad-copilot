@@ -62,6 +62,10 @@ export function placeLocalSymbol(
         for (const property of children(node, 'property')) {
             const name = atom(property[1]);
             set(property, 'at', [String(rounded(x + w / 2)), String(rounded(name === 'Sheetname' ? nameY : fileY)), '0']);
+            if (name === 'Sheetfile' && ((atom(property[2])?.length ?? 0) + 6) * 0.85 > w + 5.08) {
+                const effects = findChild(property, 'effects');
+                if (effects) set(effects, 'hide', ['yes']);
+            }
         }
         const oldPins = new Map(children(node, 'pin').map(p => [atom(p[1]), p]));
         for (const pin of children(node, 'pin')) node.splice(node.indexOf(pin), 1);
@@ -72,6 +76,8 @@ export function placeLocalSymbol(
             const pin = oldPins.get(p.num) ?? parseSExpression(`(pin ${q(p.num)} ${port.direction}
                 (uuid ${q(randomUUID())}) (effects (font (size 1.27 1.27))))`);
             set(pin, 'at', [String(point.x), String(point.y), String(angle)]);
+            const effects = findChild(pin, 'effects');
+            if (effects) set(effects, 'justify', [angle === 0 || angle === 90 ? 'right' : 'left']);
             node.push(pin);
             const signal = parseSignal(component.pins.find(pin => String(pin.pin_number) === p.num)?.signal_name ?? '');
             const connected = signal.kind !== 'empty' && signal.kind !== 'nc';

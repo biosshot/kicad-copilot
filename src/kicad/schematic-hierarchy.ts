@@ -11,6 +11,7 @@ export async function synchronizeHierarchy(rootPath: string) {
     const roots = new Map([...context.files].map(([path, source]) => [path, parseSExpression(source)]));
     const instances = new Map<string, string[]>();
     const sheetParents = new Map<SExpression[], string[]>();
+    const changedInterfaces = new Map<string, string[]>();
     const walk = (path: string, instance: string) => {
         instances.set(path, [...(instances.get(path) ?? []), instance]);
         for (const sheet of children(roots.get(path)!, 'sheet')) {
@@ -37,6 +38,9 @@ export async function synchronizeHierarchy(rootPath: string) {
             const childPath = sheetFilePath(path, sheet, context.projectDirectory);
             const ports = sheetPorts(context.files.get(childPath)!);
             const originalPins = children(sheet, 'pin');
+            if (ports.some(port => !originalPins.some(pin => atom(pin[1]) === port.name && atom(pin[2]) === port.direction))) {
+                changedInterfaces.set(path, [...changedInterfaces.get(path) ?? [], nativeProperty(sheet, 'Sheetname')]);
+            }
             for (const pin of originalPins) if (!ports.some(p => p.name === atom(pin[1]))) {
                 throw new Error(`sheet pin has no hierarchical label: ${nativeProperty(sheet, 'Sheetname')}.${atom(pin[1])}`);
             }
@@ -109,4 +113,5 @@ export async function synchronizeHierarchy(rootPath: string) {
             return `${printSExpression(root)}\n`;
         });
     }
+    return changedInterfaces;
 }

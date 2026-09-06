@@ -21,6 +21,7 @@ export default defineConfig({
         'test-analysis': 'scripts/test-analysis.ts',
         'test-schematic-hierarchy': 'scripts/test-schematic-hierarchy.ts',
         'test-mcp-ldo': 'scripts/test-mcp-ldo.ts',
+        'test-schematic-matrix': 'scripts/test-schematic-matrix.ts',
     },
     format: ['esm'],
     clean: true,

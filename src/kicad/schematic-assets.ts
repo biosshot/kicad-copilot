@@ -61,7 +61,7 @@ export function sheetPorts(source: string): SheetPort[] {
 export function sheetSymbolData(ports: SheetPort[]): SymbolData {
     const left = ports.filter(p => p.direction !== 'output');
     const right = ports.filter(p => p.direction === 'output');
-    const textWidth = (side: SheetPort[]) => Math.max(0, ...side.map(p => [...p.name].length * 4));
+    const textWidth = (side: SheetPort[]) => Math.max(0, ...side.map(p => [...p.name].length * 5));
     const bodyWidth = Math.max(50, Math.ceil((textWidth(left) + textWidth(right) + 30) / 10) * 10);
     const bodyHeight = Math.max(30, (Math.max(left.length, right.length) + 1) * 10);
     const width = bodyWidth + SHEET_PADDING * 2;

@@ -74,7 +74,7 @@ export async function prepareSchematicInput(path: string, input: CircuitMod) {
             }
         }
     }
-    const connectPort = (signal: string) => {
+    const connectPort = (signal: string, resolving: string[] = []): string => {
         const ref = parseSignal(signal);
         if (ref.kind !== 'hier' || ref.sheet === context.page.scope) return context.page.signalFor(signal);
         const newSheet = circuit.add_components.find(c => c.designator === ref.sheet && context.assets.get(c.part_uuid)?.kind === 'sheet');
@@ -82,7 +82,13 @@ export async function prepareSchematicInput(path: string, input: CircuitMod) {
             const pin = newSheet.pins.find(p => String(p.pin_number) === ref.name);
             if (!pin) throw new Error(`unknown sheet pin: ${ref.sheet}.${ref.name}`);
             if (!pin.signal_name) pin.signal_name = signal;
-            return pin.signal_name === signal ? signal : context.page.signalFor(pin.signal_name);
+            if (pin.signal_name === signal) return signal;
+            // Resolve links between sheets added by this same request, including
+            // forward references. A cycle of port aliases is one electrical net.
+            const cycle = resolving.indexOf(signal);
+            if (cycle >= 0) return resolving.slice(cycle).sort()[0];
+            pin.signal_name = connectPort(pin.signal_name, [...resolving, signal]);
+            return pin.signal_name;
         }
         const canonical = context.page.signalFor(signal);
         const existing = context.target.components.find(c => c.designator === ref.sheet)!;

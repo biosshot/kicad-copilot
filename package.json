@@ -40,6 +40,7 @@
     "test:analysis": "npm run build && node dist/test-analysis.js",
     "test:schematic-hierarchy": "npm run build && node dist/test-schematic-hierarchy.js",
     "test:mcp-ldo": "npm run build && node dist/test-mcp-ldo.js",
+    "test:schematic-matrix": "npm run build && node dist/test-schematic-matrix.js",
     "check": "npm run typecheck && npm run build",
     "prepack": "npm run build",
     "start": "node dist/index.js"
