@@ -1,0 +1,177 @@
+{
+  "status": "proposal",
+  "compatibility": {
+    "decision": "Extend request API; preserve existing schematic response schemas",
+    "unchanged_response_schemas": ["ExplainCircuit", "CircuitAssembly"],
+    "new_request_fields": ["symbols", "signals"],
+    "new_read_operation": "get_schematic_context",
+    "legacy_calls": "Keep legacy signal interpretation unless scoped-v1 is explicitly selected",
+    "implementation_status": "Not implemented"
+  },
+  "signal_format": {
+    "mode": "scoped-v1",
+    "examples": {
+      "global": "global:/GND",
+      "global_power": "global:/+3V3",
+      "root_local": "local:/ADC_IN",
+      "child_local": "local:/Power/FB",
+      "other_child_local": "local:/Analog/FB",
+      "hierarchical_port": "hier:/ADC/AIN",
+      "nested_hierarchical_port": "hier:/Control/ADC/AIN",
+      "unnamed_net": "auto:/ADC/U2.3",
+      "unconnected": "",
+      "no_connect": "NC",
+      "actual_local_net_named_NC": "local:/ADC/NC"
+    },
+    "path_rules": {
+      "sheet_path": "Names of sheet instances from the selected project root; not file paths",
+      "last_segment": "Net label, hierarchical port name, or issued unnamed-net anchor",
+      "escaping": "JSON Pointer segment escaping: ~ becomes ~0; / becomes ~1",
+      "decode": "Exactly once; no URL decoding, path normalization, case folding or trimming",
+      "special_segments": ". and .. are literal names, never filesystem traversal",
+      "example_label_with_slash": "local:/Power/VIN~1SENSE",
+      "example_label_with_tilde": "local:/Power/EN~0N",
+      "example_label_looking_like_protocol": "local:/Power/global:~1GND",
+      "case_sensitive": true,
+      "unqualified_names_in_scoped_mode": "Reject except empty string and NC",
+      "duplicate_sibling_sheet_names": "Reject ambiguous paths; do not select a sheet by filename",
+      "identity": "Resolve names through a snapshot of instance UUID paths; reject stale context after rename or topology changes"
+    },
+    "resolution_rules": {
+      "hier": "An address of an existing hierarchical interface; may alias a local or global net",
+      "export": "All pins on one resolved electrical net receive one canonical signal_name across the selected project snapshot",
+      "canonical_selection": "Prefer a global binding; otherwise a named local binding at the shallowest sheet depth; otherwise a hierarchical port at the shallowest depth; otherwise an issued auto anchor. Tie-break by the exact escaped path. Keep all other accesses as aliases in the local context",
+      "canonical_is_not_native_name": "The adapter separately preserves native KiCad net names and all label objects; it does not reconstruct them by stripping prefixes",
+      "access": "A canonical name is not permission to cross a sheet boundary; an actual local endpoint, global access or hierarchical interface is required",
+      "new_local_or_global": "Resolve an existing accessible binding or explicitly create the requested kind on the target sheet; check KiCad name collisions",
+      "new_hierarchical": "Create through an explicit interface operation with inside/outside bindings, never by interpreting an unknown hier string as a complete connection request",
+      "auto": "Issued by the adapter for an existing unnamed net; copy it, do not create nets by inventing auto names",
+      "page_wiring": "Canonical electrical equality does not require an external wire between every pair of endpoints; preserve and plan page-level connection groups separately"
+    }
+  },
+  "object_addressing": {
+    "sheet_designator": "@sheet:/ADC",
+    "sheet_identity": "The instance path in the local context; the sheet filename is not its identity",
+    "sheet_detection": "Exact membership in the validated sheet registry and request symbols, not part_uuid:null alone",
+    "real_reference_starting_with_at": "Escape as @ref:/<JSON-Pointer-escaped-reference>; for example native @sheet:/ADC becomes @ref:/@sheet:~1ADC",
+    "ordinary_real_designator": "R1",
+    "pin_number": "Stable string allocated to a sheet-pin UUID; do not renumber on port reorder",
+    "pin_name": "Native hierarchical port text, e.g. AIN",
+    "transport": "The adapter may map designators to collision-free ordinary IDs before server processing and restore every component/net/edge reference afterwards; human sheet paths must never be parsed as multipart component suffixes"
+  },
+  "get_schematic_request": {
+    "path": "main.kicad_sch",
+    "signal_format": "scoped-v1"
+  },
+  "get_schematic_response": {
+    "components": [
+      {
+        "designator": "R1",
+        "value": "1k",
+        "part_uuid": null,
+        "pins": [
+          { "pin_number": "1", "name": "1", "signal_name": "local:/INPUT" },
+          { "pin_number": "2", "name": "2", "signal_name": "local:/ADC_IN" }
+        ]
+      },
+      {
+        "designator": "@sheet:/ADC",
+        "value": "ADC",
+        "part_uuid": null,
+        "pins": [
+          { "pin_number": "1", "name": "AIN", "signal_name": "local:/ADC_IN" },
+          { "pin_number": "2", "name": "VDD", "signal_name": "global:/+3V3" },
+          { "pin_number": "3", "name": "GND", "signal_name": "global:/GND" }
+        ]
+      }
+    ]
+  },
+  "new_context_response_excerpt": {
+    "signal_format": "scoped-v1",
+    "aliases": {
+      "hier:/ADC/AIN": "local:/ADC_IN",
+      "hier:/ADC/VDD": "global:/+3V3",
+      "hier:/ADC/GND": "global:/GND"
+    },
+    "sheets": {
+      "@sheet:/ADC": {
+        "file": "adc.kicad_sch",
+        "instance_path": "/10000000-0000-4000-8000-000000000001/20000000-0000-4000-8000-000000000002",
+        "pins": {
+          "1": { "name": "AIN", "direction": "input", "inside": "hier:/ADC/AIN" },
+          "2": { "name": "VDD", "direction": "input", "inside": "hier:/ADC/VDD" },
+          "3": { "name": "GND", "direction": "passive", "inside": "hier:/ADC/GND" }
+        }
+      }
+    }
+  },
+  "server_request_extension": {
+    "symbols": {
+      "@sheet:/ADC": {
+        "kind": "blackbox",
+        "block_name": "Main",
+        "width": 200,
+        "height": 120,
+        "pins": [
+          { "pin_number": "1", "x": 0, "y": 40 },
+          { "pin_number": "2", "x": 100, "y": 0 },
+          { "pin_number": "3", "x": 100, "y": 120 }
+        ],
+        "placement": { "mode": "movable", "allowed_rotations": [0] }
+      }
+    },
+    "signals": {
+      "local:/ADC_IN": { "name": "ADC_IN", "role": "signal" },
+      "global:/+3V3": { "name": "+3V3", "role": "power" },
+      "global:/GND": { "name": "GND", "role": "ground" }
+    }
+  },
+  "request_extension_rules": {
+    "merge": "Add symbols and signals alongside the existing circuit and inputCircuit fields",
+    "units": "Existing server coordinates: 1 unit = 0.254 mm; pin x/y relative to the layout node origin, Y down",
+    "source": "A blackbox must exist in inputCircuit.components; its pins and value come from that component. Add it to the layout scene through symbols, bypassing catalog lookup",
+    "selection": "A blackbox entry in symbols explicitly selects that object for the declared placement operation; inputCircuit objects alone remain external context",
+    "geometry": "Cover native body, text clearances and actual pin anchors; local adapter retains offsets from node origin to native sheet body",
+    "placement": "Implement and enforce supported modes; never treat an unsupported fixed constraint as movable",
+    "signals": "Use signal_name as opaque identity, signals[signal_name].name for display/label sizing, and role for ground/power layout heuristics",
+    "aliases": "Resolve every alias consistently in circuit and inputCircuit before dispatch; send canonical names to the server",
+    "wire_intent": "Explicit page-wire connections will be an additional optional layout input; shared signal_name alone must not override a preserved sheet boundary or force a global label",
+    "output": "Return virtual objects through the existing components/pins/pos and edges fields, preserving the existing response schema",
+    "native_writer": "Resolve a returned blackbox by request registry and update native sheet/pin objects. Never convert it into a library symbol or a BOM/PCB component",
+    "scope_vs_role": "role:power or role:ground controls layout appearance, not net scope; a local VCC must stay local"
+  },
+  "server_response_schema_example": {
+    "circuit": {
+      "metadata": { "project_name": "Example", "description": "Sheet placement schema example" },
+      "blocks": [{ "name": "Main", "description": "Parent page", "next_block_names": [] }],
+      "components": [
+        {
+          "designator": "@sheet:/ADC",
+          "value": "ADC",
+          "part_uuid": null,
+          "block_name": "Main",
+          "search_query": "",
+          "pins": [
+            { "pin_number": "1", "name": "AIN", "signal_name": "local:/ADC_IN" },
+            { "pin_number": "2", "name": "VDD", "signal_name": "global:/+3V3" },
+            { "pin_number": "3", "name": "GND", "signal_name": "global:/GND" }
+          ],
+          "pos": {
+            "x": 300,
+            "y": 160,
+            "center": { "x": 0, "y": 0 },
+            "width": 200,
+            "height": 120,
+            "rotate": 0
+          }
+        }
+      ],
+      "edges": []
+    }
+  },
+  "example_limits": {
+    "fixtures": "Illustrative JSON, not a request sent to a server or an actual KiCad project",
+    "response_schema_example": "Only checks representability in existing response schemas; empty edges are not a completed wiring result for the parent circuit above",
+    "real_part_uuid_null": "Valid for reading an existing native component; adding a sourced real component still requires its genuine part_uuid"
+  }
+}
