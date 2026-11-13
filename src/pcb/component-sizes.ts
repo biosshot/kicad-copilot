@@ -1,4 +1,4 @@
-import { postJson } from '../utils/server';
+import { getPcbComponentSizes as queryComponentSizes } from 'eda-copilot-backend/pcb';
 import { associatedSchematicPath } from './paths';
 import { createPcbLayoutInput } from './layout-input';
 
@@ -11,7 +11,7 @@ export async function getPcbComponentSizes(
 ) {
     const schematicPath = await associatedSchematicPath(pcbPath);
     const input = await createPcbLayoutInput(pcbPath, schematicPath);
-    const response = await postJson('/v1/mcp-tools/get-pcb-component-sizes', {
+    const response = await queryComponentSizes({
         ...input,
         designators,
         includeAll,

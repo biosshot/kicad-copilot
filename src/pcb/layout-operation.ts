@@ -2,14 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { BoardAssemble } from '../types/board-assemble';
 import { fileHash } from '../kicad/pcb-writer';
-import {
-    AsyncOperationResponse,
-    asyncProgress,
-    cancelAsyncTask,
-    getAsyncTaskStatus,
-    startAsyncTask,
-    waitForAsyncTask,
-} from '../utils/server';
+import { makePcbLayout as generatePcbLayout, disposeBackend, type PcbLayoutProgress } from 'eda-copilot-backend/pcb';
 import { associatedSchematicPath } from './paths';
 import { importPcbChanges } from './import';
 import { createPcbLayoutInput } from './layout-input';
@@ -26,7 +19,18 @@ import { createOperationId } from '../operations/id';
 import { enqueueMutation } from '../utils/mutation-queue';
 import { assemblePcbLayout } from './assemble';
 
-const TASK_PATH = '/v1/mcp-tools/make-pcb-layout';
+type LayoutResult = Awaited<ReturnType<typeof finishResponse>>;
+type LocalOperation = {
+    active: ActivePcbLayout;
+    controller: AbortController;
+    progress?: PcbLayoutProgress;
+    running: boolean;
+    done: Promise<void>;
+    result?: LayoutResult;
+    error?: Error;
+};
+const operations = new Map<string, LocalOperation>();
+let starting = false;
 
 type MakePcbLayoutResponse = {
     content?: string;
@@ -55,19 +59,6 @@ function record(value: unknown): Record<string, unknown> | undefined {
         : undefined;
 }
 
-async function ensureNoActiveOperation() {
-    const active = await readActiveLayout();
-    if (!active) return;
-    const status = await getAsyncTaskStatus<MakePcbLayoutResponse>(
-        TASK_PATH,
-        active.remote_operation_id,
-    ).catch(() => undefined);
-    if (status?.status === 'pending') {
-        throw new Error(`make_pcb_layout is already running: ${active.operation_id}`);
-    }
-    await clearActiveLayout(active.operation_id);
-}
-
 function resultStatus(response: MakePcbLayoutResponse) {
     const status = record(response.toolReport)?.status;
     return status === 'error' ? 'failed_with_layout' as const : 'ok' as const;
@@ -78,23 +69,9 @@ async function saveDebugArtifact(response: MakePcbLayoutResponse, layoutId: stri
     return saveDataUrl(first?.svg_url || first?.svg, `${layoutId}-debug`);
 }
 
-async function finishOperation(active: ActivePcbLayout, operation: AsyncOperationResponse<MakePcbLayoutResponse>) {
-    if (operation.status === 'pending') {
-        return {
-            status: 'running',
-            operation_id: active.operation_id,
-            progress: asyncProgress(operation.intermediateResult),
-        };
-    }
-    if (operation.status === 'failed' || operation.status === 'cancelled') {
-        await clearActiveLayout(active.operation_id);
-        throw new Error(operation.error || `PCB layout ${operation.status}`);
-    }
-    const response = operation.result;
-    if (!response?.pcb) {
-        await clearActiveLayout(active.operation_id);
-        return pcbLayoutWithoutPlacementResult(active.operation_id, response);
-    }
+async function finishResponse(active: ActivePcbLayout, response: MakePcbLayoutResponse, signal: AbortSignal) {
+    signal.throwIfAborted();
+    if (!response.pcb) return pcbLayoutWithoutPlacementResult(active.operation_id, response);
     const layoutId = randomUUID();
     const [preview, debugPath] = await Promise.all([
         savePreviewImageFiles(response.preview_image_url, layoutId),
@@ -116,8 +93,10 @@ async function finishOperation(active: ActivePcbLayout, operation: AsyncOperatio
         debug_path: debugPath,
         created_at: Date.now(),
     });
-    await clearActiveLayout(active.operation_id);
-    await enqueueMutation(() => assemblePcbLayout(active.pcb_path, layoutId));
+    await enqueueMutation(() => {
+        signal.throwIfAborted();
+        return assemblePcbLayout(active.pcb_path, layoutId);
+    });
     return {
         status,
         applied: true,
@@ -129,53 +108,87 @@ async function finishOperation(active: ActivePcbLayout, operation: AsyncOperatio
     };
 }
 
+async function wait(operation: LocalOperation, waitMs: number) {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+        await Promise.race([operation.done, new Promise<void>(resolve => { timer = setTimeout(resolve, Math.max(0, waitMs)); })]);
+    } finally {
+        if (timer) clearTimeout(timer);
+    }
+    if (operation.error) throw operation.error;
+    if (operation.result) return operation.result;
+    return { status: 'running' as const, operation_id: operation.active.operation_id, progress: operation.progress };
+}
+
 export async function makePcbLayout(pcbPath: string, file: string, waitMs = 30_000) {
-    await ensureNoActiveOperation();
-    const schematicPath = await associatedSchematicPath(pcbPath);
-    await enqueueMutation(() => importPcbChanges(pcbPath, schematicPath));
-    const [code, input, pcbHash, schematicHash] = await Promise.all([
-        readFile(file, 'utf8'),
-        createPcbLayoutInput(pcbPath, schematicPath, true),
-        fileHash(pcbPath),
-        fileHash(schematicPath),
-    ]);
-    const remoteOperationId = await startAsyncTask(TASK_PATH, { code, ...input });
-    const operationId = createOperationId('pcb-layout');
-    const active: ActivePcbLayout = {
-        operation_id: operationId,
-        remote_operation_id: remoteOperationId,
-        pcb_path: pcbPath,
-        schematic_path: schematicPath,
-        pcb_hash: pcbHash,
-        schematic_hash: schematicHash,
-        started_at: Date.now(),
-    };
-    await writeActiveLayout(active);
-    return finishOperation(active, await waitForAsyncTask<MakePcbLayoutResponse>(
-        TASK_PATH,
-        remoteOperationId,
-        waitMs,
-    ));
+    if (starting || [...operations.values()].some(operation => operation.running)) {
+        throw new Error('make_pcb_layout is already running');
+    }
+    starting = true;
+    let operation: LocalOperation;
+    try {
+        const stale = await readActiveLayout();
+        if (stale?.pid && stale.pid !== process.pid) {
+            let alive = true;
+            try { process.kill(stale.pid, 0); } catch (error) {
+                if ((error as NodeJS.ErrnoException).code === 'ESRCH') alive = false;
+            }
+            if (alive) throw new Error(`make_pcb_layout is already running: ${stale.operation_id}`);
+        }
+        if (stale) await clearActiveLayout(stale.operation_id);
+        const schematicPath = await associatedSchematicPath(pcbPath);
+        await enqueueMutation(() => importPcbChanges(pcbPath, schematicPath));
+        const [code, input, pcbHash, schematicHash] = await Promise.all([
+            readFile(file, 'utf8'), createPcbLayoutInput(pcbPath, schematicPath, true),
+            fileHash(pcbPath), fileHash(schematicPath),
+        ]);
+        const active: ActivePcbLayout = {
+            operation_id: createOperationId('pcb-layout'), pcb_path: pcbPath,
+            schematic_path: schematicPath, pcb_hash: pcbHash, schematic_hash: schematicHash,
+            started_at: Date.now(), pid: process.pid,
+        };
+        await writeActiveLayout(active);
+        operation = { active, controller: new AbortController(), done: Promise.resolve(), running: true };
+        operations.set(active.operation_id, operation);
+        const current = operation;
+        current.done = (async () => {
+            try {
+                const response = await generatePcbLayout({ code, ...input }, {
+                    signal: current.controller.signal,
+                    onProgress: (progress: PcbLayoutProgress) => { current.progress = progress; },
+                });
+                current.result = await finishResponse(active, response as MakePcbLayoutResponse, current.controller.signal);
+            } catch (error) {
+                current.error = error instanceof Error ? error : new Error(String(error));
+            } finally {
+                try { await clearActiveLayout(active.operation_id); }
+                catch (error) { current.error ??= error instanceof Error ? error : new Error(String(error)); }
+                current.running = false;
+            }
+        })();
+    } finally {
+        starting = false;
+    }
+    return wait(operation, waitMs);
 }
 
 export async function waitPcbLayout(operationId: string, waitMs = 30_000) {
-    const active = await readActiveLayout();
-    if (!active || active.operation_id !== operationId) throw new Error(`PCB layout operation not found: ${operationId}`);
-    return finishOperation(active, await waitForAsyncTask<MakePcbLayoutResponse>(
-        TASK_PATH,
-        active.remote_operation_id,
-        waitMs,
-    ));
+    const operation = operations.get(operationId);
+    if (!operation) throw new Error(`PCB layout operation not found or interrupted: ${operationId}`);
+    return wait(operation, waitMs);
 }
 
 export async function cancelPcbLayout(operationId: string) {
-    const active = await readActiveLayout();
-    if (!active || active.operation_id !== operationId) throw new Error(`PCB layout operation not found: ${operationId}`);
-    await cancelAsyncTask(TASK_PATH, active.remote_operation_id);
-    const status = await getAsyncTaskStatus<MakePcbLayoutResponse>(
-        TASK_PATH,
-        active.remote_operation_id,
-    ).catch(() => undefined);
-    if (status && status.status !== 'pending') await clearActiveLayout(operationId);
-    return { status: 'cancel_requested', operation_id: operationId };
+    const operation = operations.get(operationId);
+    if (!operation) throw new Error(`PCB layout operation not found or interrupted: ${operationId}`);
+    if (operation.running) operation.controller.abort();
+    return { status: 'cancel_requested' as const, operation_id: operationId };
+}
+
+export async function disposePcbLayoutBackend() {
+    for (const operation of operations.values()) {
+        if (operation.running) operation.controller.abort();
+    }
+    await Promise.all([...operations.values()].map(operation => operation.done));
+    await disposeBackend();
 }

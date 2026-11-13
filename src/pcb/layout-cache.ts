@@ -4,19 +4,18 @@ import { join } from 'node:path';
 import sharp from 'sharp';
 import { BoardAssemble, BoardAssembleSchema } from '../types/board-assemble';
 import { CACHE_DIR } from '../utils/dirs';
-import { createOperationId } from '../operations/id';
 
 export type ActivePcbLayout = {
     operation_id: string;
-    remote_operation_id: string;
     pcb_path: string;
     schematic_path: string;
     pcb_hash: string;
     schematic_hash: string;
     started_at: number;
+    pid?: number;
 };
 
-export type StoredPcbLayout = Omit<ActivePcbLayout, 'operation_id' | 'remote_operation_id' | 'started_at'> & {
+export type StoredPcbLayout = Omit<ActivePcbLayout, 'operation_id' | 'started_at' | 'pid'> & {
     layout_id: string;
     pcb: BoardAssemble;
     status: 'ok' | 'failed_with_layout';
@@ -47,16 +46,7 @@ async function readJson(path: string) {
 }
 
 export async function readActiveLayout() {
-    const value = await readJson(activePath) as ActivePcbLayout | undefined;
-    if (!value || value.remote_operation_id) return value;
-
-    const migrated = {
-        ...value,
-        operation_id: createOperationId('pcb-layout'),
-        remote_operation_id: value.operation_id,
-    };
-    await writeActiveLayout(migrated);
-    return migrated;
+    return await readJson(activePath) as ActivePcbLayout | undefined;
 }
 
 export async function writeActiveLayout(active: ActivePcbLayout) {
