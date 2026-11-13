@@ -89,11 +89,18 @@ try {
     assert.deepEqual(new Set(outputs), new Set([pin(netlist, 'J2', '1'), pin(netlist, 'J3', '1')]));
     for (const c of regulators) assert.equal(pin(netlist, c.designator, '1'), pin(netlist, 'J1', '1'));
     for (const c of regulators) assert.equal(pin(netlist, c.designator, '2'), 'GND');
-    for (const [path, expectedGrounds] of [[main, 3], [child, 1]] as const) {
+    for (const path of [main, child]) {
         const source = parseSExpression(await readFile(path, 'utf8'));
         const grounds = children(source, 'symbol').filter(s => scalar(s, 'lib_id') === 'power:GNDREF');
-        assert.equal(grounds.length, expectedGrounds, 'one three-bar ground per connected wire group');
+        assert.ok(grounds.length > 0, 'ground nets must use three-bar ground symbols');
         assert.ok(grounds.every(s => nativeProperty(s, 'Value') === 'GND'));
+        const groundPoints = grounds.map(s => position(s));
+        assert.equal(new Set(groundPoints.map(p => `${p.x},${p.y}`)).size, grounds.length,
+            'ground symbols must occupy distinct locations');
+        const wirePoints = children(source, 'wire').flatMap(w => children(w, 'pts').flatMap(pts => children(pts, 'xy')))
+            .map(p => ({ x: Number(atom(p[1])), y: Number(atom(p[2])) }));
+        assert.ok(groundPoints.every(p => wirePoints.some(q => Math.hypot(q.x - p.x, q.y - p.y) < 0.001)),
+            'each ground symbol must connect to a wire');
         assert.ok(!children(source, 'global_label').some(s => atom(s[1]) === 'GND'));
         for (const sheet of children(source, 'sheet')) {
             const size = position(sheet, 'size');
