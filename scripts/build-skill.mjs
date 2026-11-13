@@ -124,6 +124,9 @@ try {
         node: rootPackage.engines.node, dependencies, installationBlockers,
     }, null, 2) + '\n');
     if (bundled) {
+        // Verify the backend's platform-native solver in a child so Windows releases the file.
+        const native = join(runtime, 'node_modules', 'eda-copilot-backend', 'native', 'pcb-board-packer', 'index.cjs');
+        execFileSync(process.execPath, ['-e', `require(${JSON.stringify(native)})`], { cwd: staging, stdio: 'pipe', windowsHide: true });
         execFileSync(process.execPath, [join(staging, 'scripts', 'kicad-copilot-cli.js'), '--help'], { cwd: staging, stdio: 'pipe', windowsHide: true });
     }
     await mkdir(dirname(output), { recursive: true });

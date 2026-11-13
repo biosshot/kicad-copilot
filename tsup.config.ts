@@ -16,6 +16,7 @@ export default defineConfig({
         'test-pcb-scenarios': 'scripts/test-pcb-scenarios.ts',
         'test-footprint-spec': 'scripts/test-footprint-spec.ts',
         'test-pcb-live': 'scripts/test-pcb-live.ts',
+        'test-local-backend': 'scripts/test-local-backend.ts',
         'test-routing-live': 'scripts/test-routing-live.ts',
         'test-routing-integration': 'scripts/test-routing-integration.ts',
         'test-analysis': 'scripts/test-analysis.ts',

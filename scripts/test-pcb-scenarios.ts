@@ -6,7 +6,7 @@ import { importKiCadRoutingBoard } from 'eda-copilot-router/adapters/kicad';
 import { applyBoardAssemble } from '../src/kicad/board-assemble';
 import { createDocument } from '../src/kicad/create-document';
 import { getSupportedKicadCli, preferredSupportedKicadCli } from '../src/kicad/cli';
-import { footprintAt, footprintIsGenerated, footprintLayer, footprintReference, listChildren, pcbFootprints, readPcb } from '../src/kicad/pcb-reader';
+import { footprintAt, footprintIsGenerated, footprintLayer, footprintReference, listChildren, padNet, pcbFootprints, readPcb } from '../src/kicad/pcb-reader';
 import { footprintGeometryIsNormalized, normalizeEasyEdaFootprintGeometry } from '../src/kicad/footprint-normalization';
 import { atomicWritePcb, parsePcbSource } from '../src/kicad/pcb-writer';
 import { pcbTemplate } from '../src/kicad/pcb-template';
@@ -194,14 +194,17 @@ async function main() {
         const emptyPath = join(directory, 'empty.kicad_pcb');
         await createDocument({ doc_type: 'pcb', path: emptyPath });
         await verifyWithCli(emptyPath);
-        const fixtureDirectory = process.env.KICAD_COPILOT_PCB_FIXTURE_DIR || 'D:\\MyProject\\kicad\\test';
-        const sourceSch = join(fixtureDirectory, 'stm32_debug.kicad_sch');
-        const targetPcb = join(directory, 'stm32_debug.kicad_pcb');
-        const targetSch = join(directory, 'stm32_debug.kicad_sch');
-        await cp(sourceSch, targetSch);
+        const fixtureDirectory = process.env.KICAD_COPILOT_PCB_FIXTURE_DIR;
+        if (fixtureDirectory) {
+            await cp(fixtureDirectory, directory, { recursive: true });
+        } else {
+            await runProcessChecked('tar', ['-xf', join(process.cwd(), 'examples', 'rp2350_debug.zip'), '-C', directory, '--strip-components=1'], { timeoutMs: 30_000 });
+        }
+        const name = fixtureDirectory ? 'stm32_debug' : 'rp2350_debug';
+        const targetPcb = join(directory, `${name}.kicad_pcb`);
+        const targetSch = join(directory, `${name}.kicad_sch`);
+        await rm(targetPcb, { force: true });
         await createDocument({ doc_type: 'pcb', path: targetPcb });
-        await cp(join(fixtureDirectory, 'kicad-copilot.pretty'), join(directory, 'kicad-copilot.pretty'), { recursive: true });
-        await cp(join(fixtureDirectory, 'fp-lib-table'), join(directory, 'fp-lib-table'));
         await importPcbChanges(targetPcb);
         await verifyWithCli(targetPcb);
 
@@ -268,10 +271,14 @@ async function main() {
         assert.deepEqual(footprintAt(hole), { x: 148.5, y: 95, rotate: 0 });
         const outline = boardOutline(assembled.root);
         assert.ok(outline.points.length >= 3, 'routing import requires a closed board outline');
-        assert.equal(outline.holes.length, 1, 'routing import must preserve Edge.Cuts holes');
-        const classifiedNet = 'VCC';
+        assert.equal(outline.holes.length, 0, 'NPTH mounting holes are not Edge.Cuts');
+        const cutoutBoard = parseSExpression(`(kicad_pcb
+            (gr_rect (start 0 0) (end 10 10) (layer "Edge.Cuts"))
+            (gr_circle (center 5 5) (end 6 5) (layer "Edge.Cuts")))`);
+        assert.equal(boardOutline(cutoutBoard).holes.length, 1, 'routing import must preserve Edge.Cuts holes');
+        const classifiedNet = pcbFootprints(assembled.root).flatMap((footprint) => listChildren(footprint, 'pad').map(padNet)).find(Boolean);
         assert.ok(classifiedNet, 'router rules test requires at least one routable net');
-        await writeFile(join(directory, 'stm32_debug.kicad_pro'), JSON.stringify({
+        await writeFile(join(directory, `${name}.kicad_pro`), JSON.stringify({
             board: { design_settings: { rules: {
                 min_clearance: 0.18,
                 min_copper_edge_clearance: 0.5,

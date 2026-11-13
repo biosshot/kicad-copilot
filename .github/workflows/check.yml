@@ -7,11 +7,28 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: kicad-copilot
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: kicad-copilot
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
-      - run: npm ci
+          cache-dependency-path: kicad-copilot/package-lock.json
+      - name: Read companion backend revision
+        id: backend
+        run: node -e "const fs=require('fs');const p=require('./backend-source.json');fs.appendFileSync(process.env.GITHUB_OUTPUT,'repository='+p.repository+'\nrevision='+p.revision+'\n')"
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ steps.backend.outputs.repository }}
+          ref: ${{ steps.backend.outputs.revision }}
+          path: eda-copilot-backend-kicad
+      - name: Build companion backend
+        working-directory: eda-copilot-backend-kicad
+        run: npm ci --ignore-scripts && npm run build
+      - run: npm ci --install-links
       - run: npm run check

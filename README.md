@@ -146,7 +146,7 @@ Restart the MCP client after adding the server. KiCad Copilot includes local wor
 
 ## Requirements
 
-- Node.js 20 or newer
+- Node.js 20.19 or newer
 - KiCad 9 or 10
 - Python 3 for managed EasyEDA2KiCad installation and kicad-happy analysis
 
@@ -157,6 +157,29 @@ The first real-component conversion uses an existing EasyEDA2KiCad installation 
 The first design-analysis call downloads the pinned kicad-happy release into the shared
 EDA Copilot asset cache after verifying its archive size and SHA-256 hash. Set
 `KICAD_HAPPY_DIR` to use a trusted local checkout instead.
+
+### Local backend and standalone skill
+
+Schematic layout, component search, PCB sizes and placement call `eda-copilot-backend`
+directly. No Copilot HTTP server, server URL or server credentials are needed.
+Catalog search and first-use downloads still require network access. KiCad supplies
+its symbol and footprint geometry as UUID-keyed fallback maps; catalog geometry wins
+when it resolves successfully.
+
+This development branch uses `file:../eda-copilot-backend-kicad` while the compatible
+backend changes await release. Build that sibling checkout first, then run
+`npm install --install-links` here. The source checkout is not a standalone npm release;
+`npm run check:release` prevents publishing this local dependency by mistake.
+
+Run `npm run build:skill:bundled` for a self-contained skill runtime for the current
+platform, then `npm run check:skill`. The result is `skill/`; its entrypoint explains
+persistent CLI sessions, SPICE simulation and datasheet tools. Native KiCad and Python
+remain system prerequisites. A lightweight `npm run build:skill` records an installation
+blocker until the backend dependency has a published version.
+
+Development checks: `npm run check` runs types, build and fast regression tests.
+`npm run test:native` runs native KiCad acceptance; `npm run test:local-backend` checks
+the actual local placement backend. Set `KICAD_CLI_PATH` for nonstandard installations.
 
 ## Schematic workflow
 

@@ -145,3 +145,5 @@ vite.config.ts.timestamp-*
 # Local architecture notes
 arch-docs/
 .test-output/
+skill/
+.skill-build-*/

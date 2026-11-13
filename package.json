@@ -41,13 +41,24 @@
     "test:schematic-hierarchy": "npm run build && node dist/test-schematic-hierarchy.js",
     "test:mcp-ldo": "npm run build && node dist/test-mcp-ldo.js",
     "test:schematic-matrix": "npm run build && node dist/test-schematic-matrix.js",
-    "check": "npm run typecheck && npm run build",
+    "test:cli-sessions": "node scripts/test-cli-sessions.mjs",
+    "test:operations": "node scripts/test-local-layout-operation.mjs",
+    "test:local-backend": "npm run build && node dist/test-local-backend.js",
+    "test:unit": "node dist/test-footprint-spec.js && node dist/test-analysis.js && npm run test:cli-sessions && npm run test:operations",
+    "test:native": "node scripts/run-native-tests.mjs",
+    "build:skill": "npm run build && node scripts/build-skill.mjs",
+    "build:skill:bundled": "npm run build && node scripts/build-skill.mjs --bundled",
+    "check:skill": "node scripts/check-skill.mjs",
+    "check:release": "node scripts/check-release.mjs",
+    "check": "npm run typecheck && npm run build && npm run test:unit",
     "prepack": "npm run build",
+    "prepublishOnly": "npm run check:release && npm run check",
     "start": "node dist/index.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "eda-copilot-router": "0.2.1",
+    "eda-copilot-backend": "file:../eda-copilot-backend-kicad",
+    "eda-copilot-router": "0.3.2",
     "fast-xml-parser": "^5.10.1",
     "find-up": "^5.0.0",
     "p-queue": "^9.1.0",
@@ -61,6 +72,6 @@
     "typescript": "^5.9.3"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=20.19"
   }
 }

@@ -1,6 +1,7 @@
 import findUp from 'find-up';
 import { homedir, tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const moduleDir = dirname(fileURLToPath(import.meta.url));
@@ -11,7 +12,8 @@ if (!packageJsonPath) {
 }
 
 export const ROOT_DIR = dirname(packageJsonPath);
-export const DOCS_DIR = join(ROOT_DIR, 'docs');
+const packageMetadata = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as { kicadCopilotDocs?: string };
+export const DOCS_DIR = resolve(ROOT_DIR, packageMetadata.kicadCopilotDocs || 'docs');
 export const SKILL_DOC_PATH = join(DOCS_DIR, 'SKILL.md');
 export const TEMP_DIR = join(tmpdir(), 'kicad-copilot-mcp');
 
