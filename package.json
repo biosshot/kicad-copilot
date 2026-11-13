@@ -69,6 +69,7 @@
   },
   "devDependencies": {
     "@types/node": "^25.0.0",
+    "esbuild": "^0.27.7",
     "rimraf": "^6.1.2",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3"

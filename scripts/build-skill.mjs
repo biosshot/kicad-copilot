@@ -1,6 +1,7 @@
 // Default: compiled skill plus npm manifest. --bundled: include production dependencies.
 // npm's pack list is authoritative: no source-checkout symlinks escape into the skill.
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { cp, mkdir, readFile, readdir, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
@@ -118,10 +119,20 @@ try {
         private: true,
         type: 'module',
     }, null, 2) + '\n');
+    let backendSource;
+    try { backendSource = JSON.parse(await readFile(join(mcpRoot, 'backend-source.json'), 'utf8')); }
+    catch (error) { if (error.code !== 'ENOENT') throw error; }
+    let nativeSolver;
+    if (bundled) {
+        const nativeDir = join(runtime, 'node_modules', 'eda-copilot-backend', 'native', 'pcb-board-packer');
+        const filename = createRequire(import.meta.url)(join(nativeDir, 'platform.cjs')).nativeFilename();
+        const bytes = await readFile(join(nativeDir, filename));
+        nativeSolver = { filename, sha256: createHash('sha256').update(bytes).digest('hex') };
+    }
     await writeFile(join(staging, 'build-info.json'), JSON.stringify({
         name: 'kicad-copilot', version: rootPackage.version,
         distribution: bundled ? 'bundled' : 'npm', platform: bundled ? platform : null,
-        node: rootPackage.engines.node, dependencies, installationBlockers,
+        node: rootPackage.engines.node, dependencies, installationBlockers, backendSource, nativeSolver,
     }, null, 2) + '\n');
     if (bundled) {
         // Verify the backend's platform-native solver in a child so Windows releases the file.
