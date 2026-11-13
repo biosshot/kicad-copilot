@@ -6,7 +6,7 @@ import { CircuitModStruct } from '../types/circuit';
 import { SKILL_DOC_PATH } from '../utils/dirs';
 import { diagnosticToolResult } from '../utils/diagnostics';
 import { enqueueMutation } from '../utils/mutation-queue';
-import { postJson } from '../utils/server';
+import { componentSearch, searchReusedBlock } from 'eda-copilot-backend/components';
 import { runTool, textResult } from '../utils/tool-result';
 import { registeredAsset, nativeProperty } from '../kicad/schematic-assets';
 import { basename } from 'node:path';
@@ -29,7 +29,7 @@ export function registerCircuitTools(server: McpServer) {
 
             return runTool(async () => {
                 const asset = part_uuid ? await registeredAsset(part_uuid) : undefined;
-                if (!asset) return postJson('/v1/mcp-tools/component-search', { part_uuid, MPN });
+                if (!asset) return componentSearch({ part_uuid, MPN });
                 return { bestComponent: {
                     part_uuid: asset.partUuid,
                     name: asset.kind === 'sheet' ? basename(asset.path, '.kicad_sch') : nativeProperty(asset.instance, 'Value'),
@@ -55,7 +55,7 @@ export function registerCircuitTools(server: McpServer) {
             }),
         },
         async ({ query, page, limit }) => runTool(
-            () => postJson('/v1/mcp-tools/search-reused-block', { query, page, limit }),
+            () => searchReusedBlock({ query, page, limit }),
         ),
     );
 

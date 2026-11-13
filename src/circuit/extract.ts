@@ -3,7 +3,7 @@ import { applyCircuitAssembly } from '../kicad/assembly';
 import { getProjectNetlist, getSchematicContext } from '../kicad/schematic-reader';
 import { CircuitAssembly, CircuitMod, ExplainCircuit } from '../types/circuit';
 import { createDiagnosticCollector, errorWithDiagnostics } from '../utils/diagnostics';
-import { postJson } from '../utils/server';
+import { extractCircuit as generateCircuit } from 'eda-copilot-backend/schematic';
 import { targetCircuitAssembly } from './target-assembly';
 import { prepareSchematicInput } from './schematic-input';
 import { withSchematicChanges } from '../kicad/schematic-writer';
@@ -95,7 +95,7 @@ export async function extractCircuit(
     circuit = context.circuit;
     const { target: inputCircuit, project: projectCircuit } = context;
     const checkpointId = await saveCheckpoint(path, 'Before extract_circuit');
-    const response = await postJson('/v1/mcp-tools/extract-circuit', {
+    const response = await generateCircuit({
         circuit,
         inputCircuit: projectCircuit,
         symbols: context.symbols,

@@ -100,19 +100,17 @@ export function createPcbLayoutPayload(
         if (!requestComponent) throw new Error(`schematic component missing from circuit: ${component.designator}`);
 
         const easyEda = easyEdaIdentity(footprint);
-        if (easyEda.footprintUuid || easyEda.partUuid) {
-            if (easyEda.footprintUuid) requestComponent.footprint_uuid = easyEda.footprintUuid;
-            if (easyEda.partUuid) requestComponent.part_uuid = easyEda.partUuid;
-            continue;
-        }
-
-        const footprintUuid = childText(footprint, 'uuid') || childText(footprint, 'tstamp');
+        if (easyEda.partUuid) requestComponent.part_uuid = easyEda.partUuid;
+        // Always provide the actual board geometry, including converted catalog
+        // parts. The backend resolves the catalog first and uses this on a miss.
+        const footprintUuid = easyEda.footprintUuid || childText(footprint, 'uuid') || childText(footprint, 'tstamp');
         if (!footprintUuid) throw new Error(`KiCad footprint has no uuid: ${component.designator}`);
-        if (Object.hasOwn(footprints, footprintUuid)) {
-            throw new Error(`duplicate KiCad footprint uuid: ${footprintUuid}`);
+        const spec = kicadFootprintToSpec(footprint);
+        if (Object.hasOwn(footprints, footprintUuid) && JSON.stringify(footprints[footprintUuid]) !== JSON.stringify(spec)) {
+            throw new Error(`conflicting KiCad geometry for footprint uuid: ${footprintUuid}`);
         }
         requestComponent.footprint_uuid = footprintUuid;
-        footprints[footprintUuid] = kicadFootprintToSpec(footprint);
+        footprints[footprintUuid] = spec;
     }
 
     return {

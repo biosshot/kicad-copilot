@@ -110,7 +110,7 @@ const identifiedFootprint = parseSExpression(`(footprint "kicad-copilot:REMOTE"
     (property "kicad_copilot:easyeda_geometry_rotation" "180")
     (pad "1" smd rect (at 0 0) (size 1 1) (layers "F.Cu" "F.Mask")))`);
 const remotePayload = createPcbLayoutPayload(circuit(easyEdaComponent), [easyEdaComponent], [identifiedFootprint]);
-assert.deepEqual(remotePayload.footprints, {});
+assert.deepEqual(remotePayload.footprints[easyEdaFootprintUuid], kicadFootprintToSpec(identifiedFootprint));
 assert.equal(remotePayload.circuit.components[0].part_uuid, easyEdaPartUuid);
 assert.equal(remotePayload.circuit.components[0].footprint_uuid, easyEdaFootprintUuid);
 
