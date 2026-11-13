@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { kicadFootprintToSpec } from '../src/kicad/footprint-spec';
-import { parseSExpression } from '../src/kicad/sexpr/ast';
+import { parseSExpression, printSExpression } from '../src/kicad/sexpr/ast';
 import { createPcbLayoutPayload } from '../src/pcb/layout-input';
 import type { PcbSchematicComponent } from '../src/kicad/schematic-reader';
 import type { ExplainCircuit } from '../src/types/circuit';
@@ -82,6 +82,13 @@ const localComponent = component();
 const localPayload = createPcbLayoutPayload(circuit(localComponent), [localComponent], [nativeFootprint]);
 assert.equal(localPayload.circuit.components[0].footprint_uuid, 'native-footprint-uuid');
 assert.deepEqual(localPayload.footprints['native-footprint-uuid'], nativeSpec);
+const secondComponent = component({ designator: 'U2', identity: '/sheet/symbol-2' });
+const duplicateNative = parseSExpression(printSExpression(nativeFootprint)
+    .replace('"U1"', '"U2"').replace('"/sheet/symbol-1"', '"/sheet/symbol-2"'));
+assert.throws(() => createPcbLayoutPayload(
+    { components: [...circuit(localComponent).components, ...circuit(secondComponent).components] },
+    [localComponent, secondComponent], [nativeFootprint, duplicateNative],
+), /duplicate KiCad footprint uuid/);
 
 const placementPayload = createPcbLayoutPayload(
     circuit(localComponent),

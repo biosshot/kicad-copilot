@@ -106,6 +106,9 @@ export function createPcbLayoutPayload(
         const footprintUuid = easyEda.footprintUuid || childText(footprint, 'uuid') || childText(footprint, 'tstamp');
         if (!footprintUuid) throw new Error(`KiCad footprint has no uuid: ${component.designator}`);
         const spec = kicadFootprintToSpec(footprint);
+        if (!easyEda.footprintUuid && Object.hasOwn(footprints, footprintUuid)) {
+            throw new Error(`duplicate KiCad footprint uuid: ${footprintUuid}`);
+        }
         if (Object.hasOwn(footprints, footprintUuid) && JSON.stringify(footprints[footprintUuid]) !== JSON.stringify(spec)) {
             throw new Error(`conflicting KiCad geometry for footprint uuid: ${footprintUuid}`);
         }
