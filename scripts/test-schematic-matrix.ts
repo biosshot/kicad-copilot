@@ -373,6 +373,24 @@ try {
         await p.modify('main', [], { external_rm_connect: [{ designator: 'PWR_A', pin_number: 'OUT_B' }],
             external_connect: [{ designator: 'PWR_A', pin_number: 'OUT_B', signal_name: 'local:ROOT:REWIRED' }] });
         await p.verify('04-rewired');
+        // A new local label on a sheet pin alone is an orphan under KiCad ERC,
+        // even though the netlist joins it to the child. Check the negative
+        // case and then attach a real parent-page pin to the same net.
+        const ercTypes = async (snapshot: string) => {
+            const report = JSON.parse(await readFile(join(p.directory, snapshot, 'erc.json'), 'utf8'));
+            return report.sheets.flatMap((sheet: any) => sheet.violations).map((v: any) => v.type);
+        };
+        assert.ok((await ercTypes('04-rewired')).includes('label_dangling'));
+        await p.modify('main', [], {
+            external_rm_connect: [{ designator: 'J4', pin_number: '1' }],
+            external_connect: [{ designator: 'J4', pin_number: '1', signal_name: 'local:ROOT:REWIRED' }],
+        });
+        await p.verify('04b-rewired-connected');
+        assert.ok(!(await ercTypes('04b-rewired-connected')).includes('label_dangling'));
+        const reconnected = xmlParser.parse(await readFile(join(p.directory, '04b-rewired-connected', 'netlist.xml'), 'utf8'));
+        const rewired = list<any>(reconnected.export.nets.net).find((net: any) => net['@_name'] === '/REWIRED');
+        const nodes = list<any>(rewired?.node).map((node: any) => `${node['@_ref']}.${node['@_pin']}`);
+        assert.ok(nodes.includes('J4.1') && nodes.includes('U2.5') && nodes.includes('C6.1'), 'KiCad must join parent and child pins');
         await p.modify('main', [], { rm_components: ['PWR_B'] });
         await p.verify('05-instance-removed');
         await p.modify('main', [p.sheet('PWR_C', 'power', { VIN: 'local:ROOT:VIN_B', OUT_A: 'local:ROOT:OUT_C', OUT_B: 'local:ROOT:OUT_D' })]);

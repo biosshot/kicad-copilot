@@ -26,9 +26,9 @@ Two persistent sessions save the same file concurrently. In 3 of 10 fresh target
 
 Fix direction: cross-process serialization for checkpoint metadata transactions and carefully defined restore/mutation coordination; preserve successfully acknowledged IDs.
 
-### P2: hierarchical rewiring introduces an ERC dangling-label error
+### Retracted P2: isolated parent-page label after hierarchical rewiring
 
-In the nested LDO fixture, `extract_circuit` removes `PWR_A.OUT_B` from its old net and connects it to `local:ROOT:REWIRED`. Before this mutation ERC has one inherited power-driver error; afterwards it has an additional `label_dangling` error for REWIRED and an isolated old-label warning. Independent native netlist still contains `/REWIRED` with C6.1 and U2.5. Thus the observed defect is a new ERC error, not proven electrical disconnection. The root cause has not been established. Exact calls, before/after ERC and rendered root page: `hierarchy/matrix/run-mW82Ez/nested-ldo/{03-partial-layout,04-rewired}/`; detailed interpretation: `hierarchy/report.md`. The error persists after removing and restoring an instance.
+The earlier P2 attributed KiCad ERC `label_dangling` on `REWIRED` to serialization. Native controls show this is expected for this test request: only the child-sheet pin was assigned the new local net; no parent-page symbol pin or other matching label was connected to it. With J4.1 also attached to `REWIRED`, KiCad 10 removes the dangling-label error and its XML netlist contains J4.1, C6.1, and U2.5. Moving the lone label directly onto the sheet pin instead of using a wire does not clear the error. No ERC suppression or electrical semantics change is warranted. The initial one-error power-driver finding remains a fixture limitation. Control evidence: `hierarchy/erc-control/erc.json`, `hierarchy/erc-control/net.xml`, `hierarchy/erc-direct/erc.json`; detailed history: `hierarchy/report.md`. The nested matrix now asserts both the isolated and connected cases using native ERC and netlist. KiCad documents the label check in its [schematic editor manual](https://docs.kicad.org/10.0/en/eeschema/eeschema.html).
 
 ### P2: packaged datasheet download requires hard-link support
 

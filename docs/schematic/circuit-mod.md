@@ -95,6 +95,8 @@ The first two colons separate `local`/`hier`, the sheet, and the name. The rest 
 
 The adapter validates and resolves these references before layout. It strips the addressing prefix when writing native labels. Local references to another file are errors, never global fallbacks. Hierarchical references on a parent must identify an existing pin (or a pin of a sheet added in the same call). Connecting within a child can create a new hierarchical label; existing inclusions receive matching pins. New ports default to bidirectional; existing port directions are retained.
 
+A new local net attached only to a child-sheet pin can produce a KiCad `label_dangling` ERC error even when the child netlist is connected. Connect the intended parent-page endpoint to that net before judging ERC; do not suppress the check.
+
 Wire sections remain native wires. Generated net markers use the resolved native label type, including when the server proposes a power-style service component. Existing power symbols keep their native meaning. Local and global labels with the same literal name on one page cannot represent independent nets; conflicting requests are rejected.
 
 Schematic buses currently require expansion before using component layout; unsupported bus wiring is rejected rather than silently flattened.
