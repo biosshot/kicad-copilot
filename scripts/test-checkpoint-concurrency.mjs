@@ -8,7 +8,7 @@ import { build } from 'esbuild';
 
 await mkdir('.test-output', { recursive: true });
 const dir = await mkdtemp(resolve('.test-output/checkpoint-concurrency-'));
-const cli = join(dir, 'cli.js');
+const cli = process.env.KICAD_COPILOT_TEST_CLI ? resolve(process.env.KICAD_COPILOT_TEST_CLI) : join(dir, 'cli.js');
 const env = { ...process.env, KICAD_COPILOT_CLI_HOME: join(dir, 'sessions'), KICAD_COPILOT_CACHE_DIR: join(dir, 'cache'), COPILOT_ROUTER_CACHE_DIR: join(dir, 'router') };
 const ids = []; let passed = false;
 function run(...args) {
@@ -33,11 +33,13 @@ function asyncCall(id, name, args) {
   });
 }
 try {
+  if (!process.env.KICAD_COPILOT_TEST_CLI) {
   const sdk = resolve(createRequire(import.meta.url).resolve('@modelcontextprotocol/sdk/package.json'), '../../esm/server');
   await build({ entryPoints: ['src/cli.ts', 'src/index.ts'], outdir: dir, bundle: true, platform: 'node', format: 'esm', packages: 'external', plugins: [{ name: 'sdk', setup(b) {
     b.onResolve({ filter: /^@modelcontextprotocol\/sdk\/client\// }, args => ({ path: args.path, external: true }));
     b.onResolve({ filter: /^@modelcontextprotocol\/sdk\/server\/(mcp|stdio)$/ }, args => ({ path: join(sdk, `${args.path.split('/').at(-1)}.js`) }));
   } }] });
+  }
   for (let i = 0; i < 8; i++) ids.push(run('start'));
   for (const count of [2, 8]) for (let round = 0; round < 4; round++) {
     const file = join(dir, `target-${count}-${round}.kicad_sch`), bytes = Buffer.from(`exact bytes ${randomUUID()}\r\n`);
