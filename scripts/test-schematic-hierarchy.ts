@@ -78,10 +78,12 @@ try {
     assert.ok(native.part_uuid);
     // Only the known project-local assets miss the catalogue; layout still runs in the real backend.
     const localIds = new Set([adcInfo.part_uuid!, native.part_uuid]);
+    let localCatalogueMisses = 0;
     globalThis.fetch = async (input, init) => {
         const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
         const match = url.pathname.match(/^\/api\/devices\/([^/]+)$/);
         if (match && localIds.has(decodeURIComponent(match[1]))) {
+            localCatalogueMisses++;
             return Response.json({ success: false, result: null, msg: 'fixture asset is local' });
         }
         return realFetch(input, init);
@@ -204,6 +206,7 @@ try {
             (effects (font (size 1.27 1.27))) (uuid "${randomUUID()}"))`).join('\n');
     await writeFile(multi, empty(randomUUID()).replace('(lib_symbols)', `(lib_symbols ${dualLibrary})`).replace(/\)\s*$/, `${units})`));
     const multiBefore = await getSchematic(multi);
+    for (const component of multiBefore.components) if (component.part_uuid) localIds.add(component.part_uuid);
     assert.deepEqual(multiBefore.components.map(c => c.designator), ['U1.1', 'U1.2']);
     assert.deepEqual(multiBefore.components.map(c => c.pins.map(p => p.pin_number)), [['1'], ['2']]);
     await beautifySchematic(multi, { Units: ['U1'] });
@@ -224,6 +227,7 @@ try {
     assert.equal(await readFile(adc, 'utf8'), savedChild, 'a failed operation must restore child instance annotations');
     const source = await readFile(main, 'utf8');
     assert.ok(!/\((?:label|global_label|hierarchical_label)\s+"(?:local|global|hier):/.test(source));
+    assert.ok(localCatalogueMisses > 0, 'local fixtures must exercise catalogue fallback');
     console.log(`Hierarchy integration passed with the local backend. Fixtures: ${directory}`);
 } finally {
     globalThis.fetch = realFetch;
