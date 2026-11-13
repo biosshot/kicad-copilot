@@ -13,6 +13,7 @@ import {
     footprintReference,
     listChildren,
     padNumber,
+    padNet,
     pcbFootprints,
     propertyValue,
     readPcb,
@@ -101,6 +102,55 @@ function ensureLegacyNet(root: SExpression[], ids: Map<string, number>, name: st
     ids.set(name, id);
     root.push([token('net'), token(String(id)), token(name, true)]);
     return id;
+}
+
+/** Plan copper renames from the complete old-to-new pad relation before mutating the PCB. */
+function reconcileCopperNets(root: SExpression[], version: number, desired: Map<SExpression[], PcbSchematicComponent | null>) {
+    const oldToNew = new Map<string, Set<string>>();
+    const newToOld = new Map<string, Set<string>>();
+    const add = (map: Map<string, Set<string>>, key: string, value: string) => {
+        const values = map.get(key) || new Set<string>();
+        values.add(value);
+        map.set(key, values);
+    };
+    for (const footprint of pcbFootprints(root)) {
+        const component = desired.get(footprint);
+        const nets = component ? pinNets(component) : undefined;
+        for (const pad of listChildren(footprint, 'pad')) {
+            const old = padNet(pad);
+            if (!old) continue;
+            const number = padNumber(pad);
+            const next = component === null ? '' : (number && nets?.has(number) ? nets.get(number)! : old);
+            add(oldToNew, old, next);
+            if (next) add(newToOld, next, old);
+        }
+    }
+    const ids = rootNetIds(root);
+    const namesById = new Map([...ids].map(([name, id]) => [String(id), name]));
+    const copper = ['segment', 'arc', 'via', 'zone'].flatMap((head) => listChildren(root, head));
+    const netName = (item: SExpression[]) => {
+        const net = findChild(item, 'net');
+        const value = atom(net?.[1]) || '';
+        return atom(net?.[2]) || childText(item, 'net_name') || namesById.get(value) || (version >= 20250000 ? value : '');
+    };
+    const copperNets = new Set(copper.map(netName).filter(Boolean));
+    const renames = new Map<string, string>();
+    for (const [old, targets] of oldToNew) {
+        if (!copperNets.has(old) || (targets.size === 1 && targets.has(old))) continue;
+        const next = targets.size === 1 ? [...targets][0] : '';
+        const sources = next ? newToOld.get(next) : undefined;
+        if (!next || (sources && sources.size !== 1) || (next !== old && copperNets.has(next))) {
+            throw new Error(`PCB_IMPORT_AMBIGUOUS_COPPER_NET: existing copper on ${old} cannot be safely synchronized (split, merge, or removed net); resolve the copper before importing.`);
+        }
+        renames.set(old, next);
+    }
+    for (const item of copper) {
+        const next = renames.get(netName(item));
+        if (!next) continue;
+        if (version >= 20250000) setChild(item, 'net', [token(next, true)]);
+        else setChild(item, 'net', [token(String(ensureLegacyNet(root, ids, next)))]);
+        if (findChild(item, 'net_name')) setChild(item, 'net_name', [token(next, true)]);
+    }
 }
 
 function assignPadNets(root: SExpression[], footprint: SExpression[], component: PcbSchematicComponent, version: number) {
@@ -230,6 +280,17 @@ export async function importPcbChanges(pcbPathInput: string, schematicOverride?:
             throw new Error(`ambiguous PCB identity: ${component.designator}`);
         }
     }
+
+    const desired = new Map<SExpression[], PcbSchematicComponent | null>();
+    for (const footprint of footprints) {
+        if (footprintIsBoardOnly(footprint)) continue;
+        const path = footprintPath(footprint);
+        const ref = footprintReference(footprint)?.toUpperCase();
+        const component = (path && allByIdentity.get(path)) || (ref && activeByReference.get(ref));
+        if (component) desired.set(footprint, component.on_board && component.footprint_name ? component : null);
+        else if (path) desired.set(footprint, null);
+    }
+    reconcileCopperNets(pcb.root, pcb.version, desired);
 
     const resolvedDefinitions = new Map<string, Awaited<ReturnType<typeof resolveFootprintDefinition>>>();
     for (const component of active) {
