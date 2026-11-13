@@ -48,6 +48,16 @@ interface ImpedanceOptions {
   referenceNet?: string | "auto";
 }
 
+type NetPriority = "critical" | "high" | "normal" | "low";
+type ViaPreference = "auto" | "avoid" | "forbid";
+
+interface NetRoutingPreference {
+  /** Relative routing importance. Default: normal. */
+  priority?: NetPriority;
+  /** auto uses the router default; avoid is strong; forbid is prohibitive best-effort. Neither is a DRC rule. Default: auto. */
+  viaPreference?: ViaPreference;
+}
+
 interface ZoneOptions {
   clearanceMm?: number;
   minThicknessMm?: number;
@@ -87,30 +97,38 @@ declare function polygon(net: string): PolygonBuilder;
 
 declare function plane(options: {
   net: string;
+  /** Layers to pour. Default OUTER (TOP and BOTTOM). For ordinary two-layer GND, write OUTER explicitly; use one layer only for a verified reason. */
   layers?: LayerSelector;
   region?: RegionSelector;
-  paddingMm?: number;
   zone?: ZoneOptions;
   stitching?: false | true | {
     gridMm?: number;
+    /** Maximum pad-center to via-center distance in mm. Plane stitching searches beside target-net pads before adding the background grid. Default 10. */
     maxVisibleViaDistanceMm?: number;
     via?: "drc-min" | Pick<ViaOptions, "diameterMm" | "drillMm">;
+    /** Allow pad-centered stitching vias. Default false; requires explicit opt-in. */
     viaInPad?: boolean;
-    maxVias?: number;
   };
 }): void;
 
 declare function drc(options: RuleOptions): void;
 declare function netClass(name: string, options: RuleOptions & { nets: string[] }): void;
+/** Add or move nets into an existing net class without replacing its other members. */
+declare function assignNetsToNetClass(name: string, nets: string[]): void;
+/** Remove selected nets from one named net class. */
+declare function removeNetsFromNetClass(name: string, nets: string[]): void;
+/** Remove selected nets from whichever net class currently owns them. */
+declare function unassignNetClass(nets: string[]): void;
+/** Delete one net class relation. */
+declare function deleteNetClass(name: string): void;
 
-declare function signalNet(net: string, options?: RuleOptions & {
+declare function signalNet(net: string, options?: RuleOptions & NetRoutingPreference & {
   netClass?: string;
   impedance?: ImpedanceOptions;
 }): void;
 
-declare function powerNet(net: string, options?: RuleOptions & {
+declare function powerNet(net: string, options?: RuleOptions & NetRoutingPreference & {
   netClass?: string;
-  /** Prefer this electrical intent over an LLM-calculated trackWidthMm. */
   maxCurrentA?: number;
   maxTempRiseC?: number;
   maxTrackWidthMm?: number;
@@ -127,15 +145,24 @@ declare function diffPair(id: string, options: RuleOptions & {
   maxUncoupledLengthMm?: number;
   impedance?: ImpedanceOptions;
 }): void;
+/** Delete one differential-pair relation. */
+declare function deleteDiffPair(id: string): void;
 
 declare function matchedGroup(id: string, options: {
   nets: string[];
   toleranceMm?: number;
 }): void;
+/** Add nets to an existing matched group without replacing its other members. */
+declare function addNetsToMatchedGroup(id: string, nets: string[]): void;
+/** Remove selected nets from one matched group. Groups with fewer than two members are removed. */
+declare function removeNetsFromMatchedGroup(id: string, nets: string[]): void;
+/** Move nets from any current matched group into the named group. */
+declare function moveNetsToMatchedGroup(id: string, nets: string[]): void;
+/** Delete one matched-group relation. */
+declare function deleteMatchedGroup(id: string): void;
 
 interface ViaStitchCommon {
   via?: Pick<ViaOptions, "diameterMm" | "drillMm"> | "drc-min";
-  maxVias?: number;
 }
 
 type ViaStitchOptions =
@@ -183,36 +210,29 @@ interface BusDetectOptions {
 /** true emits only backend enablement; omitted numeric fields stay backend defaults. */
 declare function busDetect(enabled: boolean | BusDetectOptions): void;
 
-/** Configure automatic fanout for a component or one logical pad. */
+/** Explicit dense-package escape retry for a component or one logical pad. The first routing attempt must omit it unless the user requires it; successful fanout copper is created before main routing. */
 declare function fanout(target: FanoutTarget, options?: FanoutOptions): void;
 
 /**
- * Disable automatic dense-package fanout for whole components or individual
- * logical pads. This does not exclude their nets from normal routing.
+ * Exclude whole components or individual logical pads from explicit
+ * dense-package fanout. This does not exclude their nets from normal routing.
  */
 declare function disableFanout(...targets: FanoutTarget[]): void;
 
-/** Declare the verified board/fabricator stack for current and impedance derivation. */
+/** Copper disableRouting defaults to false. true forbids new tracks globally, not planes or through-via spans; intersected with per-net allowedLayers. Repeat in each routing program that needs this policy. */
 declare function stack(options: {
   boardThicknessMm?: number;
   fallbackCopperThicknessOz?: number;
   viaPlatingThicknessUm?: number;
   maxTrackWidthMm?: number;
   layers?: Array<
-    | { kind: "copper"; name: PhysicalLayer; thicknessOz?: number; thicknessMm?: number }
+    | { kind: "copper"; name: PhysicalLayer; thicknessOz?: number; thicknessMm?: number; disableRouting?: boolean }
     | { kind: "dielectric"; name?: string; thicknessMm?: number; relativePermittivity?: number; lossTangent?: number; material?: string }
   >;
   solderMask?: {
     top?: { thicknessMm?: number; relativePermittivity?: number };
     bottom?: { thicknessMm?: number; relativePermittivity?: number };
   };
-}): void;
-
-/** Usually omit quality(); the router default is balanced. */
-declare function quality(options: {
-  profile?: "fast" | "balanced" | "quality-first" | "completion-first";
-  /** 1..16. Omit unless a measured routing problem justifies extra candidates. */
-  maxCandidates?: number;
 }): void;
 
 declare function onlyNets(...nets: string[]): void;

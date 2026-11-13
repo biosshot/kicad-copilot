@@ -1,9 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { access, copyFile, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, extname, join, resolve } from 'node:path';
-import { run, type RoutingDiagnostic, type RoutingResult } from 'eda-copilot-router';
+import { createHybridBackend, run, type RoutingDiagnostic, type RoutingResult } from 'eda-copilot-router';
 import { applyKiCadRoutingResult, importKiCadRoutingBoard } from 'eda-copilot-router/adapters/kicad';
-import { createKrtBackend } from 'eda-copilot-router/backends/krt';
 import { saveCheckpoint } from '../checkpoints/store';
 import { readPcb } from '../kicad/pcb-reader';
 import { inspectPcbCandidate, pcbDrcMetrics } from '../kicad/pcb-validation';
@@ -106,15 +105,18 @@ async function runOperation(operation: PcbDslOperation, dslPath: string) {
     try {
         await mkdir(artifactsDirectory, { recursive: true });
         operation.stage = 'importing';
+        const sourceBeforeRouting = await readFile(operation.path, 'utf8');
         const imported = await importKiCadRoutingBoard(operation.path);
         if (!imported.board || !imported.context) throw new Error(imported.diagnostics.map(item => item.message).join('\n'));
         const dsl = await readFile(resolve(dslPath), 'utf8');
         operation.controller.signal.throwIfAborted();
 
         operation.stage = 'routing';
-        const backend = createKrtBackend({
-            artifactsDirectory: join(artifactsDirectory, 'krt'),
-            keepArtifacts: true,
+        const backend = createHybridBackend({
+            krt: {
+                artifactsDirectory: join(artifactsDirectory, 'krt'),
+                keepArtifacts: true,
+            },
         });
         const signal = AbortSignal.any([
             operation.controller.signal,
@@ -124,18 +126,25 @@ async function runOperation(operation: PcbDslOperation, dslPath: string) {
             board: imported.board,
             dsl,
             backend,
-            policy: { profile: 'completion-first' },
             signal,
         });
         await writeFile(join(artifactsDirectory, 'routing-result.json'), `${JSON.stringify(result, null, 2)}\n`);
-        signal.throwIfAborted();
+        // A timeout may still yield independently validated partial copper.
+        operation.controller.signal.throwIfAborted();
+        if (result.status === 'error') {
+            throw new Error(result.diagnostics.filter(item => item.severity === 'error')
+                .map(item => `${item.code}: ${item.message}`).join('\n') || 'PCB router DSL failed.');
+        }
 
         operation.stage = 'verifying';
         const candidatePath = join(artifactsDirectory, 'candidate.kicad_pcb');
         const applied = await applyKiCadRoutingResult(imported.context, result, candidatePath);
         if (!applied.outputPath) throw new Error(applied.diagnostics.map(item => item.message).join('\n'));
-        signal.throwIfAborted();
-        if (!result.rules.applyRequested) {
+        const adapterErrors = applied.diagnostics.slice(result.diagnostics.length).filter(item => item.severity === 'error');
+        if (adapterErrors.length) throw new Error(adapterErrors.map(item => `${item.code}: ${item.message}`).join('\n'));
+        operation.controller.signal.throwIfAborted();
+        const applyRules = result.operation === 'apply-drc' || result.operation === 'all';
+        if (!applyRules) {
             await restoreSourceRulesForRoutingOnly(operation.path, applied.outputPath);
         }
         const candidate = await readPcb(applied.outputPath);
@@ -146,16 +155,19 @@ async function runOperation(operation: PcbDslOperation, dslPath: string) {
         );
         const verificationDiagnostics = nativeVerificationDiagnostics(inspected.report);
         const nativeVerification = verificationDiagnostics.length ? 'failed' as const : 'passed' as const;
-        const diagnostics = [...applied.diagnostics, ...verificationDiagnostics];
-        signal.throwIfAborted();
+        const diagnostics = [...imported.diagnostics, ...applied.diagnostics, ...verificationDiagnostics];
+        operation.controller.signal.throwIfAborted();
 
         operation.stage = 'applying';
         await enqueueMutation(async () => {
             const current = await readPcb(operation.path);
-            signal.throwIfAborted();
+            operation.controller.signal.throwIfAborted();
+            if (current.source !== sourceBeforeRouting) {
+                throw new Error('PCB changed during routing; refusing to overwrite the newer board.');
+            }
             await saveCheckpoint(current.path, 'Before copilot-router PCB DSL');
             await atomicWritePcb(current.path, current.source, inspected.root);
-            if (result.rules.applyRequested) {
+            if (applyRules) {
                 await replaceFileIfPresent(projectPath(applied.outputPath!, '.kicad_pro'), projectPath(current.path, '.kicad_pro'));
                 await replaceFileIfPresent(projectPath(applied.outputPath!, '.kicad_dru'), projectPath(current.path, '.kicad_dru'));
             }
@@ -221,4 +233,11 @@ export function cancelPcbDsl(operationId: string) {
     if (!operation) throw new Error(`PCB DSL operation not found: ${operationId}`);
     if (operation.status === 'running') operation.controller.abort();
     return { status: 'cancel_requested' as const, operation_id: operationId };
+}
+
+/** Stop in-flight routing before the server releases its transport. */
+export async function disposePcbRouting() {
+    const active = [...operations.values()].filter(operation => operation.status === 'running');
+    for (const operation of active) operation.controller.abort();
+    await Promise.all(active.map(operation => operation.done));
 }

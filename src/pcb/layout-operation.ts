@@ -8,6 +8,7 @@ import { importPcbChanges } from './import';
 import { createPcbLayoutInput } from './layout-input';
 import {
     ActivePcbLayout,
+    acquireLayoutLock,
     clearActiveLayout,
     readActiveLayout,
     saveDataUrl,
@@ -100,6 +101,7 @@ async function finishResponse(active: ActivePcbLayout, response: MakePcbLayoutRe
     return {
         status,
         applied: true,
+        operation_id: active.operation_id,
         layout_id: layoutId,
         ...(status === 'failed_with_layout' && response.content ? { message: response.content } : {}),
         ...(previewPath ? { preview_path: previewPath } : {}),
@@ -115,8 +117,8 @@ async function wait(operation: LocalOperation, waitMs: number) {
     } finally {
         if (timer) clearTimeout(timer);
     }
-    if (operation.error) throw operation.error;
-    if (operation.result) return operation.result;
+    if (!operation.running && operation.error) throw operation.error;
+    if (!operation.running && operation.result) return operation.result;
     return { status: 'running' as const, operation_id: operation.active.operation_id, progress: operation.progress };
 }
 
@@ -126,15 +128,10 @@ export async function makePcbLayout(pcbPath: string, file: string, waitMs = 30_0
     }
     starting = true;
     let operation: LocalOperation;
+    let releaseLock: (() => Promise<void>) | undefined;
     try {
+        releaseLock = await acquireLayoutLock();
         const stale = await readActiveLayout();
-        if (stale?.pid && stale.pid !== process.pid) {
-            let alive = true;
-            try { process.kill(stale.pid, 0); } catch (error) {
-                if ((error as NodeJS.ErrnoException).code === 'ESRCH') alive = false;
-            }
-            if (alive) throw new Error(`make_pcb_layout is already running: ${stale.operation_id}`);
-        }
         if (stale) await clearActiveLayout(stale.operation_id);
         const schematicPath = await associatedSchematicPath(pcbPath);
         await enqueueMutation(() => importPcbChanges(pcbPath, schematicPath));
@@ -163,9 +160,14 @@ export async function makePcbLayout(pcbPath: string, file: string, waitMs = 30_0
             } finally {
                 try { await clearActiveLayout(active.operation_id); }
                 catch (error) { current.error ??= error instanceof Error ? error : new Error(String(error)); }
+                try { await releaseLock?.(); }
+                catch (error) { current.error ??= error instanceof Error ? error : new Error(String(error)); }
                 current.running = false;
             }
         })();
+    } catch (error) {
+        await releaseLock?.();
+        throw error;
     } finally {
         starting = false;
     }

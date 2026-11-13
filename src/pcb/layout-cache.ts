@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, open, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import sharp from 'sharp';
 import { BoardAssemble, BoardAssembleSchema } from '../types/board-assemble';
@@ -28,6 +28,51 @@ export type StoredPcbLayout = Omit<ActivePcbLayout, 'operation_id' | 'started_at
 
 const directory = join(CACHE_DIR, 'pcb-layout');
 const activePath = join(directory, 'active.json');
+
+const lockPath = join(directory, 'active.lock');
+const reclaimPath = join(directory, 'active.reclaim');
+
+function processIsAlive(pid: number) {
+    try { process.kill(pid, 0); return true; }
+    catch (error) { return (error as NodeJS.ErrnoException).code !== 'ESRCH'; }
+}
+
+/** Reserve placement across processes. An unreadable lock is treated as live. */
+export async function acquireLayoutLock() {
+    await mkdir(directory, { recursive: true });
+    const token = randomUUID();
+    for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+            const handle = await open(lockPath, 'wx');
+            try { await handle.writeFile(JSON.stringify({ pid: process.pid, token })); }
+            catch (error) { await handle.close(); await rm(lockPath, { force: true }); throw error; }
+            await handle.close();
+            return async () => {
+                const lock = await readJson(lockPath) as { token?: string } | undefined;
+                if (lock?.token === token) await rm(lockPath, { force: true });
+            };
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+        }
+        let guard;
+        try { guard = await open(reclaimPath, 'wx'); }
+        catch (error) {
+            if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw new Error('make_pcb_layout is already running');
+            throw error;
+        }
+        try {
+            const lock = await readJson(lockPath).catch(() => undefined) as { pid?: number } | undefined;
+            if (!lock || !Number.isInteger(lock.pid) || lock.pid! <= 0 || processIsAlive(lock.pid!)) {
+                throw new Error('make_pcb_layout is already running');
+            }
+            await rm(lockPath, { force: true });
+        } finally {
+            await guard.close();
+            await rm(reclaimPath, { force: true });
+        }
+    }
+    throw new Error('make_pcb_layout is already running');
+}
 
 async function writeJsonAtomic(path: string, value: unknown) {
     await mkdir(directory, { recursive: true });

@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { run } from 'eda-copilot-router';
 import { applyKiCadRoutingResult, importKiCadRoutingBoard } from 'eda-copilot-router/adapters/kicad';
-import { runPcbRouterDsl } from '../src/routing/routing-operation';
+import { runPcbRouterDsl, waitPcbDsl } from '../src/routing/routing-operation';
 
 const fixture = fileURLToPath(new URL('../tests/fixtures/cap-chain.kicad_pcb', import.meta.url));
 const directory = await mkdtemp(join(tmpdir(), 'kicad-router-integration-'));
@@ -14,8 +14,8 @@ const require = createRequire(import.meta.url);
 const routerRoot = dirname(require.resolve('eda-copilot-router/package.json'));
 
 assert.equal(
-    await readFile(fileURLToPath(new URL('../docs/pcb-routing/dsl.d.ts', import.meta.url)), 'utf8'),
-    await readFile(join(routerRoot, 'docs', 'routing-dsl.d.ts'), 'utf8'),
+    (await readFile(fileURLToPath(new URL('../docs/pcb-routing/dsl.d.ts', import.meta.url)), 'utf8')).replace(/\r\n/g, '\n'),
+    (await readFile(join(routerRoot, 'docs', 'routing-dsl.d.ts'), 'utf8')).replace(/\r\n/g, '\n'),
     'installed routing DSL declarations are out of sync with eda-copilot-router',
 );
 
@@ -43,13 +43,21 @@ try {
     async function executeDsl(name: string, code: string) {
         const dsl = join(directory, `${name}.js`);
         await writeFile(dsl, code);
-        const result = await runPcbRouterDsl(source, dsl, 55_000);
+        let result = await runPcbRouterDsl(source, dsl, 55_000);
+        while (result && 'operation_id' in result) {
+            result = await waitPcbDsl(result.operation_id, 55_000);
+        }
         assert.ok(result && typeof result === 'object' && 'status' in result);
         assert.notEqual(result.status, 'running');
         return result;
     }
 
     await executeDsl('rules', 'applyDrcRules()\n');
+
+    const routeResult = await executeDsl('route', 'runRouting()\n');
+    assert.ok('tracks' in routeResult && Number(routeResult.tracks) > 0, JSON.stringify(routeResult));
+    assert.ok('native_verification' in routeResult && routeResult.native_verification !== 'not-run');
+    assert.match(await readFile(source, 'utf8'), /\(segment\b/);
 
     const stackResult = await executeDsl('stack', `
 stack({
@@ -91,7 +99,7 @@ runCopper()
     assert.match(await readFile(source, 'utf8'), /\(zone\b/);
 
     assert.ok((await readFile(source, 'utf8')).includes('(kicad_pcb'));
-    process.stdout.write('Published router stack, cleanup, and copper integration: ok\n');
+    process.stdout.write('Published router routing, stack, cleanup, and copper integration: ok\n');
 } finally {
     await rm(directory, { recursive: true, force: true });
 }

@@ -9,6 +9,8 @@ import { registerDocumentTools } from './tools/documents';
 import { registerPcbTools } from './tools/pcb/index';
 import { registerAnalysisTools } from './tools/analysis';
 import { registerOperationTools } from './tools/operations';
+import { disposePcbLayoutBackend } from './pcb/layout-operation';
+import { disposePcbRouting } from './routing/routing-operation';
 
 function createServer() {
     const server = new McpServer({
@@ -38,7 +40,7 @@ async function main() {
         if (transportClosed) return Promise.resolve();
 
         transportClosed = true;
-        closePromise = transport.close().catch((error) => {
+        closePromise = Promise.all([disposePcbLayoutBackend(), disposePcbRouting()]).then(() => transport.close()).catch((error) => {
             console.error(error);
         });
         return closePromise;
@@ -50,6 +52,7 @@ async function main() {
 
     transport.onclose = () => {
         transportClosed = true;
+        void Promise.all([disposePcbLayoutBackend(), disposePcbRouting()]).catch(console.error);
     };
     process.stdin.once('end', requestClose);
     process.stdin.once('close', requestClose);
