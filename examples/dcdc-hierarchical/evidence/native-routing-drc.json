@@ -1,0 +1,504 @@
+{
+    "$schema": "https://schemas.kicad.org/drc.v1.json",
+    "coordinate_units": "mm",
+    "date": "2026-11-13T22:19:13",
+    "ignored_checks": [
+        {
+            "description": "Footprint has no courtyard defined",
+            "key": "missing_courtyard"
+        },
+        {
+            "description": "Track endpoint not centered on via",
+            "key": "track_not_centered_on_via"
+        },
+        {
+            "description": "Tuning profile track geometries",
+            "key": "tuning_profile_track_geometries"
+        },
+        {
+            "description": "Footprint doesn't match symbol's footprint filters",
+            "key": "footprint_filters_mismatch"
+        },
+        {
+            "description": "Footprint component type doesn't match footprint pads",
+            "key": "footprint_type_mismatch"
+        }
+    ],
+    "included_severities": [
+        "error",
+        "warning",
+        "exclusion"
+    ],
+    "kicad_version": "10.0.0",
+    "schematic_parity": [],
+    "source": "DCDC_Acceptance.kicad_pcb",
+    "unconnected_items": [],
+    "violations": [
+        {
+            "description": "Footprint 'C45783_C0805' does not match copy in library 'kicad-copilot'",
+            "items": [
+                {
+                    "description": "Footprint C2",
+                    "pos": {
+                        "x": 123.509,
+                        "y": 95.832
+                    },
+                    "uuid": "04e8b812-6199-41aa-af6c-e6d815d3899f"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Footprint 'C1591_C0603' does not match copy in library 'kicad-copilot'",
+            "items": [
+                {
+                    "description": "Footprint C14",
+                    "pos": {
+                        "x": 132.602,
+                        "y": 115.49
+                    },
+                    "uuid": "05fd2eac-6b7d-4837-8875-315e42424eb4"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Footprint 'C138687_C1210' does not match copy in library 'kicad-copilot'",
+            "items": [
+                {
+                    "description": "Footprint C10",
+                    "pos": {
+                        "x": 136.252,
+                        "y": 113.765
+                    },
+                    "uuid": "17470b3c-ebb2-4089-9d5a-31541246db32"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Footprint 'C337502_VQFN-16_L3.0-W3.0-P0.50-BL-EP1.7' does not match copy in library 'kicad-copilot'",
+            "items": [
+                {
+                    "description": "Footprint U1",
+                    "pos": {
+                        "x": 120.975,
+                        "y": 101.177
+                    },
+                    "uuid": "2464f1a0-a7b8-41c0-bccb-ef8f9cbf1aa3"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Footprint 'C482818_R0603' does not match copy in library 'kicad-copilot'",
+            "items": [
+                {
+                    "description": "Footprint R6",
+                    "pos": {
+                        "x": 134.942,
+                        "y": 121.213
+                    },
+                    "uuid": "25aa9945-eb3b-478e-a4d5-213124533506"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Footprint 'C1613_C0603' does not match copy in library 'kicad-copilot'",
+            "items": [
+                {
+                    "description": "Footprint C16",
+                    "pos": {
+                        "x": 139.769,
+                        "y": 118.11
+                    },
+                    "uuid": "2d13fe27-07ed-4920-b3ab-12510a3efeaf"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Footprint 'C719179_IND-SMD_L4.5-W4.1_SRP4020TA' does not match copy in library 'kicad-copilot'",
+            "items": [
+                {
+                    "description": "Footprint L4",
+                    "pos": {
+                        "x": 131.13,
+                        "y": 121.213
+                    },
+                    "uuid": "3da8dd63-3473-4ae0-a30f-d7b21ff606c3"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Footprint 'C482818_R0603' does not match copy in library 'kicad-copilot'",
+            "items": [
+                {
+                    "description": "Footprint R1",
+                    "pos": {
+                        "x": 117.786,
+                        "y": 100.162
+                    },
+                    "uuid": "53aa4293-045d-4770-9eeb-09cb8f1fa776"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Footprint 'C1591_C0603' does not match copy in library 'kicad-copilot'",
+            "items": [
+                {
+                    "description": "Footprint C3",
+                    "pos": {
+                        "x": 123.509,
+                        "y": 97.822
+                    },
+                    "uuid": "5606126a-6d51-4b12-acd2-afde0f06947c"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Footprint 'C14675_R0603' does not match copy in library 'kicad-copilot'",
+            "items": [
+                {
+                    "description": "Footprint R4",
+                    "pos": {
+                        "x": 138.713,
+                        "y": 100.019
+                    },
+                    "uuid": "67e67063-5142-4b34-b9a5-133ebb2ce182"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Footprint 'C719179_IND-SMD_L4.5-W4.1_SRP4020TA' does not match copy in library 'kicad-copilot'",
+            "items": [
+                {
+                    "description": "Footprint L2",
+                    "pos": {
+                        "x": 138.713,
+                        "y": 107.004
+                    },
+                    "uuid": "6f3dfd30-a8ce-49e6-8eed-26347b24712b"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Footprint 'C185324_R0603' does not match copy in library 'kicad-copilot'",
+            "items": [
+                {
+                    "description": "Footprint R3",
+                    "pos": {
+                        "x": 138.713,
+                        "y": 103.192
+                    },
+                    "uuid": "7076167d-8179-440f-9c63-1cc5c93f7120"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Footprint 'C138687_C1210' does not match copy in library 'kicad-copilot'",
+            "items": [
+                {
+                    "description": "Footprint C1",
+                    "pos": {
+                        "x": 125.234,
+                        "y": 101.472
+                    },
+                    "uuid": "7942c269-3e27-4a60-8c8b-a5408cb2b645"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Footprint 'C1591_C0603' does not match copy in library 'kicad-copilot'",
+            "items": [
+                {
+                    "description": "Footprint C7",
+                    "pos": {
+                        "x": 132.99,
+                        "y": 105.532
+                    },
+                    "uuid": "7e4c81e1-f1ff-47dc-ae45-7ecfb72803cd"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Footprint 'C1613_C0603' does not match copy in library 'kicad-copilot'",
+            "items": [
+                {
+                    "description": "Footprint C4",
+                    "pos": {
+                        "x": 120.889,
+                        "y": 104.989
+                    },
+                    "uuid": "83d7a32c-7932-4d21-8f50-d641ef6786a9"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Footprint 'C45783_C0805' does not match copy in library 'kicad-copilot'",
+            "items": [
+                {
+                    "description": "Footprint C12",
+                    "pos": {
+                        "x": 130.612,
+                        "y": 115.49
+                    },
+                    "uuid": "8b6702e4-b7df-406e-81d5-207ff5cbbfcc"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Footprint 'C138687_C1210' does not match copy in library 'kicad-copilot'",
+            "items": [
+                {
+                    "description": "Footprint C5",
+                    "pos": {
+                        "x": 131.265,
+                        "y": 101.882
+                    },
+                    "uuid": "8c0185eb-6168-4de8-b93f-2178b62a7a38"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Footprint 'C337502_VQFN-16_L3.0-W3.0-P0.50-BL-EP1.7' does not match copy in library 'kicad-copilot'",
+            "items": [
+                {
+                    "description": "Footprint U2",
+                    "pos": {
+                        "x": 135.524,
+                        "y": 102.177
+                    },
+                    "uuid": "95ed0c26-5b09-4346-9288-ae09ed8fc2b9"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Footprint 'C19267356_CONN-TH_B2B-XH-AM-LF-SN' does not match copy in library 'kicad-copilot'",
+            "items": [
+                {
+                    "description": "Footprint CN4",
+                    "pos": {
+                        "x": 115.9,
+                        "y": 122.4
+                    },
+                    "uuid": "99b13691-adae-41f8-9b7d-abcc6d467e3c"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Footprint 'C14675_R0603' does not match copy in library 'kicad-copilot'",
+            "items": [
+                {
+                    "description": "Footprint R2",
+                    "pos": {
+                        "x": 117.786,
+                        "y": 103.335
+                    },
+                    "uuid": "abf2438c-0ae0-4b76-aca0-57cc8eff1404"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Footprint 'C719179_IND-SMD_L4.5-W4.1_SRP4020TA' does not match copy in library 'kicad-copilot'",
+            "items": [
+                {
+                    "description": "Footprint L1",
+                    "pos": {
+                        "x": 117.786,
+                        "y": 96.35
+                    },
+                    "uuid": "bbeb12fc-7145-477c-8ad2-a3ffdbf4fa0c"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Footprint 'C1613_C0603' does not match copy in library 'kicad-copilot'",
+            "items": [
+                {
+                    "description": "Footprint C8",
+                    "pos": {
+                        "x": 135.61,
+                        "y": 98.365
+                    },
+                    "uuid": "d42d702d-53d7-467e-8803-b4c9416aeb59"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Footprint 'C14675_R0603' does not match copy in library 'kicad-copilot'",
+            "items": [
+                {
+                    "description": "Footprint R8",
+                    "pos": {
+                        "x": 138.115,
+                        "y": 121.213
+                    },
+                    "uuid": "d431c380-21d0-4bcd-bc6a-959bdb2e0adf"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Footprint 'C19267356_CONN-TH_B2B-XH-AM-LF-SN' does not match copy in library 'kicad-copilot'",
+            "items": [
+                {
+                    "description": "Footprint CN2",
+                    "pos": {
+                        "x": 119.001,
+                        "y": 87.6
+                    },
+                    "uuid": "ddbe3bb1-7e5d-4b6e-a5b3-4ed0f233a46c"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Footprint 'C19267356_CONN-TH_B2B-XH-AM-LF-SN' does not match copy in library 'kicad-copilot'",
+            "items": [
+                {
+                    "description": "Footprint CN3",
+                    "pos": {
+                        "x": 123.514,
+                        "y": 122.4
+                    },
+                    "uuid": "e6b5c3c1-12d6-4666-9add-7e4e6c9c6b30"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Footprint 'C19267356_CONN-TH_B2B-XH-AM-LF-SN' does not match copy in library 'kicad-copilot'",
+            "items": [
+                {
+                    "description": "Footprint CN1",
+                    "pos": {
+                        "x": 127.749,
+                        "y": 87.6
+                    },
+                    "uuid": "ec23e0e2-5f1d-440f-a72c-7b445e9a9e94"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Footprint 'C337502_VQFN-16_L3.0-W3.0-P0.50-BL-EP1.7' does not match copy in library 'kicad-copilot'",
+            "items": [
+                {
+                    "description": "Footprint U4",
+                    "pos": {
+                        "x": 135.957,
+                        "y": 118.024
+                    },
+                    "uuid": "fb44b8ac-209e-4164-b0a2-b3a300370717"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Footprint 'C45783_C0805' does not match copy in library 'kicad-copilot'",
+            "items": [
+                {
+                    "description": "Footprint C6",
+                    "pos": {
+                        "x": 132.99,
+                        "y": 107.522
+                    },
+                    "uuid": "fbcacd21-af1b-4e81-805f-356b65a27fb0"
+                }
+            ],
+            "severity": "warning",
+            "type": "lib_footprint_mismatch"
+        },
+        {
+            "description": "Silkscreen clearance",
+            "items": [
+                {
+                    "description": "Reference field of C16",
+                    "pos": {
+                        "x": 142.002,
+                        "y": 117.27
+                    },
+                    "uuid": "047d6de5-81e1-43a2-b2d6-29b1125790e4"
+                },
+                {
+                    "description": "Arc of C16 on F.Silkscreen",
+                    "pos": {
+                        "x": 140.169,
+                        "y": 117.03
+                    },
+                    "uuid": "77ad15c5-6c94-4b2b-a5c3-dd0d7e09928d"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_overlap"
+        },
+        {
+            "description": "Silkscreen clearance",
+            "items": [
+                {
+                    "description": "Reference field of C16",
+                    "pos": {
+                        "x": 142.002,
+                        "y": 117.27
+                    },
+                    "uuid": "047d6de5-81e1-43a2-b2d6-29b1125790e4"
+                },
+                {
+                    "description": "Segment of C16 on F.Silkscreen",
+                    "pos": {
+                        "x": 140.479,
+                        "y": 117.83
+                    },
+                    "uuid": "70ee9929-2dd5-4bc3-bb29-694aa7b1145f"
+                }
+            ],
+            "severity": "warning",
+            "type": "silk_overlap"
+        }
+    ]
+}

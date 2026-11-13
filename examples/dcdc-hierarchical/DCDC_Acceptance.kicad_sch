@@ -1,0 +1,16 @@
+(kicad_sch
+	(version 20260306)
+	(generator "kicad-copilot")
+	(generator_version "0.1.0")
+	(uuid "23c05147-7866-4605-afed-91ef438d36b7")
+	(paper "A4")
+	(lib_symbols)
+	
+	(sheet (at 142.24 100.33) (size 12.7 7.62) (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no) (stroke (width 0) (type solid)) (fill (color 0 0 0 0.0000)) (uuid "0201dcd6-7ad0-4780-b097-de36bac34615") (property "Sheetname" "PowerSubsystem" (at 148.59 99.06 0) (effects (font (size 1.27 1.27)) (justify left bottom))) (property "Sheetfile" "PowerSubsystem.kicad_sch" (at 148.59 109.22 0) (effects (font (size 1.27 1.27)) (justify left top) (hide yes))) (instances (project "DCDC_Acceptance" (path "/23c05147-7866-4605-afed-91ef438d36b7" (page "2")))) (property "Block Name" "PowerSubsystem" (at 148.59 109.22 0) (effects (font (size 1.27 1.27)) (hide yes))))
+(sheet_instances
+		(path "/"
+			(page "1")
+		)
+	)
+	(embedded_fonts no)
+)

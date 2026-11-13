@@ -1,0 +1,3691 @@
+(export
+	(version "E")
+	(design
+		(source "D:\\MyProject\\NN\\projects\\Agents\\easyeda-copilot\\kicad-copilot\\examples\\dcdc-hierarchical\\DCDC_Acceptance.kicad_sch")
+		(date "2026-11-13T22:19:15")
+		(tool "Eeschema 10.0.0")
+		(sheet
+			(number "1")
+			(name "/")
+			(tstamps "/")
+			(title_block
+				(title)
+				(company)
+				(rev)
+				(date)
+				(source "DCDC_Acceptance.kicad_sch")
+				(comment
+					(number "1")
+					(value "")
+				)
+				(comment
+					(number "2")
+					(value "")
+				)
+				(comment
+					(number "3")
+					(value "")
+				)
+				(comment
+					(number "4")
+					(value "")
+				)
+				(comment
+					(number "5")
+					(value "")
+				)
+				(comment
+					(number "6")
+					(value "")
+				)
+				(comment
+					(number "7")
+					(value "")
+				)
+				(comment
+					(number "8")
+					(value "")
+				)
+				(comment
+					(number "9")
+					(value "")
+				)
+			)
+		)
+		(sheet
+			(number "2")
+			(name "/PowerSubsystem/")
+			(tstamps "/0201dcd6-7ad0-4780-b097-de36bac34615/")
+			(title_block
+				(title)
+				(company)
+				(rev)
+				(date)
+				(source "PowerSubsystem.kicad_sch")
+				(comment
+					(number "1")
+					(value "")
+				)
+				(comment
+					(number "2")
+					(value "")
+				)
+				(comment
+					(number "3")
+					(value "")
+				)
+				(comment
+					(number "4")
+					(value "")
+				)
+				(comment
+					(number "5")
+					(value "")
+				)
+				(comment
+					(number "6")
+					(value "")
+				)
+				(comment
+					(number "7")
+					(value "")
+				)
+				(comment
+					(number "8")
+					(value "")
+				)
+				(comment
+					(number "9")
+					(value "")
+				)
+			)
+		)
+		(sheet
+			(number "3")
+			(name "/PowerSubsystem/Buck3V/")
+			(tstamps "/0201dcd6-7ad0-4780-b097-de36bac34615/e09029d6-fee5-492c-83e4-4b96fa23331f/")
+			(title_block
+				(title)
+				(company)
+				(rev)
+				(date)
+				(source "Buck3V.kicad_sch")
+				(comment
+					(number "1")
+					(value "")
+				)
+				(comment
+					(number "2")
+					(value "")
+				)
+				(comment
+					(number "3")
+					(value "")
+				)
+				(comment
+					(number "4")
+					(value "")
+				)
+				(comment
+					(number "5")
+					(value "")
+				)
+				(comment
+					(number "6")
+					(value "")
+				)
+				(comment
+					(number "7")
+					(value "")
+				)
+				(comment
+					(number "8")
+					(value "")
+				)
+				(comment
+					(number "9")
+					(value "")
+				)
+			)
+		)
+		(sheet
+			(number "4")
+			(name "/PowerSubsystem/Buck5V/")
+			(tstamps "/0201dcd6-7ad0-4780-b097-de36bac34615/43fde62a-b882-4cc0-a2ac-04f8d572d064/")
+			(title_block
+				(title)
+				(company)
+				(rev)
+				(date)
+				(source "Buck5V.kicad_sch")
+				(comment
+					(number "1")
+					(value "")
+				)
+				(comment
+					(number "2")
+					(value "")
+				)
+				(comment
+					(number "3")
+					(value "")
+				)
+				(comment
+					(number "4")
+					(value "")
+				)
+				(comment
+					(number "5")
+					(value "")
+				)
+				(comment
+					(number "6")
+					(value "")
+				)
+				(comment
+					(number "7")
+					(value "")
+				)
+				(comment
+					(number "8")
+					(value "")
+				)
+				(comment
+					(number "9")
+					(value "")
+				)
+			)
+		)
+		(sheet
+			(number "5")
+			(name "/PowerSubsystem/SH2/")
+			(tstamps "/0201dcd6-7ad0-4780-b097-de36bac34615/3014cad3-7a2f-48f9-bb1e-fb5bc0f95ad4/")
+			(title_block
+				(title)
+				(company)
+				(rev)
+				(date)
+				(source "Buck3V.kicad_sch")
+				(comment
+					(number "1")
+					(value "")
+				)
+				(comment
+					(number "2")
+					(value "")
+				)
+				(comment
+					(number "3")
+					(value "")
+				)
+				(comment
+					(number "4")
+					(value "")
+				)
+				(comment
+					(number "5")
+					(value "")
+				)
+				(comment
+					(number "6")
+					(value "")
+				)
+				(comment
+					(number "7")
+					(value "")
+				)
+				(comment
+					(number "8")
+					(value "")
+				)
+				(comment
+					(number "9")
+					(value "")
+				)
+			)
+		)
+	)
+	(components
+		(comp
+			(ref "CN1")
+			(value "12V_IN")
+			(footprint "kicad-copilot:C19267356_CONN-TH_B2B-XH-AM-LF-SN")
+			(datasheet "https://www.lcsc.com/datasheet/C19267356.pdf")
+			(fields
+				(field
+					(name "MPN") "B2B-XH-AM")
+				(field
+					(name "LCSC Part") "C19267356")
+				(field
+					(name "EasyEDA part_uuid") "8d9f47f119a448729f01b3bb1d0cf269")
+				(field
+					(name "Block Name") "InputConnector")
+				(field
+					(name "Footprint") "kicad-copilot:C19267356_CONN-TH_B2B-XH-AM-LF-SN")
+				(field
+					(name "Datasheet") "https://www.lcsc.com/datasheet/C19267356.pdf")
+				(field
+					(name "Description")
+				)
+			)
+			(libsource
+				(lib "kicad-copilot")
+				(part "B2B-XH-AM")
+				(description "")
+			)
+			(property
+				(name "MPN")
+				(value "B2B-XH-AM")
+			)
+			(property
+				(name "LCSC Part")
+				(value "C19267356")
+			)
+			(property
+				(name "EasyEDA part_uuid")
+				(value "8d9f47f119a448729f01b3bb1d0cf269")
+			)
+			(property
+				(name "Block Name")
+				(value "InputConnector")
+			)
+			(property
+				(name "Sheetname")
+				(value "PowerSubsystem")
+			)
+			(property
+				(name "Sheetfile")
+				(value "PowerSubsystem.kicad_sch")
+			)
+			(property
+				(name "Block Name")
+				(value "PowerSubsystem")
+			)
+			(sheetpath
+				(names "/PowerSubsystem/")
+				(tstamps "/0201dcd6-7ad0-4780-b097-de36bac34615/")
+			)
+			(tstamps "01577d81-2712-45fb-a57f-ef8b33683dcb")
+			(units
+				(unit
+					(name "A")
+					(pins
+						(pin
+							(num "1")
+						)
+						(pin
+							(num "2")
+						)
+					)
+				)
+			)
+		)
+		(comp
+			(ref "CN2")
+			(value "3V_A_OUT")
+			(footprint "kicad-copilot:C19267356_CONN-TH_B2B-XH-AM-LF-SN")
+			(datasheet "https://www.lcsc.com/datasheet/C19267356.pdf")
+			(fields
+				(field
+					(name "MPN") "B2B-XH-AM")
+				(field
+					(name "LCSC Part") "C19267356")
+				(field
+					(name "EasyEDA part_uuid") "8d9f47f119a448729f01b3bb1d0cf269")
+				(field
+					(name "Block Name") "Output3VA")
+				(field
+					(name "Footprint") "kicad-copilot:C19267356_CONN-TH_B2B-XH-AM-LF-SN")
+				(field
+					(name "Datasheet") "https://www.lcsc.com/datasheet/C19267356.pdf")
+				(field
+					(name "Description")
+				)
+			)
+			(libsource
+				(lib "kicad-copilot")
+				(part "B2B-XH-AM")
+				(description "")
+			)
+			(property
+				(name "MPN")
+				(value "B2B-XH-AM")
+			)
+			(property
+				(name "LCSC Part")
+				(value "C19267356")
+			)
+			(property
+				(name "EasyEDA part_uuid")
+				(value "8d9f47f119a448729f01b3bb1d0cf269")
+			)
+			(property
+				(name "Block Name")
+				(value "Output3VA")
+			)
+			(property
+				(name "Sheetname")
+				(value "PowerSubsystem")
+			)
+			(property
+				(name "Sheetfile")
+				(value "PowerSubsystem.kicad_sch")
+			)
+			(property
+				(name "Block Name")
+				(value "PowerSubsystem")
+			)
+			(sheetpath
+				(names "/PowerSubsystem/")
+				(tstamps "/0201dcd6-7ad0-4780-b097-de36bac34615/")
+			)
+			(tstamps "bb125e46-96f4-41d9-8c7a-49b4a16b46fe")
+			(units
+				(unit
+					(name "A")
+					(pins
+						(pin
+							(num "1")
+						)
+						(pin
+							(num "2")
+						)
+					)
+				)
+			)
+		)
+		(comp
+			(ref "CN3")
+			(value "3V_B_OUT")
+			(footprint "kicad-copilot:C19267356_CONN-TH_B2B-XH-AM-LF-SN")
+			(datasheet "https://www.lcsc.com/datasheet/C19267356.pdf")
+			(fields
+				(field
+					(name "MPN") "B2B-XH-AM")
+				(field
+					(name "LCSC Part") "C19267356")
+				(field
+					(name "EasyEDA part_uuid") "8d9f47f119a448729f01b3bb1d0cf269")
+				(field
+					(name "Block Name") "Output3VB")
+				(field
+					(name "Footprint") "kicad-copilot:C19267356_CONN-TH_B2B-XH-AM-LF-SN")
+				(field
+					(name "Datasheet") "https://www.lcsc.com/datasheet/C19267356.pdf")
+				(field
+					(name "Description")
+				)
+			)
+			(libsource
+				(lib "kicad-copilot")
+				(part "B2B-XH-AM")
+				(description "")
+			)
+			(property
+				(name "MPN")
+				(value "B2B-XH-AM")
+			)
+			(property
+				(name "LCSC Part")
+				(value "C19267356")
+			)
+			(property
+				(name "EasyEDA part_uuid")
+				(value "8d9f47f119a448729f01b3bb1d0cf269")
+			)
+			(property
+				(name "Block Name")
+				(value "Output3VB")
+			)
+			(property
+				(name "Sheetname")
+				(value "PowerSubsystem")
+			)
+			(property
+				(name "Sheetfile")
+				(value "PowerSubsystem.kicad_sch")
+			)
+			(property
+				(name "Block Name")
+				(value "PowerSubsystem")
+			)
+			(sheetpath
+				(names "/PowerSubsystem/")
+				(tstamps "/0201dcd6-7ad0-4780-b097-de36bac34615/")
+			)
+			(tstamps "318b44cf-310b-4b67-a910-1b7b6a27a4b6")
+			(units
+				(unit
+					(name "A")
+					(pins
+						(pin
+							(num "1")
+						)
+						(pin
+							(num "2")
+						)
+					)
+				)
+			)
+		)
+		(comp
+			(ref "CN4")
+			(value "5V_OUT_OUT")
+			(footprint "kicad-copilot:C19267356_CONN-TH_B2B-XH-AM-LF-SN")
+			(datasheet "https://www.lcsc.com/datasheet/C19267356.pdf")
+			(fields
+				(field
+					(name "MPN") "B2B-XH-AM")
+				(field
+					(name "LCSC Part") "C19267356")
+				(field
+					(name "EasyEDA part_uuid") "8d9f47f119a448729f01b3bb1d0cf269")
+				(field
+					(name "Block Name") "Output5V")
+				(field
+					(name "Footprint") "kicad-copilot:C19267356_CONN-TH_B2B-XH-AM-LF-SN")
+				(field
+					(name "Datasheet") "https://www.lcsc.com/datasheet/C19267356.pdf")
+				(field
+					(name "Description")
+				)
+			)
+			(libsource
+				(lib "kicad-copilot")
+				(part "B2B-XH-AM")
+				(description "")
+			)
+			(property
+				(name "MPN")
+				(value "B2B-XH-AM")
+			)
+			(property
+				(name "LCSC Part")
+				(value "C19267356")
+			)
+			(property
+				(name "EasyEDA part_uuid")
+				(value "8d9f47f119a448729f01b3bb1d0cf269")
+			)
+			(property
+				(name "Block Name")
+				(value "Output5V")
+			)
+			(property
+				(name "Sheetname")
+				(value "PowerSubsystem")
+			)
+			(property
+				(name "Sheetfile")
+				(value "PowerSubsystem.kicad_sch")
+			)
+			(property
+				(name "Block Name")
+				(value "PowerSubsystem")
+			)
+			(sheetpath
+				(names "/PowerSubsystem/")
+				(tstamps "/0201dcd6-7ad0-4780-b097-de36bac34615/")
+			)
+			(tstamps "2c97eaf6-78c6-41ce-a5ec-a7c4954d2295")
+			(units
+				(unit
+					(name "A")
+					(pins
+						(pin
+							(num "1")
+						)
+						(pin
+							(num "2")
+						)
+					)
+				)
+			)
+		)
+		(comp
+			(ref "C1")
+			(value "10uF")
+			(footprint "kicad-copilot:C138687_C1210")
+			(datasheet "https://lcsc.com/product-detail/Multilayer-Ceramic-Capacitors-MLCC-SMD-SMT_Samsung-Electro-Mechanics-CL32B106KBJNNNE_C138687.html")
+			(fields
+				(field
+					(name "MPN") "CL32B106KBJNNNE")
+				(field
+					(name "LCSC Part") "C138687")
+				(field
+					(name "EasyEDA part_uuid") "b81d050433924fbabb0707884a45c79e")
+				(field
+					(name "Block Name") "BuckConverter")
+				(field
+					(name "Footprint") "kicad-copilot:C138687_C1210")
+				(field
+					(name "Datasheet") "https://lcsc.com/product-detail/Multilayer-Ceramic-Capacitors-MLCC-SMD-SMT_Samsung-Electro-Mechanics-CL32B106KBJNNNE_C138687.html")
+				(field
+					(name "Description")
+				)
+			)
+			(libsource
+				(lib "kicad-copilot")
+				(part "CL32B106KBJNNNE")
+				(description "")
+			)
+			(property
+				(name "MPN")
+				(value "CL32B106KBJNNNE")
+			)
+			(property
+				(name "LCSC Part")
+				(value "C138687")
+			)
+			(property
+				(name "EasyEDA part_uuid")
+				(value "b81d050433924fbabb0707884a45c79e")
+			)
+			(property
+				(name "Block Name")
+				(value "BuckConverter")
+			)
+			(property
+				(name "Sheetname")
+				(value "Buck3V")
+			)
+			(property
+				(name "Sheetfile")
+				(value "Buck3V.kicad_sch")
+			)
+			(property
+				(name "Block Name")
+				(value "Buck3V_A")
+			)
+			(property
+				(name "ki_keywords")
+				(value "Multilayer Ceramic Capacitors MLCC - SMD/SMT")
+			)
+			(sheetpath
+				(names "/PowerSubsystem/Buck3V/")
+				(tstamps "/0201dcd6-7ad0-4780-b097-de36bac34615/e09029d6-fee5-492c-83e4-4b96fa23331f/")
+			)
+			(tstamps "428ba7f9-bcbf-46de-a9e4-10ad3549f990")
+			(units
+				(unit
+					(name "A")
+					(pins
+						(pin
+							(num "2")
+						)
+						(pin
+							(num "1")
+						)
+					)
+				)
+			)
+		)
+		(comp
+			(ref "C2")
+			(value "22uF")
+			(footprint "kicad-copilot:C45783_C0805")
+			(datasheet "https://lcsc.com/product-detail/Multilayer-Ceramic-Capacitors-MLCC-SMD-SMT_SAMSUNG_CL21A226MAQNNNE_22uF-226-20-25V_C45783.html")
+			(fields
+				(field
+					(name "MPN") "CL21A226MAQNNNE")
+				(field
+					(name "LCSC Part") "C45783")
+				(field
+					(name "EasyEDA part_uuid") "9583d53cf848486a9d523fcaf153a729")
+				(field
+					(name "Block Name") "BuckConverter")
+				(field
+					(name "Footprint") "kicad-copilot:C45783_C0805")
+				(field
+					(name "Datasheet") "https://lcsc.com/product-detail/Multilayer-Ceramic-Capacitors-MLCC-SMD-SMT_SAMSUNG_CL21A226MAQNNNE_22uF-226-20-25V_C45783.html")
+				(field
+					(name "Description")
+				)
+			)
+			(libsource
+				(lib "kicad-copilot")
+				(part "CL21A226MAQNNNE")
+				(description "")
+			)
+			(property
+				(name "MPN")
+				(value "CL21A226MAQNNNE")
+			)
+			(property
+				(name "LCSC Part")
+				(value "C45783")
+			)
+			(property
+				(name "EasyEDA part_uuid")
+				(value "9583d53cf848486a9d523fcaf153a729")
+			)
+			(property
+				(name "Block Name")
+				(value "BuckConverter")
+			)
+			(property
+				(name "Sheetname")
+				(value "Buck3V")
+			)
+			(property
+				(name "Sheetfile")
+				(value "Buck3V.kicad_sch")
+			)
+			(property
+				(name "Block Name")
+				(value "Buck3V_A")
+			)
+			(property
+				(name "ki_keywords")
+				(value "Multilayer Ceramic Capacitors MLCC - SMD/SMT")
+			)
+			(sheetpath
+				(names "/PowerSubsystem/Buck3V/")
+				(tstamps "/0201dcd6-7ad0-4780-b097-de36bac34615/e09029d6-fee5-492c-83e4-4b96fa23331f/")
+			)
+			(tstamps "80696b01-d893-4dfd-b832-1fc3ca3b5da1")
+			(units
+				(unit
+					(name "A")
+					(pins
+						(pin
+							(num "1")
+						)
+						(pin
+							(num "2")
+						)
+					)
+				)
+			)
+		)
+		(comp
+			(ref "C3")
+			(value "100nF")
+			(footprint "kicad-copilot:C1591_C0603")
+			(datasheet "https://lcsc.com/product-detail/Multilayer-Ceramic-Capacitors-MLCC-SMD-SMT_SAMSUNG_CL10B104KB8NNNC_100nF-104-10-50V_C1591.html")
+			(fields
+				(field
+					(name "MPN") "CL10B104KB8NNNC")
+				(field
+					(name "LCSC Part") "C1591")
+				(field
+					(name "EasyEDA part_uuid") "49c50a09a6674d6b9c72fcc3adebcbca")
+				(field
+					(name "Block Name") "BuckConverter")
+				(field
+					(name "Footprint") "kicad-copilot:C1591_C0603")
+				(field
+					(name "Datasheet") "https://lcsc.com/product-detail/Multilayer-Ceramic-Capacitors-MLCC-SMD-SMT_SAMSUNG_CL10B104KB8NNNC_100nF-104-10-50V_C1591.html")
+				(field
+					(name "Description")
+				)
+			)
+			(libsource
+				(lib "kicad-copilot")
+				(part "CL10B104KB8NNNC")
+				(description "100nF (104) ±10% 50V")
+			)
+			(property
+				(name "MPN")
+				(value "CL10B104KB8NNNC")
+			)
+			(property
+				(name "LCSC Part")
+				(value "C1591")
+			)
+			(property
+				(name "EasyEDA part_uuid")
+				(value "49c50a09a6674d6b9c72fcc3adebcbca")
+			)
+			(property
+				(name "Block Name")
+				(value "BuckConverter")
+			)
+			(property
+				(name "Sheetname")
+				(value "Buck3V")
+			)
+			(property
+				(name "Sheetfile")
+				(value "Buck3V.kicad_sch")
+			)
+			(property
+				(name "Block Name")
+				(value "Buck3V_A")
+			)
+			(property
+				(name "ki_keywords")
+				(value "Multilayer Ceramic Capacitors MLCC - SMD/SMT")
+			)
+			(sheetpath
+				(names "/PowerSubsystem/Buck3V/")
+				(tstamps "/0201dcd6-7ad0-4780-b097-de36bac34615/e09029d6-fee5-492c-83e4-4b96fa23331f/")
+			)
+			(tstamps "f14870f3-1204-45a4-a4eb-0c0a5e874d33")
+			(units
+				(unit
+					(name "A")
+					(pins
+						(pin
+							(num "1")
+						)
+						(pin
+							(num "2")
+						)
+					)
+				)
+			)
+		)
+		(comp
+			(ref "C4")
+			(value "3.3nF")
+			(footprint "kicad-copilot:C1613_C0603")
+			(datasheet "https://lcsc.com/product-detail/Multilayer-Ceramic-Capacitors-MLCC-SMD-SMT_SAMSUNG_CL10B332KB8NNNC_3-3nF-332-10-50V_C1613.html")
+			(fields
+				(field
+					(name "MPN") "CL10B332KB8NNNC")
+				(field
+					(name "LCSC Part") "C1613")
+				(field
+					(name "EasyEDA part_uuid") "82091d53505c4d18b18f20c707e780dc")
+				(field
+					(name "Block Name") "BuckConverter")
+				(field
+					(name "Footprint") "kicad-copilot:C1613_C0603")
+				(field
+					(name "Datasheet") "https://lcsc.com/product-detail/Multilayer-Ceramic-Capacitors-MLCC-SMD-SMT_SAMSUNG_CL10B332KB8NNNC_3-3nF-332-10-50V_C1613.html")
+				(field
+					(name "Description")
+				)
+			)
+			(libsource
+				(lib "kicad-copilot")
+				(part "CL10B332KB8NNNC")
+				(description "3.3nF (332) ±10% 50V")
+			)
+			(property
+				(name "MPN")
+				(value "CL10B332KB8NNNC")
+			)
+			(property
+				(name "LCSC Part")
+				(value "C1613")
+			)
+			(property
+				(name "EasyEDA part_uuid")
+				(value "82091d53505c4d18b18f20c707e780dc")
+			)
+			(property
+				(name "Block Name")
+				(value "BuckConverter")
+			)
+			(property
+				(name "Sheetname")
+				(value "Buck3V")
+			)
+			(property
+				(name "Sheetfile")
+				(value "Buck3V.kicad_sch")
+			)
+			(property
+				(name "Block Name")
+				(value "Buck3V_A")
+			)
+			(property
+				(name "ki_keywords")
+				(value "Multilayer Ceramic Capacitors MLCC - SMD/SMT")
+			)
+			(sheetpath
+				(names "/PowerSubsystem/Buck3V/")
+				(tstamps "/0201dcd6-7ad0-4780-b097-de36bac34615/e09029d6-fee5-492c-83e4-4b96fa23331f/")
+			)
+			(tstamps "751c0e8b-081b-4493-b1b5-068d9fc2853c")
+			(units
+				(unit
+					(name "A")
+					(pins
+						(pin
+							(num "1")
+						)
+						(pin
+							(num "2")
+						)
+					)
+				)
+			)
+		)
+		(comp
+			(ref "L1")
+			(value "2.2uH")
+			(footprint "kicad-copilot:C719179_IND-SMD_L4.5-W4.1_SRP4020TA")
+			(datasheet "https://www.lcsc.com/datasheet/C719179.pdf")
+			(fields
+				(field
+					(name "MPN") "SRP4020TA-2R2M")
+				(field
+					(name "LCSC Part") "C719179")
+				(field
+					(name "EasyEDA part_uuid") "e4acfdcf505549e582e2188850bfb5af")
+				(field
+					(name "Block Name") "BuckConverter")
+				(field
+					(name "Footprint") "kicad-copilot:C719179_IND-SMD_L4.5-W4.1_SRP4020TA")
+				(field
+					(name "Datasheet") "https://www.lcsc.com/datasheet/C719179.pdf")
+				(field
+					(name "Description")
+				)
+			)
+			(libsource
+				(lib "kicad-copilot")
+				(part "SRP4020TA-2R2M")
+				(description "")
+			)
+			(property
+				(name "MPN")
+				(value "SRP4020TA-2R2M")
+			)
+			(property
+				(name "LCSC Part")
+				(value "C719179")
+			)
+			(property
+				(name "EasyEDA part_uuid")
+				(value "e4acfdcf505549e582e2188850bfb5af")
+			)
+			(property
+				(name "Block Name")
+				(value "BuckConverter")
+			)
+			(property
+				(name "Sheetname")
+				(value "Buck3V")
+			)
+			(property
+				(name "Sheetfile")
+				(value "Buck3V.kicad_sch")
+			)
+			(property
+				(name "Block Name")
+				(value "Buck3V_A")
+			)
+			(property
+				(name "ki_keywords")
+				(value "Power Inductors")
+			)
+			(sheetpath
+				(names "/PowerSubsystem/Buck3V/")
+				(tstamps "/0201dcd6-7ad0-4780-b097-de36bac34615/e09029d6-fee5-492c-83e4-4b96fa23331f/")
+			)
+			(tstamps "44b9f512-7643-427d-bb26-8c03c4fe86e8")
+			(units
+				(unit
+					(name "A")
+					(pins
+						(pin
+							(num "1")
+						)
+						(pin
+							(num "2")
+						)
+					)
+				)
+			)
+		)
+		(comp
+			(ref "R1")
+			(value "274k")
+			(footprint "kicad-copilot:C482818_R0603")
+			(datasheet "https://lcsc.com/product-detail/New-Arrivals_YAGEO-RC0603FR-07274KL_C482818.html")
+			(fields
+				(field
+					(name "MPN") "RC0603FR-07274KL")
+				(field
+					(name "LCSC Part") "C482818")
+				(field
+					(name "EasyEDA part_uuid") "157654ba9bbe4a0c9d7a3d08a80a710e")
+				(field
+					(name "Block Name") "BuckConverter")
+				(field
+					(name "Footprint") "kicad-copilot:C482818_R0603")
+				(field
+					(name "Datasheet") "https://lcsc.com/product-detail/New-Arrivals_YAGEO-RC0603FR-07274KL_C482818.html")
+				(field
+					(name "Description")
+				)
+			)
+			(libsource
+				(lib "kicad-copilot")
+				(part "RC0603FR-07274KL")
+				(description "")
+			)
+			(property
+				(name "MPN")
+				(value "RC0603FR-07274KL")
+			)
+			(property
+				(name "LCSC Part")
+				(value "C482818")
+			)
+			(property
+				(name "EasyEDA part_uuid")
+				(value "157654ba9bbe4a0c9d7a3d08a80a710e")
+			)
+			(property
+				(name "Block Name")
+				(value "BuckConverter")
+			)
+			(property
+				(name "Sheetname")
+				(value "Buck3V")
+			)
+			(property
+				(name "Sheetfile")
+				(value "Buck3V.kicad_sch")
+			)
+			(property
+				(name "Block Name")
+				(value "Buck3V_A")
+			)
+			(property
+				(name "ki_keywords")
+				(value "Resistors")
+			)
+			(sheetpath
+				(names "/PowerSubsystem/Buck3V/")
+				(tstamps "/0201dcd6-7ad0-4780-b097-de36bac34615/e09029d6-fee5-492c-83e4-4b96fa23331f/")
+			)
+			(tstamps "96220dce-1da4-4e57-b96e-09e03ac16776")
+			(units
+				(unit
+					(name "A")
+					(pins
+						(pin
+							(num "1")
+						)
+						(pin
+							(num "2")
+						)
+					)
+				)
+			)
+		)
+		(comp
+			(ref "R2")
+			(value "100k")
+			(footprint "kicad-copilot:C14675_R0603")
+			(datasheet "https://lcsc.com/product-detail/Chip-Resistor-Surface-Mount_100KR-1003-1_C14675.html")
+			(fields
+				(field
+					(name "MPN") "RC0603FR-07100KL")
+				(field
+					(name "LCSC Part") "C14675")
+				(field
+					(name "EasyEDA part_uuid") "63f36718007a410e91ecdc02f05d06ac")
+				(field
+					(name "Block Name") "BuckConverter")
+				(field
+					(name "Footprint") "kicad-copilot:C14675_R0603")
+				(field
+					(name "Datasheet") "https://lcsc.com/product-detail/Chip-Resistor-Surface-Mount_100KR-1003-1_C14675.html")
+				(field
+					(name "Description")
+				)
+			)
+			(libsource
+				(lib "kicad-copilot")
+				(part "RC0603FR-07100KL")
+				(description "")
+			)
+			(property
+				(name "MPN")
+				(value "RC0603FR-07100KL")
+			)
+			(property
+				(name "LCSC Part")
+				(value "C14675")
+			)
+			(property
+				(name "EasyEDA part_uuid")
+				(value "63f36718007a410e91ecdc02f05d06ac")
+			)
+			(property
+				(name "Block Name")
+				(value "BuckConverter")
+			)
+			(property
+				(name "Sheetname")
+				(value "Buck3V")
+			)
+			(property
+				(name "Sheetfile")
+				(value "Buck3V.kicad_sch")
+			)
+			(property
+				(name "Block Name")
+				(value "Buck3V_A")
+			)
+			(property
+				(name "ki_keywords")
+				(value "Resistors")
+			)
+			(sheetpath
+				(names "/PowerSubsystem/Buck3V/")
+				(tstamps "/0201dcd6-7ad0-4780-b097-de36bac34615/e09029d6-fee5-492c-83e4-4b96fa23331f/")
+			)
+			(tstamps "62879421-bb49-478f-b675-1cd8b76bafc7")
+			(units
+				(unit
+					(name "A")
+					(pins
+						(pin
+							(num "1")
+						)
+						(pin
+							(num "2")
+						)
+					)
+				)
+			)
+		)
+		(comp
+			(ref "U1")
+			(value "TPS62130ARGTR")
+			(footprint "kicad-copilot:C337502_VQFN-16_L3.0-W3.0-P0.50-BL-EP1.7")
+			(datasheet "https://lcsc.com/product-detail/Others_Texas-Instruments-TI-TPS62130ARGTR_C337502.html")
+			(fields
+				(field
+					(name "MPN") "TPS62130ARGTR")
+				(field
+					(name "LCSC Part") "C337502")
+				(field
+					(name "EasyEDA part_uuid") "a03a2434c32e411a8a3b39b8122990ac")
+				(field
+					(name "Block Name") "BuckConverter")
+				(field
+					(name "Footprint") "kicad-copilot:C337502_VQFN-16_L3.0-W3.0-P0.50-BL-EP1.7")
+				(field
+					(name "Datasheet") "https://lcsc.com/product-detail/Others_Texas-Instruments-TI-TPS62130ARGTR_C337502.html")
+				(field
+					(name "Description")
+				)
+			)
+			(libsource
+				(lib "kicad-copilot")
+				(part "TPS62130ARGTR")
+				(description "")
+			)
+			(property
+				(name "MPN")
+				(value "TPS62130ARGTR")
+			)
+			(property
+				(name "LCSC Part")
+				(value "C337502")
+			)
+			(property
+				(name "EasyEDA part_uuid")
+				(value "a03a2434c32e411a8a3b39b8122990ac")
+			)
+			(property
+				(name "Block Name")
+				(value "BuckConverter")
+			)
+			(property
+				(name "Sheetname")
+				(value "Buck3V")
+			)
+			(property
+				(name "Sheetfile")
+				(value "Buck3V.kicad_sch")
+			)
+			(property
+				(name "Block Name")
+				(value "Buck3V_A")
+			)
+			(property
+				(name "ki_keywords")
+				(value "DC-DC Converters")
+			)
+			(sheetpath
+				(names "/PowerSubsystem/Buck3V/")
+				(tstamps "/0201dcd6-7ad0-4780-b097-de36bac34615/e09029d6-fee5-492c-83e4-4b96fa23331f/")
+			)
+			(tstamps "e494651d-1114-42f4-86e1-59db694db2d3")
+			(units
+				(unit
+					(name "A")
+					(pins
+						(pin
+							(num "1")
+						)
+						(pin
+							(num "2")
+						)
+						(pin
+							(num "3")
+						)
+						(pin
+							(num "4")
+						)
+						(pin
+							(num "17")
+						)
+						(pin
+							(num "16")
+						)
+						(pin
+							(num "5")
+						)
+						(pin
+							(num "15")
+						)
+						(pin
+							(num "6")
+						)
+						(pin
+							(num "14")
+						)
+						(pin
+							(num "7")
+						)
+						(pin
+							(num "13")
+						)
+						(pin
+							(num "8")
+						)
+						(pin
+							(num "12")
+						)
+						(pin
+							(num "11")
+						)
+						(pin
+							(num "10")
+						)
+						(pin
+							(num "9")
+						)
+					)
+				)
+			)
+		)
+		(comp
+			(ref "C5")
+			(value "10uF")
+			(footprint "kicad-copilot:C138687_C1210")
+			(datasheet "https://lcsc.com/product-detail/Multilayer-Ceramic-Capacitors-MLCC-SMD-SMT_Samsung-Electro-Mechanics-CL32B106KBJNNNE_C138687.html")
+			(fields
+				(field
+					(name "MPN") "CL32B106KBJNNNE")
+				(field
+					(name "LCSC Part") "C138687")
+				(field
+					(name "EasyEDA part_uuid") "b81d050433924fbabb0707884a45c79e")
+				(field
+					(name "Block Name") "BuckConverter")
+				(field
+					(name "Footprint") "kicad-copilot:C138687_C1210")
+				(field
+					(name "Datasheet") "https://lcsc.com/product-detail/Multilayer-Ceramic-Capacitors-MLCC-SMD-SMT_Samsung-Electro-Mechanics-CL32B106KBJNNNE_C138687.html")
+				(field
+					(name "Description")
+				)
+			)
+			(libsource
+				(lib "kicad-copilot")
+				(part "CL32B106KBJNNNE")
+				(description "")
+			)
+			(property
+				(name "MPN")
+				(value "CL32B106KBJNNNE")
+			)
+			(property
+				(name "LCSC Part")
+				(value "C138687")
+			)
+			(property
+				(name "EasyEDA part_uuid")
+				(value "b81d050433924fbabb0707884a45c79e")
+			)
+			(property
+				(name "Block Name")
+				(value "BuckConverter")
+			)
+			(property
+				(name "Sheetname")
+				(value "Buck5V")
+			)
+			(property
+				(name "Sheetfile")
+				(value "Buck5V.kicad_sch")
+			)
+			(property
+				(name "Block Name")
+				(value "Buck5V")
+			)
+			(property
+				(name "ki_keywords")
+				(value "Multilayer Ceramic Capacitors MLCC - SMD/SMT")
+			)
+			(sheetpath
+				(names "/PowerSubsystem/Buck5V/")
+				(tstamps "/0201dcd6-7ad0-4780-b097-de36bac34615/43fde62a-b882-4cc0-a2ac-04f8d572d064/")
+			)
+			(tstamps "aee948be-ca1b-4092-b36f-52134d3756a3")
+			(units
+				(unit
+					(name "A")
+					(pins
+						(pin
+							(num "2")
+						)
+						(pin
+							(num "1")
+						)
+					)
+				)
+			)
+		)
+		(comp
+			(ref "C6")
+			(value "22uF")
+			(footprint "kicad-copilot:C45783_C0805")
+			(datasheet "https://lcsc.com/product-detail/Multilayer-Ceramic-Capacitors-MLCC-SMD-SMT_SAMSUNG_CL21A226MAQNNNE_22uF-226-20-25V_C45783.html")
+			(fields
+				(field
+					(name "MPN") "CL21A226MAQNNNE")
+				(field
+					(name "LCSC Part") "C45783")
+				(field
+					(name "EasyEDA part_uuid") "9583d53cf848486a9d523fcaf153a729")
+				(field
+					(name "Block Name") "BuckConverter")
+				(field
+					(name "Footprint") "kicad-copilot:C45783_C0805")
+				(field
+					(name "Datasheet") "https://lcsc.com/product-detail/Multilayer-Ceramic-Capacitors-MLCC-SMD-SMT_SAMSUNG_CL21A226MAQNNNE_22uF-226-20-25V_C45783.html")
+				(field
+					(name "Description")
+				)
+			)
+			(libsource
+				(lib "kicad-copilot")
+				(part "CL21A226MAQNNNE")
+				(description "")
+			)
+			(property
+				(name "MPN")
+				(value "CL21A226MAQNNNE")
+			)
+			(property
+				(name "LCSC Part")
+				(value "C45783")
+			)
+			(property
+				(name "EasyEDA part_uuid")
+				(value "9583d53cf848486a9d523fcaf153a729")
+			)
+			(property
+				(name "Block Name")
+				(value "BuckConverter")
+			)
+			(property
+				(name "Sheetname")
+				(value "Buck5V")
+			)
+			(property
+				(name "Sheetfile")
+				(value "Buck5V.kicad_sch")
+			)
+			(property
+				(name "Block Name")
+				(value "Buck5V")
+			)
+			(property
+				(name "ki_keywords")
+				(value "Multilayer Ceramic Capacitors MLCC - SMD/SMT")
+			)
+			(sheetpath
+				(names "/PowerSubsystem/Buck5V/")
+				(tstamps "/0201dcd6-7ad0-4780-b097-de36bac34615/43fde62a-b882-4cc0-a2ac-04f8d572d064/")
+			)
+			(tstamps "4f7495f4-6142-4719-ad53-06f92f33ccc4")
+			(units
+				(unit
+					(name "A")
+					(pins
+						(pin
+							(num "1")
+						)
+						(pin
+							(num "2")
+						)
+					)
+				)
+			)
+		)
+		(comp
+			(ref "C7")
+			(value "100nF")
+			(footprint "kicad-copilot:C1591_C0603")
+			(datasheet "https://lcsc.com/product-detail/Multilayer-Ceramic-Capacitors-MLCC-SMD-SMT_SAMSUNG_CL10B104KB8NNNC_100nF-104-10-50V_C1591.html")
+			(fields
+				(field
+					(name "MPN") "CL10B104KB8NNNC")
+				(field
+					(name "LCSC Part") "C1591")
+				(field
+					(name "EasyEDA part_uuid") "49c50a09a6674d6b9c72fcc3adebcbca")
+				(field
+					(name "Block Name") "BuckConverter")
+				(field
+					(name "Footprint") "kicad-copilot:C1591_C0603")
+				(field
+					(name "Datasheet") "https://lcsc.com/product-detail/Multilayer-Ceramic-Capacitors-MLCC-SMD-SMT_SAMSUNG_CL10B104KB8NNNC_100nF-104-10-50V_C1591.html")
+				(field
+					(name "Description")
+				)
+			)
+			(libsource
+				(lib "kicad-copilot")
+				(part "CL10B104KB8NNNC")
+				(description "100nF (104) ±10% 50V")
+			)
+			(property
+				(name "MPN")
+				(value "CL10B104KB8NNNC")
+			)
+			(property
+				(name "LCSC Part")
+				(value "C1591")
+			)
+			(property
+				(name "EasyEDA part_uuid")
+				(value "49c50a09a6674d6b9c72fcc3adebcbca")
+			)
+			(property
+				(name "Block Name")
+				(value "BuckConverter")
+			)
+			(property
+				(name "Sheetname")
+				(value "Buck5V")
+			)
+			(property
+				(name "Sheetfile")
+				(value "Buck5V.kicad_sch")
+			)
+			(property
+				(name "Block Name")
+				(value "Buck5V")
+			)
+			(property
+				(name "ki_keywords")
+				(value "Multilayer Ceramic Capacitors MLCC - SMD/SMT")
+			)
+			(sheetpath
+				(names "/PowerSubsystem/Buck5V/")
+				(tstamps "/0201dcd6-7ad0-4780-b097-de36bac34615/43fde62a-b882-4cc0-a2ac-04f8d572d064/")
+			)
+			(tstamps "a4037593-e6e6-43ce-b8ee-94f11fceff46")
+			(units
+				(unit
+					(name "A")
+					(pins
+						(pin
+							(num "1")
+						)
+						(pin
+							(num "2")
+						)
+					)
+				)
+			)
+		)
+		(comp
+			(ref "C8")
+			(value "3.3nF")
+			(footprint "kicad-copilot:C1613_C0603")
+			(datasheet "https://lcsc.com/product-detail/Multilayer-Ceramic-Capacitors-MLCC-SMD-SMT_SAMSUNG_CL10B332KB8NNNC_3-3nF-332-10-50V_C1613.html")
+			(fields
+				(field
+					(name "MPN") "CL10B332KB8NNNC")
+				(field
+					(name "LCSC Part") "C1613")
+				(field
+					(name "EasyEDA part_uuid") "82091d53505c4d18b18f20c707e780dc")
+				(field
+					(name "Block Name") "BuckConverter")
+				(field
+					(name "Footprint") "kicad-copilot:C1613_C0603")
+				(field
+					(name "Datasheet") "https://lcsc.com/product-detail/Multilayer-Ceramic-Capacitors-MLCC-SMD-SMT_SAMSUNG_CL10B332KB8NNNC_3-3nF-332-10-50V_C1613.html")
+				(field
+					(name "Description")
+				)
+			)
+			(libsource
+				(lib "kicad-copilot")
+				(part "CL10B332KB8NNNC")
+				(description "3.3nF (332) ±10% 50V")
+			)
+			(property
+				(name "MPN")
+				(value "CL10B332KB8NNNC")
+			)
+			(property
+				(name "LCSC Part")
+				(value "C1613")
+			)
+			(property
+				(name "EasyEDA part_uuid")
+				(value "82091d53505c4d18b18f20c707e780dc")
+			)
+			(property
+				(name "Block Name")
+				(value "BuckConverter")
+			)
+			(property
+				(name "Sheetname")
+				(value "Buck5V")
+			)
+			(property
+				(name "Sheetfile")
+				(value "Buck5V.kicad_sch")
+			)
+			(property
+				(name "Block Name")
+				(value "Buck5V")
+			)
+			(property
+				(name "ki_keywords")
+				(value "Multilayer Ceramic Capacitors MLCC - SMD/SMT")
+			)
+			(sheetpath
+				(names "/PowerSubsystem/Buck5V/")
+				(tstamps "/0201dcd6-7ad0-4780-b097-de36bac34615/43fde62a-b882-4cc0-a2ac-04f8d572d064/")
+			)
+			(tstamps "c09aef30-8527-4530-9656-f015d7b8951b")
+			(units
+				(unit
+					(name "A")
+					(pins
+						(pin
+							(num "1")
+						)
+						(pin
+							(num "2")
+						)
+					)
+				)
+			)
+		)
+		(comp
+			(ref "L2")
+			(value "2.2uH")
+			(footprint "kicad-copilot:C719179_IND-SMD_L4.5-W4.1_SRP4020TA")
+			(datasheet "https://www.lcsc.com/datasheet/C719179.pdf")
+			(fields
+				(field
+					(name "MPN") "SRP4020TA-2R2M")
+				(field
+					(name "LCSC Part") "C719179")
+				(field
+					(name "EasyEDA part_uuid") "e4acfdcf505549e582e2188850bfb5af")
+				(field
+					(name "Block Name") "BuckConverter")
+				(field
+					(name "Footprint") "kicad-copilot:C719179_IND-SMD_L4.5-W4.1_SRP4020TA")
+				(field
+					(name "Datasheet") "https://www.lcsc.com/datasheet/C719179.pdf")
+				(field
+					(name "Description")
+				)
+			)
+			(libsource
+				(lib "kicad-copilot")
+				(part "SRP4020TA-2R2M")
+				(description "")
+			)
+			(property
+				(name "MPN")
+				(value "SRP4020TA-2R2M")
+			)
+			(property
+				(name "LCSC Part")
+				(value "C719179")
+			)
+			(property
+				(name "EasyEDA part_uuid")
+				(value "e4acfdcf505549e582e2188850bfb5af")
+			)
+			(property
+				(name "Block Name")
+				(value "BuckConverter")
+			)
+			(property
+				(name "Sheetname")
+				(value "Buck5V")
+			)
+			(property
+				(name "Sheetfile")
+				(value "Buck5V.kicad_sch")
+			)
+			(property
+				(name "Block Name")
+				(value "Buck5V")
+			)
+			(property
+				(name "ki_keywords")
+				(value "Power Inductors")
+			)
+			(sheetpath
+				(names "/PowerSubsystem/Buck5V/")
+				(tstamps "/0201dcd6-7ad0-4780-b097-de36bac34615/43fde62a-b882-4cc0-a2ac-04f8d572d064/")
+			)
+			(tstamps "414e7300-7133-4017-8957-931874fe8064")
+			(units
+				(unit
+					(name "A")
+					(pins
+						(pin
+							(num "1")
+						)
+						(pin
+							(num "2")
+						)
+					)
+				)
+			)
+		)
+		(comp
+			(ref "R3")
+			(value "523k")
+			(footprint "kicad-copilot:C185324_R0603")
+			(datasheet "https://lcsc.com/product-detail/Chip-Resistor-Surface-Mount_523KR-5233-1_C185324.html")
+			(fields
+				(field
+					(name "MPN") "RC0603FR-07523KL")
+				(field
+					(name "LCSC Part") "C185324")
+				(field
+					(name "EasyEDA part_uuid") "02a312b2bf584c26990ca6426cbe3031")
+				(field
+					(name "Block Name") "BuckConverter")
+				(field
+					(name "Footprint") "kicad-copilot:C185324_R0603")
+				(field
+					(name "Datasheet") "https://lcsc.com/product-detail/Chip-Resistor-Surface-Mount_523KR-5233-1_C185324.html")
+				(field
+					(name "Description")
+				)
+			)
+			(libsource
+				(lib "kicad-copilot")
+				(part "RC0603FR-07523KL")
+				(description "")
+			)
+			(property
+				(name "MPN")
+				(value "RC0603FR-07523KL")
+			)
+			(property
+				(name "LCSC Part")
+				(value "C185324")
+			)
+			(property
+				(name "EasyEDA part_uuid")
+				(value "02a312b2bf584c26990ca6426cbe3031")
+			)
+			(property
+				(name "Block Name")
+				(value "BuckConverter")
+			)
+			(property
+				(name "Sheetname")
+				(value "Buck5V")
+			)
+			(property
+				(name "Sheetfile")
+				(value "Buck5V.kicad_sch")
+			)
+			(property
+				(name "Block Name")
+				(value "Buck5V")
+			)
+			(property
+				(name "ki_keywords")
+				(value "Resistors")
+			)
+			(sheetpath
+				(names "/PowerSubsystem/Buck5V/")
+				(tstamps "/0201dcd6-7ad0-4780-b097-de36bac34615/43fde62a-b882-4cc0-a2ac-04f8d572d064/")
+			)
+			(tstamps "0833a7ae-b0df-4f5b-97c3-b1c6878cc9e4")
+			(units
+				(unit
+					(name "A")
+					(pins
+						(pin
+							(num "1")
+						)
+						(pin
+							(num "2")
+						)
+					)
+				)
+			)
+		)
+		(comp
+			(ref "R4")
+			(value "100k")
+			(footprint "kicad-copilot:C14675_R0603")
+			(datasheet "https://lcsc.com/product-detail/Chip-Resistor-Surface-Mount_100KR-1003-1_C14675.html")
+			(fields
+				(field
+					(name "MPN") "RC0603FR-07100KL")
+				(field
+					(name "LCSC Part") "C14675")
+				(field
+					(name "EasyEDA part_uuid") "63f36718007a410e91ecdc02f05d06ac")
+				(field
+					(name "Block Name") "BuckConverter")
+				(field
+					(name "Footprint") "kicad-copilot:C14675_R0603")
+				(field
+					(name "Datasheet") "https://lcsc.com/product-detail/Chip-Resistor-Surface-Mount_100KR-1003-1_C14675.html")
+				(field
+					(name "Description")
+				)
+			)
+			(libsource
+				(lib "kicad-copilot")
+				(part "RC0603FR-07100KL")
+				(description "")
+			)
+			(property
+				(name "MPN")
+				(value "RC0603FR-07100KL")
+			)
+			(property
+				(name "LCSC Part")
+				(value "C14675")
+			)
+			(property
+				(name "EasyEDA part_uuid")
+				(value "63f36718007a410e91ecdc02f05d06ac")
+			)
+			(property
+				(name "Block Name")
+				(value "BuckConverter")
+			)
+			(property
+				(name "Sheetname")
+				(value "Buck5V")
+			)
+			(property
+				(name "Sheetfile")
+				(value "Buck5V.kicad_sch")
+			)
+			(property
+				(name "Block Name")
+				(value "Buck5V")
+			)
+			(property
+				(name "ki_keywords")
+				(value "Resistors")
+			)
+			(sheetpath
+				(names "/PowerSubsystem/Buck5V/")
+				(tstamps "/0201dcd6-7ad0-4780-b097-de36bac34615/43fde62a-b882-4cc0-a2ac-04f8d572d064/")
+			)
+			(tstamps "c37d759e-2775-48bc-aecb-d0f4da0348f1")
+			(units
+				(unit
+					(name "A")
+					(pins
+						(pin
+							(num "1")
+						)
+						(pin
+							(num "2")
+						)
+					)
+				)
+			)
+		)
+		(comp
+			(ref "U2")
+			(value "TPS62130ARGTR")
+			(footprint "kicad-copilot:C337502_VQFN-16_L3.0-W3.0-P0.50-BL-EP1.7")
+			(datasheet "https://lcsc.com/product-detail/Others_Texas-Instruments-TI-TPS62130ARGTR_C337502.html")
+			(fields
+				(field
+					(name "MPN") "TPS62130ARGTR")
+				(field
+					(name "LCSC Part") "C337502")
+				(field
+					(name "EasyEDA part_uuid") "a03a2434c32e411a8a3b39b8122990ac")
+				(field
+					(name "Block Name") "BuckConverter")
+				(field
+					(name "Footprint") "kicad-copilot:C337502_VQFN-16_L3.0-W3.0-P0.50-BL-EP1.7")
+				(field
+					(name "Datasheet") "https://lcsc.com/product-detail/Others_Texas-Instruments-TI-TPS62130ARGTR_C337502.html")
+				(field
+					(name "Description")
+				)
+			)
+			(libsource
+				(lib "kicad-copilot")
+				(part "TPS62130ARGTR")
+				(description "")
+			)
+			(property
+				(name "MPN")
+				(value "TPS62130ARGTR")
+			)
+			(property
+				(name "LCSC Part")
+				(value "C337502")
+			)
+			(property
+				(name "EasyEDA part_uuid")
+				(value "a03a2434c32e411a8a3b39b8122990ac")
+			)
+			(property
+				(name "Block Name")
+				(value "BuckConverter")
+			)
+			(property
+				(name "Sheetname")
+				(value "Buck5V")
+			)
+			(property
+				(name "Sheetfile")
+				(value "Buck5V.kicad_sch")
+			)
+			(property
+				(name "Block Name")
+				(value "Buck5V")
+			)
+			(property
+				(name "ki_keywords")
+				(value "DC-DC Converters")
+			)
+			(sheetpath
+				(names "/PowerSubsystem/Buck5V/")
+				(tstamps "/0201dcd6-7ad0-4780-b097-de36bac34615/43fde62a-b882-4cc0-a2ac-04f8d572d064/")
+			)
+			(tstamps "e0b566eb-73b3-4270-9a7f-d172eaab6550")
+			(units
+				(unit
+					(name "A")
+					(pins
+						(pin
+							(num "1")
+						)
+						(pin
+							(num "2")
+						)
+						(pin
+							(num "3")
+						)
+						(pin
+							(num "4")
+						)
+						(pin
+							(num "17")
+						)
+						(pin
+							(num "16")
+						)
+						(pin
+							(num "5")
+						)
+						(pin
+							(num "15")
+						)
+						(pin
+							(num "6")
+						)
+						(pin
+							(num "14")
+						)
+						(pin
+							(num "7")
+						)
+						(pin
+							(num "13")
+						)
+						(pin
+							(num "8")
+						)
+						(pin
+							(num "12")
+						)
+						(pin
+							(num "11")
+						)
+						(pin
+							(num "10")
+						)
+						(pin
+							(num "9")
+						)
+					)
+				)
+			)
+		)
+		(comp
+			(ref "C10")
+			(value "10uF")
+			(footprint "kicad-copilot:C138687_C1210")
+			(datasheet "https://lcsc.com/product-detail/Multilayer-Ceramic-Capacitors-MLCC-SMD-SMT_Samsung-Electro-Mechanics-CL32B106KBJNNNE_C138687.html")
+			(fields
+				(field
+					(name "MPN") "CL32B106KBJNNNE")
+				(field
+					(name "LCSC Part") "C138687")
+				(field
+					(name "EasyEDA part_uuid") "b81d050433924fbabb0707884a45c79e")
+				(field
+					(name "Block Name") "BuckConverter")
+				(field
+					(name "Footprint") "kicad-copilot:C138687_C1210")
+				(field
+					(name "Datasheet") "https://lcsc.com/product-detail/Multilayer-Ceramic-Capacitors-MLCC-SMD-SMT_Samsung-Electro-Mechanics-CL32B106KBJNNNE_C138687.html")
+				(field
+					(name "Description")
+				)
+			)
+			(libsource
+				(lib "kicad-copilot")
+				(part "CL32B106KBJNNNE")
+				(description "")
+			)
+			(property
+				(name "MPN")
+				(value "CL32B106KBJNNNE")
+			)
+			(property
+				(name "LCSC Part")
+				(value "C138687")
+			)
+			(property
+				(name "EasyEDA part_uuid")
+				(value "b81d050433924fbabb0707884a45c79e")
+			)
+			(property
+				(name "Block Name")
+				(value "BuckConverter")
+			)
+			(property
+				(name "Sheetname")
+				(value "SH2")
+			)
+			(property
+				(name "Sheetfile")
+				(value "Buck3V.kicad_sch")
+			)
+			(property
+				(name "Block Name")
+				(value "Buck3V_B")
+			)
+			(property
+				(name "ki_keywords")
+				(value "Multilayer Ceramic Capacitors MLCC - SMD/SMT")
+			)
+			(sheetpath
+				(names "/PowerSubsystem/SH2/")
+				(tstamps "/0201dcd6-7ad0-4780-b097-de36bac34615/3014cad3-7a2f-48f9-bb1e-fb5bc0f95ad4/")
+			)
+			(tstamps "428ba7f9-bcbf-46de-a9e4-10ad3549f990")
+			(units
+				(unit
+					(name "A")
+					(pins
+						(pin
+							(num "2")
+						)
+						(pin
+							(num "1")
+						)
+					)
+				)
+			)
+		)
+		(comp
+			(ref "C12")
+			(value "22uF")
+			(footprint "kicad-copilot:C45783_C0805")
+			(datasheet "https://lcsc.com/product-detail/Multilayer-Ceramic-Capacitors-MLCC-SMD-SMT_SAMSUNG_CL21A226MAQNNNE_22uF-226-20-25V_C45783.html")
+			(fields
+				(field
+					(name "MPN") "CL21A226MAQNNNE")
+				(field
+					(name "LCSC Part") "C45783")
+				(field
+					(name "EasyEDA part_uuid") "9583d53cf848486a9d523fcaf153a729")
+				(field
+					(name "Block Name") "BuckConverter")
+				(field
+					(name "Footprint") "kicad-copilot:C45783_C0805")
+				(field
+					(name "Datasheet") "https://lcsc.com/product-detail/Multilayer-Ceramic-Capacitors-MLCC-SMD-SMT_SAMSUNG_CL21A226MAQNNNE_22uF-226-20-25V_C45783.html")
+				(field
+					(name "Description")
+				)
+			)
+			(libsource
+				(lib "kicad-copilot")
+				(part "CL21A226MAQNNNE")
+				(description "")
+			)
+			(property
+				(name "MPN")
+				(value "CL21A226MAQNNNE")
+			)
+			(property
+				(name "LCSC Part")
+				(value "C45783")
+			)
+			(property
+				(name "EasyEDA part_uuid")
+				(value "9583d53cf848486a9d523fcaf153a729")
+			)
+			(property
+				(name "Block Name")
+				(value "BuckConverter")
+			)
+			(property
+				(name "Sheetname")
+				(value "SH2")
+			)
+			(property
+				(name "Sheetfile")
+				(value "Buck3V.kicad_sch")
+			)
+			(property
+				(name "Block Name")
+				(value "Buck3V_B")
+			)
+			(property
+				(name "ki_keywords")
+				(value "Multilayer Ceramic Capacitors MLCC - SMD/SMT")
+			)
+			(sheetpath
+				(names "/PowerSubsystem/SH2/")
+				(tstamps "/0201dcd6-7ad0-4780-b097-de36bac34615/3014cad3-7a2f-48f9-bb1e-fb5bc0f95ad4/")
+			)
+			(tstamps "80696b01-d893-4dfd-b832-1fc3ca3b5da1")
+			(units
+				(unit
+					(name "A")
+					(pins
+						(pin
+							(num "1")
+						)
+						(pin
+							(num "2")
+						)
+					)
+				)
+			)
+		)
+		(comp
+			(ref "C14")
+			(value "100nF")
+			(footprint "kicad-copilot:C1591_C0603")
+			(datasheet "https://lcsc.com/product-detail/Multilayer-Ceramic-Capacitors-MLCC-SMD-SMT_SAMSUNG_CL10B104KB8NNNC_100nF-104-10-50V_C1591.html")
+			(fields
+				(field
+					(name "MPN") "CL10B104KB8NNNC")
+				(field
+					(name "LCSC Part") "C1591")
+				(field
+					(name "EasyEDA part_uuid") "49c50a09a6674d6b9c72fcc3adebcbca")
+				(field
+					(name "Block Name") "BuckConverter")
+				(field
+					(name "Footprint") "kicad-copilot:C1591_C0603")
+				(field
+					(name "Datasheet") "https://lcsc.com/product-detail/Multilayer-Ceramic-Capacitors-MLCC-SMD-SMT_SAMSUNG_CL10B104KB8NNNC_100nF-104-10-50V_C1591.html")
+				(field
+					(name "Description")
+				)
+			)
+			(libsource
+				(lib "kicad-copilot")
+				(part "CL10B104KB8NNNC")
+				(description "100nF (104) ±10% 50V")
+			)
+			(property
+				(name "MPN")
+				(value "CL10B104KB8NNNC")
+			)
+			(property
+				(name "LCSC Part")
+				(value "C1591")
+			)
+			(property
+				(name "EasyEDA part_uuid")
+				(value "49c50a09a6674d6b9c72fcc3adebcbca")
+			)
+			(property
+				(name "Block Name")
+				(value "BuckConverter")
+			)
+			(property
+				(name "Sheetname")
+				(value "SH2")
+			)
+			(property
+				(name "Sheetfile")
+				(value "Buck3V.kicad_sch")
+			)
+			(property
+				(name "Block Name")
+				(value "Buck3V_B")
+			)
+			(property
+				(name "ki_keywords")
+				(value "Multilayer Ceramic Capacitors MLCC - SMD/SMT")
+			)
+			(sheetpath
+				(names "/PowerSubsystem/SH2/")
+				(tstamps "/0201dcd6-7ad0-4780-b097-de36bac34615/3014cad3-7a2f-48f9-bb1e-fb5bc0f95ad4/")
+			)
+			(tstamps "f14870f3-1204-45a4-a4eb-0c0a5e874d33")
+			(units
+				(unit
+					(name "A")
+					(pins
+						(pin
+							(num "1")
+						)
+						(pin
+							(num "2")
+						)
+					)
+				)
+			)
+		)
+		(comp
+			(ref "C16")
+			(value "3.3nF")
+			(footprint "kicad-copilot:C1613_C0603")
+			(datasheet "https://lcsc.com/product-detail/Multilayer-Ceramic-Capacitors-MLCC-SMD-SMT_SAMSUNG_CL10B332KB8NNNC_3-3nF-332-10-50V_C1613.html")
+			(fields
+				(field
+					(name "MPN") "CL10B332KB8NNNC")
+				(field
+					(name "LCSC Part") "C1613")
+				(field
+					(name "EasyEDA part_uuid") "82091d53505c4d18b18f20c707e780dc")
+				(field
+					(name "Block Name") "BuckConverter")
+				(field
+					(name "Footprint") "kicad-copilot:C1613_C0603")
+				(field
+					(name "Datasheet") "https://lcsc.com/product-detail/Multilayer-Ceramic-Capacitors-MLCC-SMD-SMT_SAMSUNG_CL10B332KB8NNNC_3-3nF-332-10-50V_C1613.html")
+				(field
+					(name "Description")
+				)
+			)
+			(libsource
+				(lib "kicad-copilot")
+				(part "CL10B332KB8NNNC")
+				(description "3.3nF (332) ±10% 50V")
+			)
+			(property
+				(name "MPN")
+				(value "CL10B332KB8NNNC")
+			)
+			(property
+				(name "LCSC Part")
+				(value "C1613")
+			)
+			(property
+				(name "EasyEDA part_uuid")
+				(value "82091d53505c4d18b18f20c707e780dc")
+			)
+			(property
+				(name "Block Name")
+				(value "BuckConverter")
+			)
+			(property
+				(name "Sheetname")
+				(value "SH2")
+			)
+			(property
+				(name "Sheetfile")
+				(value "Buck3V.kicad_sch")
+			)
+			(property
+				(name "Block Name")
+				(value "Buck3V_B")
+			)
+			(property
+				(name "ki_keywords")
+				(value "Multilayer Ceramic Capacitors MLCC - SMD/SMT")
+			)
+			(sheetpath
+				(names "/PowerSubsystem/SH2/")
+				(tstamps "/0201dcd6-7ad0-4780-b097-de36bac34615/3014cad3-7a2f-48f9-bb1e-fb5bc0f95ad4/")
+			)
+			(tstamps "751c0e8b-081b-4493-b1b5-068d9fc2853c")
+			(units
+				(unit
+					(name "A")
+					(pins
+						(pin
+							(num "1")
+						)
+						(pin
+							(num "2")
+						)
+					)
+				)
+			)
+		)
+		(comp
+			(ref "L4")
+			(value "2.2uH")
+			(footprint "kicad-copilot:C719179_IND-SMD_L4.5-W4.1_SRP4020TA")
+			(datasheet "https://www.lcsc.com/datasheet/C719179.pdf")
+			(fields
+				(field
+					(name "MPN") "SRP4020TA-2R2M")
+				(field
+					(name "LCSC Part") "C719179")
+				(field
+					(name "EasyEDA part_uuid") "e4acfdcf505549e582e2188850bfb5af")
+				(field
+					(name "Block Name") "BuckConverter")
+				(field
+					(name "Footprint") "kicad-copilot:C719179_IND-SMD_L4.5-W4.1_SRP4020TA")
+				(field
+					(name "Datasheet") "https://www.lcsc.com/datasheet/C719179.pdf")
+				(field
+					(name "Description")
+				)
+			)
+			(libsource
+				(lib "kicad-copilot")
+				(part "SRP4020TA-2R2M")
+				(description "")
+			)
+			(property
+				(name "MPN")
+				(value "SRP4020TA-2R2M")
+			)
+			(property
+				(name "LCSC Part")
+				(value "C719179")
+			)
+			(property
+				(name "EasyEDA part_uuid")
+				(value "e4acfdcf505549e582e2188850bfb5af")
+			)
+			(property
+				(name "Block Name")
+				(value "BuckConverter")
+			)
+			(property
+				(name "Sheetname")
+				(value "SH2")
+			)
+			(property
+				(name "Sheetfile")
+				(value "Buck3V.kicad_sch")
+			)
+			(property
+				(name "Block Name")
+				(value "Buck3V_B")
+			)
+			(property
+				(name "ki_keywords")
+				(value "Power Inductors")
+			)
+			(sheetpath
+				(names "/PowerSubsystem/SH2/")
+				(tstamps "/0201dcd6-7ad0-4780-b097-de36bac34615/3014cad3-7a2f-48f9-bb1e-fb5bc0f95ad4/")
+			)
+			(tstamps "44b9f512-7643-427d-bb26-8c03c4fe86e8")
+			(units
+				(unit
+					(name "A")
+					(pins
+						(pin
+							(num "1")
+						)
+						(pin
+							(num "2")
+						)
+					)
+				)
+			)
+		)
+		(comp
+			(ref "R6")
+			(value "274k")
+			(footprint "kicad-copilot:C482818_R0603")
+			(datasheet "https://lcsc.com/product-detail/New-Arrivals_YAGEO-RC0603FR-07274KL_C482818.html")
+			(fields
+				(field
+					(name "MPN") "RC0603FR-07274KL")
+				(field
+					(name "LCSC Part") "C482818")
+				(field
+					(name "EasyEDA part_uuid") "157654ba9bbe4a0c9d7a3d08a80a710e")
+				(field
+					(name "Block Name") "BuckConverter")
+				(field
+					(name "Footprint") "kicad-copilot:C482818_R0603")
+				(field
+					(name "Datasheet") "https://lcsc.com/product-detail/New-Arrivals_YAGEO-RC0603FR-07274KL_C482818.html")
+				(field
+					(name "Description")
+				)
+			)
+			(libsource
+				(lib "kicad-copilot")
+				(part "RC0603FR-07274KL")
+				(description "")
+			)
+			(property
+				(name "MPN")
+				(value "RC0603FR-07274KL")
+			)
+			(property
+				(name "LCSC Part")
+				(value "C482818")
+			)
+			(property
+				(name "EasyEDA part_uuid")
+				(value "157654ba9bbe4a0c9d7a3d08a80a710e")
+			)
+			(property
+				(name "Block Name")
+				(value "BuckConverter")
+			)
+			(property
+				(name "Sheetname")
+				(value "SH2")
+			)
+			(property
+				(name "Sheetfile")
+				(value "Buck3V.kicad_sch")
+			)
+			(property
+				(name "Block Name")
+				(value "Buck3V_B")
+			)
+			(property
+				(name "ki_keywords")
+				(value "Resistors")
+			)
+			(sheetpath
+				(names "/PowerSubsystem/SH2/")
+				(tstamps "/0201dcd6-7ad0-4780-b097-de36bac34615/3014cad3-7a2f-48f9-bb1e-fb5bc0f95ad4/")
+			)
+			(tstamps "96220dce-1da4-4e57-b96e-09e03ac16776")
+			(units
+				(unit
+					(name "A")
+					(pins
+						(pin
+							(num "1")
+						)
+						(pin
+							(num "2")
+						)
+					)
+				)
+			)
+		)
+		(comp
+			(ref "R8")
+			(value "100k")
+			(footprint "kicad-copilot:C14675_R0603")
+			(datasheet "https://lcsc.com/product-detail/Chip-Resistor-Surface-Mount_100KR-1003-1_C14675.html")
+			(fields
+				(field
+					(name "MPN") "RC0603FR-07100KL")
+				(field
+					(name "LCSC Part") "C14675")
+				(field
+					(name "EasyEDA part_uuid") "63f36718007a410e91ecdc02f05d06ac")
+				(field
+					(name "Block Name") "BuckConverter")
+				(field
+					(name "Footprint") "kicad-copilot:C14675_R0603")
+				(field
+					(name "Datasheet") "https://lcsc.com/product-detail/Chip-Resistor-Surface-Mount_100KR-1003-1_C14675.html")
+				(field
+					(name "Description")
+				)
+			)
+			(libsource
+				(lib "kicad-copilot")
+				(part "RC0603FR-07100KL")
+				(description "")
+			)
+			(property
+				(name "MPN")
+				(value "RC0603FR-07100KL")
+			)
+			(property
+				(name "LCSC Part")
+				(value "C14675")
+			)
+			(property
+				(name "EasyEDA part_uuid")
+				(value "63f36718007a410e91ecdc02f05d06ac")
+			)
+			(property
+				(name "Block Name")
+				(value "BuckConverter")
+			)
+			(property
+				(name "Sheetname")
+				(value "SH2")
+			)
+			(property
+				(name "Sheetfile")
+				(value "Buck3V.kicad_sch")
+			)
+			(property
+				(name "Block Name")
+				(value "Buck3V_B")
+			)
+			(property
+				(name "ki_keywords")
+				(value "Resistors")
+			)
+			(sheetpath
+				(names "/PowerSubsystem/SH2/")
+				(tstamps "/0201dcd6-7ad0-4780-b097-de36bac34615/3014cad3-7a2f-48f9-bb1e-fb5bc0f95ad4/")
+			)
+			(tstamps "62879421-bb49-478f-b675-1cd8b76bafc7")
+			(units
+				(unit
+					(name "A")
+					(pins
+						(pin
+							(num "1")
+						)
+						(pin
+							(num "2")
+						)
+					)
+				)
+			)
+		)
+		(comp
+			(ref "U4")
+			(value "TPS62130ARGTR")
+			(footprint "kicad-copilot:C337502_VQFN-16_L3.0-W3.0-P0.50-BL-EP1.7")
+			(datasheet "https://lcsc.com/product-detail/Others_Texas-Instruments-TI-TPS62130ARGTR_C337502.html")
+			(fields
+				(field
+					(name "MPN") "TPS62130ARGTR")
+				(field
+					(name "LCSC Part") "C337502")
+				(field
+					(name "EasyEDA part_uuid") "a03a2434c32e411a8a3b39b8122990ac")
+				(field
+					(name "Block Name") "BuckConverter")
+				(field
+					(name "Footprint") "kicad-copilot:C337502_VQFN-16_L3.0-W3.0-P0.50-BL-EP1.7")
+				(field
+					(name "Datasheet") "https://lcsc.com/product-detail/Others_Texas-Instruments-TI-TPS62130ARGTR_C337502.html")
+				(field
+					(name "Description")
+				)
+			)
+			(libsource
+				(lib "kicad-copilot")
+				(part "TPS62130ARGTR")
+				(description "")
+			)
+			(property
+				(name "MPN")
+				(value "TPS62130ARGTR")
+			)
+			(property
+				(name "LCSC Part")
+				(value "C337502")
+			)
+			(property
+				(name "EasyEDA part_uuid")
+				(value "a03a2434c32e411a8a3b39b8122990ac")
+			)
+			(property
+				(name "Block Name")
+				(value "BuckConverter")
+			)
+			(property
+				(name "Sheetname")
+				(value "SH2")
+			)
+			(property
+				(name "Sheetfile")
+				(value "Buck3V.kicad_sch")
+			)
+			(property
+				(name "Block Name")
+				(value "Buck3V_B")
+			)
+			(property
+				(name "ki_keywords")
+				(value "DC-DC Converters")
+			)
+			(sheetpath
+				(names "/PowerSubsystem/SH2/")
+				(tstamps "/0201dcd6-7ad0-4780-b097-de36bac34615/3014cad3-7a2f-48f9-bb1e-fb5bc0f95ad4/")
+			)
+			(tstamps "e494651d-1114-42f4-86e1-59db694db2d3")
+			(units
+				(unit
+					(name "A")
+					(pins
+						(pin
+							(num "1")
+						)
+						(pin
+							(num "2")
+						)
+						(pin
+							(num "3")
+						)
+						(pin
+							(num "4")
+						)
+						(pin
+							(num "17")
+						)
+						(pin
+							(num "16")
+						)
+						(pin
+							(num "5")
+						)
+						(pin
+							(num "15")
+						)
+						(pin
+							(num "6")
+						)
+						(pin
+							(num "14")
+						)
+						(pin
+							(num "7")
+						)
+						(pin
+							(num "13")
+						)
+						(pin
+							(num "8")
+						)
+						(pin
+							(num "12")
+						)
+						(pin
+							(num "11")
+						)
+						(pin
+							(num "10")
+						)
+						(pin
+							(num "9")
+						)
+					)
+				)
+			)
+		)
+	)
+	(groups)
+	(variants)
+	(libparts
+		(libpart
+			(lib "kicad-copilot")
+			(part "B2B-XH-AM")
+			(docs "https://www.lcsc.com/datasheet/C19267356.pdf")
+			(fields
+				(field
+					(name "Reference") "CN")
+				(field
+					(name "Value") "B2B-XH-AM")
+				(field
+					(name "Footprint") "kicad-copilot:C19267356_CONN-TH_B2B-XH-AM-LF-SN")
+				(field
+					(name "Datasheet") "https://www.lcsc.com/datasheet/C19267356.pdf")
+				(field
+					(name "Description")
+				)
+				(field
+					(name "Manufacturer") "JST")
+				(field
+					(name "MPN") "B2B-XH-AM")
+				(field
+					(name "LCSC Part") "C19267356")
+			)
+			(pins
+				(pin
+					(num "1")
+					(name "1")
+					(type "passive")
+				)
+				(pin
+					(num "2")
+					(name "2")
+					(type "passive")
+				)
+			)
+		)
+		(libpart
+			(lib "kicad-copilot")
+			(part "CL10B104KB8NNNC")
+			(description "100nF (104) ±10% 50V")
+			(docs "https://lcsc.com/product-detail/Multilayer-Ceramic-Capacitors-MLCC-SMD-SMT_SAMSUNG_CL10B104KB8NNNC_100nF-104-10-50V_C1591.html")
+			(fields
+				(field
+					(name "Reference") "C")
+				(field
+					(name "Value") "CL10B104KB8NNNC")
+				(field
+					(name "Footprint") "kicad-copilot:C1591_C0603")
+				(field
+					(name "Datasheet") "https://lcsc.com/product-detail/Multilayer-Ceramic-Capacitors-MLCC-SMD-SMT_SAMSUNG_CL10B104KB8NNNC_100nF-104-10-50V_C1591.html")
+				(field
+					(name "Description") "100nF (104) ±10% 50V")
+				(field
+					(name "Manufacturer") "SAMSUNG(三星)")
+				(field
+					(name "MPN") "CL10B104KB8NNNC")
+				(field
+					(name "LCSC Part") "C1591")
+			)
+			(pins
+				(pin
+					(num "1")
+					(name "1")
+					(type "passive")
+				)
+				(pin
+					(num "2")
+					(name "2")
+					(type "passive")
+				)
+			)
+		)
+		(libpart
+			(lib "kicad-copilot")
+			(part "CL10B332KB8NNNC")
+			(description "3.3nF (332) ±10% 50V")
+			(docs "https://lcsc.com/product-detail/Multilayer-Ceramic-Capacitors-MLCC-SMD-SMT_SAMSUNG_CL10B332KB8NNNC_3-3nF-332-10-50V_C1613.html")
+			(fields
+				(field
+					(name "Reference") "C")
+				(field
+					(name "Value") "CL10B332KB8NNNC")
+				(field
+					(name "Footprint") "kicad-copilot:C1613_C0603")
+				(field
+					(name "Datasheet") "https://lcsc.com/product-detail/Multilayer-Ceramic-Capacitors-MLCC-SMD-SMT_SAMSUNG_CL10B332KB8NNNC_3-3nF-332-10-50V_C1613.html")
+				(field
+					(name "Description") "3.3nF (332) ±10% 50V")
+				(field
+					(name "Manufacturer") "SAMSUNG(三星)")
+				(field
+					(name "MPN") "CL10B332KB8NNNC")
+				(field
+					(name "LCSC Part") "C1613")
+			)
+			(pins
+				(pin
+					(num "1")
+					(name "1")
+					(type "passive")
+				)
+				(pin
+					(num "2")
+					(name "2")
+					(type "passive")
+				)
+			)
+		)
+		(libpart
+			(lib "kicad-copilot")
+			(part "CL21A226MAQNNNE")
+			(docs "https://lcsc.com/product-detail/Multilayer-Ceramic-Capacitors-MLCC-SMD-SMT_SAMSUNG_CL21A226MAQNNNE_22uF-226-20-25V_C45783.html")
+			(fields
+				(field
+					(name "Reference") "C")
+				(field
+					(name "Value") "CL21A226MAQNNNE")
+				(field
+					(name "Footprint") "kicad-copilot:C45783_C0805")
+				(field
+					(name "Datasheet") "https://lcsc.com/product-detail/Multilayer-Ceramic-Capacitors-MLCC-SMD-SMT_SAMSUNG_CL21A226MAQNNNE_22uF-226-20-25V_C45783.html")
+				(field
+					(name "Description")
+				)
+				(field
+					(name "Manufacturer") "SAMSUNG(三星)")
+				(field
+					(name "MPN") "CL21A226MAQNNNE")
+				(field
+					(name "LCSC Part") "C45783")
+			)
+			(pins
+				(pin
+					(num "1")
+					(name "1")
+					(type "passive")
+				)
+				(pin
+					(num "2")
+					(name "2")
+					(type "passive")
+				)
+			)
+		)
+		(libpart
+			(lib "kicad-copilot")
+			(part "CL32B106KBJNNNE")
+			(docs "https://lcsc.com/product-detail/Multilayer-Ceramic-Capacitors-MLCC-SMD-SMT_Samsung-Electro-Mechanics-CL32B106KBJNNNE_C138687.html")
+			(fields
+				(field
+					(name "Reference") "C")
+				(field
+					(name "Value") "CL32B106KBJNNNE")
+				(field
+					(name "Footprint") "kicad-copilot:C138687_C1210")
+				(field
+					(name "Datasheet") "https://lcsc.com/product-detail/Multilayer-Ceramic-Capacitors-MLCC-SMD-SMT_Samsung-Electro-Mechanics-CL32B106KBJNNNE_C138687.html")
+				(field
+					(name "Description")
+				)
+				(field
+					(name "Manufacturer") "SAMSUNG(三星)")
+				(field
+					(name "MPN") "CL32B106KBJNNNE")
+				(field
+					(name "LCSC Part") "C138687")
+			)
+			(pins
+				(pin
+					(num "1")
+					(name "1")
+					(type "passive")
+				)
+				(pin
+					(num "2")
+					(name "2")
+					(type "passive")
+				)
+			)
+		)
+		(libpart
+			(lib "kicad-copilot")
+			(part "RC0603FR-07100KL")
+			(docs "https://lcsc.com/product-detail/Chip-Resistor-Surface-Mount_100KR-1003-1_C14675.html")
+			(fields
+				(field
+					(name "Reference") "R")
+				(field
+					(name "Value") "RC0603FR-07100KL")
+				(field
+					(name "Footprint") "kicad-copilot:C14675_R0603")
+				(field
+					(name "Datasheet") "https://lcsc.com/product-detail/Chip-Resistor-Surface-Mount_100KR-1003-1_C14675.html")
+				(field
+					(name "Description")
+				)
+				(field
+					(name "Manufacturer") "YAGEO(国巨)")
+				(field
+					(name "MPN") "RC0603FR-07100KL")
+				(field
+					(name "LCSC Part") "C14675")
+			)
+			(pins
+				(pin
+					(num "1")
+					(name "1")
+					(type "passive")
+				)
+				(pin
+					(num "2")
+					(name "2")
+					(type "passive")
+				)
+			)
+		)
+		(libpart
+			(lib "kicad-copilot")
+			(part "RC0603FR-07274KL")
+			(docs "https://lcsc.com/product-detail/New-Arrivals_YAGEO-RC0603FR-07274KL_C482818.html")
+			(fields
+				(field
+					(name "Reference") "R")
+				(field
+					(name "Value") "RC0603FR-07274KL")
+				(field
+					(name "Footprint") "kicad-copilot:C482818_R0603")
+				(field
+					(name "Datasheet") "https://lcsc.com/product-detail/New-Arrivals_YAGEO-RC0603FR-07274KL_C482818.html")
+				(field
+					(name "Description")
+				)
+				(field
+					(name "Manufacturer") "YAGEO(国巨)")
+				(field
+					(name "MPN") "RC0603FR-07274KL")
+				(field
+					(name "LCSC Part") "C482818")
+			)
+			(pins
+				(pin
+					(num "1")
+					(name "1")
+					(type "passive")
+				)
+				(pin
+					(num "2")
+					(name "2")
+					(type "passive")
+				)
+			)
+		)
+		(libpart
+			(lib "kicad-copilot")
+			(part "RC0603FR-07523KL")
+			(docs "https://lcsc.com/product-detail/Chip-Resistor-Surface-Mount_523KR-5233-1_C185324.html")
+			(fields
+				(field
+					(name "Reference") "R")
+				(field
+					(name "Value") "RC0603FR-07523KL")
+				(field
+					(name "Footprint") "kicad-copilot:C185324_R0603")
+				(field
+					(name "Datasheet") "https://lcsc.com/product-detail/Chip-Resistor-Surface-Mount_523KR-5233-1_C185324.html")
+				(field
+					(name "Description")
+				)
+				(field
+					(name "Manufacturer") "YAGEO(国巨)")
+				(field
+					(name "MPN") "RC0603FR-07523KL")
+				(field
+					(name "LCSC Part") "C185324")
+			)
+			(pins
+				(pin
+					(num "1")
+					(name "1")
+					(type "passive")
+				)
+				(pin
+					(num "2")
+					(name "2")
+					(type "passive")
+				)
+			)
+		)
+		(libpart
+			(lib "kicad-copilot")
+			(part "SRP4020TA-2R2M")
+			(docs "https://www.lcsc.com/datasheet/C719179.pdf")
+			(fields
+				(field
+					(name "Reference") "D")
+				(field
+					(name "Value") "SRP4020TA-2R2M")
+				(field
+					(name "Footprint") "kicad-copilot:C719179_IND-SMD_L4.5-W4.1_SRP4020TA")
+				(field
+					(name "Datasheet") "https://www.lcsc.com/datasheet/C719179.pdf")
+				(field
+					(name "Description")
+				)
+				(field
+					(name "Manufacturer") "BOURNS")
+				(field
+					(name "MPN") "SRP4020TA-2R2M")
+				(field
+					(name "LCSC Part") "C719179")
+			)
+			(pins
+				(pin
+					(num "1")
+					(name "1")
+					(type "passive")
+				)
+				(pin
+					(num "2")
+					(name "2")
+					(type "passive")
+				)
+			)
+		)
+		(libpart
+			(lib "kicad-copilot")
+			(part "TPS62130ARGTR")
+			(docs "https://lcsc.com/product-detail/Others_Texas-Instruments-TI-TPS62130ARGTR_C337502.html")
+			(fields
+				(field
+					(name "Reference") "U")
+				(field
+					(name "Value") "TPS62130ARGTR")
+				(field
+					(name "Footprint") "kicad-copilot:C337502_VQFN-16_L3.0-W3.0-P0.50-BL-EP1.7")
+				(field
+					(name "Datasheet") "https://lcsc.com/product-detail/Others_Texas-Instruments-TI-TPS62130ARGTR_C337502.html")
+				(field
+					(name "Description")
+				)
+				(field
+					(name "Manufacturer") "TI(德州仪器)")
+				(field
+					(name "MPN") "TPS62130ARGTR")
+				(field
+					(name "LCSC Part") "C337502")
+			)
+			(pins
+				(pin
+					(num "1")
+					(name "SW")
+					(type "passive")
+				)
+				(pin
+					(num "2")
+					(name "SW")
+					(type "passive")
+				)
+				(pin
+					(num "3")
+					(name "SW")
+					(type "passive")
+				)
+				(pin
+					(num "4")
+					(name "PG")
+					(type "passive")
+				)
+				(pin
+					(num "5")
+					(name "FB")
+					(type "passive")
+				)
+				(pin
+					(num "6")
+					(name "AGND")
+					(type "power_in")
+				)
+				(pin
+					(num "7")
+					(name "FSW")
+					(type "passive")
+				)
+				(pin
+					(num "8")
+					(name "DEF")
+					(type "passive")
+				)
+				(pin
+					(num "9")
+					(name "SS/TR")
+					(type "passive")
+				)
+				(pin
+					(num "10")
+					(name "AVIN")
+					(type "passive")
+				)
+				(pin
+					(num "11")
+					(name "PVIN")
+					(type "passive")
+				)
+				(pin
+					(num "12")
+					(name "PVIN")
+					(type "passive")
+				)
+				(pin
+					(num "13")
+					(name "EN")
+					(type "input")
+				)
+				(pin
+					(num "14")
+					(name "VOS")
+					(type "passive")
+				)
+				(pin
+					(num "15")
+					(name "PGND")
+					(type "power_in")
+				)
+				(pin
+					(num "16")
+					(name "PGND")
+					(type "power_in")
+				)
+				(pin
+					(num "17")
+					(name "PAD")
+					(type "passive")
+				)
+			)
+		)
+	)
+	(libraries
+		(library
+			(logical "kicad-copilot")
+			(uri "${KIPRJMOD}/kicad-copilot.kicad_sym")
+		)
+	)
+	(nets
+		(net
+			(code "1")
+			(name "/PowerSubsystem/3V_A")
+			(class "Default")
+			(node
+				(ref "C2")
+				(pin "1")
+				(pinfunction "1_1")
+				(pintype "passive")
+			)
+			(node
+				(ref "CN2")
+				(pin "1")
+				(pinfunction "1_1")
+				(pintype "passive")
+			)
+			(node
+				(ref "L1")
+				(pin "2")
+				(pinfunction "2_2")
+				(pintype "passive")
+			)
+			(node
+				(ref "R1")
+				(pin "1")
+				(pinfunction "1_1")
+				(pintype "passive")
+			)
+			(node
+				(ref "U1")
+				(pin "14")
+				(pinfunction "VOS_14")
+				(pintype "passive")
+			)
+		)
+		(net
+			(code "2")
+			(name "/PowerSubsystem/3V_B")
+			(class "Default")
+			(node
+				(ref "C12")
+				(pin "1")
+				(pinfunction "1_1")
+				(pintype "passive")
+			)
+			(node
+				(ref "CN3")
+				(pin "1")
+				(pinfunction "1_1")
+				(pintype "passive")
+			)
+			(node
+				(ref "L4")
+				(pin "2")
+				(pinfunction "2_2")
+				(pintype "passive")
+			)
+			(node
+				(ref "R6")
+				(pin "1")
+				(pinfunction "1_1")
+				(pintype "passive")
+			)
+			(node
+				(ref "U4")
+				(pin "14")
+				(pinfunction "VOS_14")
+				(pintype "passive")
+			)
+		)
+		(net
+			(code "3")
+			(name "/PowerSubsystem/5V_OUT")
+			(class "Default")
+			(node
+				(ref "C6")
+				(pin "1")
+				(pinfunction "1_1")
+				(pintype "passive")
+			)
+			(node
+				(ref "CN4")
+				(pin "1")
+				(pinfunction "1_1")
+				(pintype "passive")
+			)
+			(node
+				(ref "L2")
+				(pin "2")
+				(pinfunction "2_2")
+				(pintype "passive")
+			)
+			(node
+				(ref "R3")
+				(pin "1")
+				(pinfunction "1_1")
+				(pintype "passive")
+			)
+			(node
+				(ref "U2")
+				(pin "14")
+				(pinfunction "VOS_14")
+				(pintype "passive")
+			)
+		)
+		(net
+			(code "4")
+			(name "/PowerSubsystem/Buck3V/FB")
+			(class "Default")
+			(node
+				(ref "R1")
+				(pin "2")
+				(pinfunction "2_2")
+				(pintype "passive")
+			)
+			(node
+				(ref "R2")
+				(pin "1")
+				(pinfunction "1_1")
+				(pintype "passive")
+			)
+			(node
+				(ref "U1")
+				(pin "5")
+				(pinfunction "FB_5")
+				(pintype "passive")
+			)
+		)
+		(net
+			(code "5")
+			(name "/PowerSubsystem/Buck3V/SS")
+			(class "Default")
+			(node
+				(ref "C4")
+				(pin "1")
+				(pinfunction "1_1")
+				(pintype "passive")
+			)
+			(node
+				(ref "U1")
+				(pin "9")
+				(pinfunction "SS/TR_9")
+				(pintype "passive")
+			)
+		)
+		(net
+			(code "6")
+			(name "/PowerSubsystem/Buck3V/SW")
+			(class "Default")
+			(node
+				(ref "L1")
+				(pin "1")
+				(pinfunction "1_1")
+				(pintype "passive")
+			)
+			(node
+				(ref "U1")
+				(pin "1")
+				(pinfunction "SW_1")
+				(pintype "passive")
+			)
+			(node
+				(ref "U1")
+				(pin "2")
+				(pinfunction "SW_2")
+				(pintype "passive")
+			)
+			(node
+				(ref "U1")
+				(pin "3")
+				(pinfunction "SW_3")
+				(pintype "passive")
+			)
+		)
+		(net
+			(code "7")
+			(name "/PowerSubsystem/Buck5V/FB")
+			(class "Default")
+			(node
+				(ref "R3")
+				(pin "2")
+				(pinfunction "2_2")
+				(pintype "passive")
+			)
+			(node
+				(ref "R4")
+				(pin "1")
+				(pinfunction "1_1")
+				(pintype "passive")
+			)
+			(node
+				(ref "U2")
+				(pin "5")
+				(pinfunction "FB_5")
+				(pintype "passive")
+			)
+		)
+		(net
+			(code "8")
+			(name "/PowerSubsystem/Buck5V/SS")
+			(class "Default")
+			(node
+				(ref "C8")
+				(pin "1")
+				(pinfunction "1_1")
+				(pintype "passive")
+			)
+			(node
+				(ref "U2")
+				(pin "9")
+				(pinfunction "SS/TR_9")
+				(pintype "passive")
+			)
+		)
+		(net
+			(code "9")
+			(name "/PowerSubsystem/Buck5V/SW")
+			(class "Default")
+			(node
+				(ref "L2")
+				(pin "1")
+				(pinfunction "1_1")
+				(pintype "passive")
+			)
+			(node
+				(ref "U2")
+				(pin "1")
+				(pinfunction "SW_1")
+				(pintype "passive")
+			)
+			(node
+				(ref "U2")
+				(pin "2")
+				(pinfunction "SW_2")
+				(pintype "passive")
+			)
+			(node
+				(ref "U2")
+				(pin "3")
+				(pinfunction "SW_3")
+				(pintype "passive")
+			)
+		)
+		(net
+			(code "10")
+			(name "/PowerSubsystem/GND")
+			(class "Default")
+			(node
+				(ref "C1")
+				(pin "2")
+				(pinfunction "2_2")
+				(pintype "passive")
+			)
+			(node
+				(ref "C10")
+				(pin "2")
+				(pinfunction "2_2")
+				(pintype "passive")
+			)
+			(node
+				(ref "C12")
+				(pin "2")
+				(pinfunction "2_2")
+				(pintype "passive")
+			)
+			(node
+				(ref "C14")
+				(pin "2")
+				(pinfunction "2_2")
+				(pintype "passive")
+			)
+			(node
+				(ref "C16")
+				(pin "2")
+				(pinfunction "2_2")
+				(pintype "passive")
+			)
+			(node
+				(ref "C2")
+				(pin "2")
+				(pinfunction "2_2")
+				(pintype "passive")
+			)
+			(node
+				(ref "C3")
+				(pin "2")
+				(pinfunction "2_2")
+				(pintype "passive")
+			)
+			(node
+				(ref "C4")
+				(pin "2")
+				(pinfunction "2_2")
+				(pintype "passive")
+			)
+			(node
+				(ref "C5")
+				(pin "2")
+				(pinfunction "2_2")
+				(pintype "passive")
+			)
+			(node
+				(ref "C6")
+				(pin "2")
+				(pinfunction "2_2")
+				(pintype "passive")
+			)
+			(node
+				(ref "C7")
+				(pin "2")
+				(pinfunction "2_2")
+				(pintype "passive")
+			)
+			(node
+				(ref "C8")
+				(pin "2")
+				(pinfunction "2_2")
+				(pintype "passive")
+			)
+			(node
+				(ref "CN1")
+				(pin "2")
+				(pinfunction "2_2")
+				(pintype "passive")
+			)
+			(node
+				(ref "CN2")
+				(pin "2")
+				(pinfunction "2_2")
+				(pintype "passive")
+			)
+			(node
+				(ref "CN3")
+				(pin "2")
+				(pinfunction "2_2")
+				(pintype "passive")
+			)
+			(node
+				(ref "CN4")
+				(pin "2")
+				(pinfunction "2_2")
+				(pintype "passive")
+			)
+			(node
+				(ref "R2")
+				(pin "2")
+				(pinfunction "2_2")
+				(pintype "passive")
+			)
+			(node
+				(ref "R4")
+				(pin "2")
+				(pinfunction "2_2")
+				(pintype "passive")
+			)
+			(node
+				(ref "R8")
+				(pin "2")
+				(pinfunction "2_2")
+				(pintype "passive")
+			)
+			(node
+				(ref "U1")
+				(pin "15")
+				(pinfunction "PGND_15")
+				(pintype "power_in")
+			)
+			(node
+				(ref "U1")
+				(pin "16")
+				(pinfunction "PGND_16")
+				(pintype "power_in")
+			)
+			(node
+				(ref "U1")
+				(pin "17")
+				(pinfunction "PAD_17")
+				(pintype "passive")
+			)
+			(node
+				(ref "U1")
+				(pin "6")
+				(pinfunction "AGND_6")
+				(pintype "power_in")
+			)
+			(node
+				(ref "U1")
+				(pin "7")
+				(pinfunction "FSW_7")
+				(pintype "passive")
+			)
+			(node
+				(ref "U1")
+				(pin "8")
+				(pinfunction "DEF_8")
+				(pintype "passive")
+			)
+			(node
+				(ref "U2")
+				(pin "15")
+				(pinfunction "PGND_15")
+				(pintype "power_in")
+			)
+			(node
+				(ref "U2")
+				(pin "16")
+				(pinfunction "PGND_16")
+				(pintype "power_in")
+			)
+			(node
+				(ref "U2")
+				(pin "17")
+				(pinfunction "PAD_17")
+				(pintype "passive")
+			)
+			(node
+				(ref "U2")
+				(pin "6")
+				(pinfunction "AGND_6")
+				(pintype "power_in")
+			)
+			(node
+				(ref "U2")
+				(pin "7")
+				(pinfunction "FSW_7")
+				(pintype "passive")
+			)
+			(node
+				(ref "U2")
+				(pin "8")
+				(pinfunction "DEF_8")
+				(pintype "passive")
+			)
+			(node
+				(ref "U4")
+				(pin "15")
+				(pinfunction "PGND_15")
+				(pintype "power_in")
+			)
+			(node
+				(ref "U4")
+				(pin "16")
+				(pinfunction "PGND_16")
+				(pintype "power_in")
+			)
+			(node
+				(ref "U4")
+				(pin "17")
+				(pinfunction "PAD_17")
+				(pintype "passive")
+			)
+			(node
+				(ref "U4")
+				(pin "6")
+				(pinfunction "AGND_6")
+				(pintype "power_in")
+			)
+			(node
+				(ref "U4")
+				(pin "7")
+				(pinfunction "FSW_7")
+				(pintype "passive")
+			)
+			(node
+				(ref "U4")
+				(pin "8")
+				(pinfunction "DEF_8")
+				(pintype "passive")
+			)
+		)
+		(net
+			(code "11")
+			(name "/PowerSubsystem/SH2/FB")
+			(class "Default")
+			(node
+				(ref "R6")
+				(pin "2")
+				(pinfunction "2_2")
+				(pintype "passive")
+			)
+			(node
+				(ref "R8")
+				(pin "1")
+				(pinfunction "1_1")
+				(pintype "passive")
+			)
+			(node
+				(ref "U4")
+				(pin "5")
+				(pinfunction "FB_5")
+				(pintype "passive")
+			)
+		)
+		(net
+			(code "12")
+			(name "/PowerSubsystem/SH2/SS")
+			(class "Default")
+			(node
+				(ref "C16")
+				(pin "1")
+				(pinfunction "1_1")
+				(pintype "passive")
+			)
+			(node
+				(ref "U4")
+				(pin "9")
+				(pinfunction "SS/TR_9")
+				(pintype "passive")
+			)
+		)
+		(net
+			(code "13")
+			(name "/PowerSubsystem/SH2/SW")
+			(class "Default")
+			(node
+				(ref "L4")
+				(pin "1")
+				(pinfunction "1_1")
+				(pintype "passive")
+			)
+			(node
+				(ref "U4")
+				(pin "1")
+				(pinfunction "SW_1")
+				(pintype "passive")
+			)
+			(node
+				(ref "U4")
+				(pin "2")
+				(pinfunction "SW_2")
+				(pintype "passive")
+			)
+			(node
+				(ref "U4")
+				(pin "3")
+				(pinfunction "SW_3")
+				(pintype "passive")
+			)
+		)
+		(net
+			(code "14")
+			(name "/PowerSubsystem/VIN12")
+			(class "Default")
+			(node
+				(ref "C1")
+				(pin "1")
+				(pinfunction "1_1")
+				(pintype "passive")
+			)
+			(node
+				(ref "C10")
+				(pin "1")
+				(pinfunction "1_1")
+				(pintype "passive")
+			)
+			(node
+				(ref "C14")
+				(pin "1")
+				(pinfunction "1_1")
+				(pintype "passive")
+			)
+			(node
+				(ref "C3")
+				(pin "1")
+				(pinfunction "1_1")
+				(pintype "passive")
+			)
+			(node
+				(ref "C5")
+				(pin "1")
+				(pinfunction "1_1")
+				(pintype "passive")
+			)
+			(node
+				(ref "C7")
+				(pin "1")
+				(pinfunction "1_1")
+				(pintype "passive")
+			)
+			(node
+				(ref "CN1")
+				(pin "1")
+				(pinfunction "1_1")
+				(pintype "passive")
+			)
+			(node
+				(ref "U1")
+				(pin "10")
+				(pinfunction "AVIN_10")
+				(pintype "passive")
+			)
+			(node
+				(ref "U1")
+				(pin "11")
+				(pinfunction "PVIN_11")
+				(pintype "passive")
+			)
+			(node
+				(ref "U1")
+				(pin "12")
+				(pinfunction "PVIN_12")
+				(pintype "passive")
+			)
+			(node
+				(ref "U1")
+				(pin "13")
+				(pinfunction "EN_13")
+				(pintype "input")
+			)
+			(node
+				(ref "U2")
+				(pin "10")
+				(pinfunction "AVIN_10")
+				(pintype "passive")
+			)
+			(node
+				(ref "U2")
+				(pin "11")
+				(pinfunction "PVIN_11")
+				(pintype "passive")
+			)
+			(node
+				(ref "U2")
+				(pin "12")
+				(pinfunction "PVIN_12")
+				(pintype "passive")
+			)
+			(node
+				(ref "U2")
+				(pin "13")
+				(pinfunction "EN_13")
+				(pintype "input")
+			)
+			(node
+				(ref "U4")
+				(pin "10")
+				(pinfunction "AVIN_10")
+				(pintype "passive")
+			)
+			(node
+				(ref "U4")
+				(pin "11")
+				(pinfunction "PVIN_11")
+				(pintype "passive")
+			)
+			(node
+				(ref "U4")
+				(pin "12")
+				(pinfunction "PVIN_12")
+				(pintype "passive")
+			)
+			(node
+				(ref "U4")
+				(pin "13")
+				(pinfunction "EN_13")
+				(pintype "input")
+			)
+		)
+		(net
+			(code "15")
+			(name "unconnected-(U1-PG-Pad4)")
+			(class "Default")
+			(node
+				(ref "U1")
+				(pin "4")
+				(pinfunction "PG_4")
+				(pintype "passive+no_connect")
+			)
+		)
+		(net
+			(code "16")
+			(name "unconnected-(U2-PG-Pad4)")
+			(class "Default")
+			(node
+				(ref "U2")
+				(pin "4")
+				(pinfunction "PG_4")
+				(pintype "passive+no_connect")
+			)
+		)
+		(net
+			(code "17")
+			(name "unconnected-(U4-PG-Pad4)")
+			(class "Default")
+			(node
+				(ref "U4")
+				(pin "4")
+				(pinfunction "PG_4")
+				(pintype "passive+no_connect")
+			)
+		)
+	)
+)

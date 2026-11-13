@@ -1,0 +1,73 @@
+{
+    "$schema": "https://schemas.kicad.org/erc.v1.json",
+    "coordinate_units": "mm",
+    "date": "2026-11-13T22:19:08",
+    "ignored_checks": [
+        {
+            "description": "Global label only appears once in the schematic",
+            "key": "single_global_label"
+        },
+        {
+            "description": "Four connection points are joined together",
+            "key": "four_way_junction"
+        },
+        {
+            "description": "SPICE model issue",
+            "key": "simulation_model_issue"
+        },
+        {
+            "description": "Assigned footprint doesn't match footprint filters",
+            "key": "footprint_filter"
+        }
+    ],
+    "included_severities": [
+        "error",
+        "warning",
+        "exclusion"
+    ],
+    "kicad_version": "10.0.0",
+    "sheets": [
+        {
+            "path": "/",
+            "uuid_path": "/23c05147-7866-4605-afed-91ef438d36b7",
+            "violations": []
+        },
+        {
+            "path": "/PowerSubsystem/",
+            "uuid_path": "/23c05147-7866-4605-afed-91ef438d36b7/0201dcd6-7ad0-4780-b097-de36bac34615",
+            "violations": []
+        },
+        {
+            "path": "/PowerSubsystem/Buck3V/",
+            "uuid_path": "/23c05147-7866-4605-afed-91ef438d36b7/0201dcd6-7ad0-4780-b097-de36bac34615/e09029d6-fee5-492c-83e4-4b96fa23331f",
+            "violations": [
+                {
+                    "description": "Input Power pin not driven by any Output Power pins",
+                    "items": [
+                        {
+                            "description": "Symbol U4 Pin 6 [AGND, Power input, Line]",
+                            "pos": {
+                                "x": 1.3462,
+                                "y": 1.4224
+                            },
+                            "uuid": "b7e4ef70-2260-4a0d-9c32-0aa050dff00f"
+                        }
+                    ],
+                    "severity": "error",
+                    "type": "power_pin_not_driven"
+                }
+            ]
+        },
+        {
+            "path": "/PowerSubsystem/Buck5V/",
+            "uuid_path": "/23c05147-7866-4605-afed-91ef438d36b7/0201dcd6-7ad0-4780-b097-de36bac34615/43fde62a-b882-4cc0-a2ac-04f8d572d064",
+            "violations": []
+        },
+        {
+            "path": "/PowerSubsystem/SH2/",
+            "uuid_path": "/23c05147-7866-4605-afed-91ef438d36b7/0201dcd6-7ad0-4780-b097-de36bac34615/3014cad3-7a2f-48f9-bb1e-fb5bc0f95ad4",
+            "violations": []
+        }
+    ],
+    "source": "DCDC_Acceptance.kicad_sch"
+}

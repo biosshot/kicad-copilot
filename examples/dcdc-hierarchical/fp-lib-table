@@ -1,0 +1,4 @@
+(fp_lib_table
+  (version 7)
+  (lib (name "kicad-copilot")(type "KiCad")(uri "${KIPRJMOD}/kicad-copilot.pretty")(options "")(descr "KiCad Copilot project library"))
+)
