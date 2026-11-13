@@ -42,6 +42,7 @@
     "test:mcp-ldo": "npm run build && node dist/test-mcp-ldo.js",
     "test:schematic-matrix": "npm run build && node dist/test-schematic-matrix.js",
     "test:cli-sessions": "node scripts/test-cli-sessions.mjs",
+    "test:cli-pcb-live": "node scripts/test-cli-pcb-live.mjs",
     "test:operations": "node scripts/test-local-layout-operation.mjs",
     "test:local-backend": "npm run build && node dist/test-local-backend.js",
     "test:ground-layout": "npm run build && node dist/test-ground-layout.js",

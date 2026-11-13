@@ -167,7 +167,10 @@ its symbol and footprint geometry as UUID-keyed fallback maps; catalog geometry 
 when it resolves successfully.
 
 This development branch uses `file:../eda-copilot-backend-kicad` while the compatible
-backend changes await release. Build that sibling checkout first, then run
+backend changes await release. `backend-source.json` pins the companion commit;
+that commit must be available on the backend remote before the two-repository CI
+can run. Build that sibling checkout first (including `npm run native:build` for
+native PCB placement), then run
 `npm install --install-links` here. The source checkout is not a standalone npm release;
 `npm run check:release` prevents publishing this local dependency by mistake.
 

@@ -137,6 +137,11 @@ function updateFootprintMetadata(
     schematicPath: string,
     version: number,
 ) {
+    // Library footprints commonly omit an instance UUID. Every board instance
+    // needs a stable identity for geometry lookup on subsequent operations.
+    if (!childText(footprint, 'uuid') && !childText(footprint, 'tstamp')) {
+        setChild(footprint, 'uuid', [token(randomUUID(), true)]);
+    }
     setProperty(footprint, 'Reference', component.designator, false);
     setProperty(footprint, 'Value', component.value);
     setProperty(footprint, 'EasyEDA part_uuid', component.part_uuid || '');
