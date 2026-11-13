@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { XMLParser } from 'fast-xml-parser';
 import sharp from 'sharp';
 import { openMcpClient } from '../src/mcp-client';
@@ -17,9 +18,27 @@ await mkdir(base, { recursive: true });
 const output = await mkdtemp(join(base, 'run-'));
 console.log(`Fixtures: ${output}`);
 const cli = await getSupportedKicadCli();
+const localIdsPath = join(output, 'local-catalogue-ids.json');
+await writeFile(localIdsPath, '[]');
+process.env.KICAD_MATRIX_LOCAL_IDS = localIdsPath;
+const preload = pathToFileURL(resolve('tests/fixtures/native-catalog/mock-catalogue.mjs')).href;
+process.env.NODE_OPTIONS = `${process.env.NODE_OPTIONS ?? ''} --import=${preload}`.trim();
 const client = await openMcpClient();
 const results: { name: string; status: string; details?: string; directory: string }[] = [];
-const ids = { ldo: '8c72fdff8032447e8704660d377171f6', cap: 'e10bc30d72324129a5b7daae4e75f56f', connector: '9cdd746789df4eb5b83f56551b6edd1b' };
+const ids = { ldo: '', cap: '', connector: '', buck: '' };
+const seed = resolve('tests/fixtures/native-catalog');
+for (const [file, entries] of [['ldo.kicad_sch', [['U1', 'ldo'], ['C1', 'cap']]], ['main.kicad_sch', [['J1', 'connector']]], ['buck.kicad_sch', [['U1', 'buck']]]] as const) {
+    const response = await client.callTool({ name: 'get_schematic', arguments: { path: join(seed, file) } });
+    if (response.isError) throw new Error(`native catalogue fixture: ${JSON.stringify(response)}`);
+    const native = nativeInstances(await readFile(join(seed, file), 'utf8'));
+    for (const [ref, key] of entries) {
+        const instance = native.find(c => c.designator === ref);
+        assert.ok(instance, `native fixture ${ref} missing`);
+        ids[key] = instance.asset.partUuid;
+    }
+}
+await writeFile(localIdsPath, JSON.stringify(Object.values(ids)));
+
 const list = <T>(v: T | T[] | undefined): T[] => v === undefined ? [] : Array.isArray(v) ? v : [v];
 const xmlParser = new XMLParser({ ignoreAttributes: false });
 const escape = (s: string) => s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('"', '&quot;');
@@ -56,11 +75,16 @@ class Project {
     async create() {
         await mkdir(this.directory, { recursive: true });
         await this.call('create_doc', { doc: { doc_type: 'project', path: join(this.directory, 'main.kicad_pro') } });
+        for (const name of ['kicad-copilot.kicad_sym', 'sym-lib-table', 'fp-lib-table', 'kicad-copilot.pretty'])
+            await cp(join(seed, name), join(this.directory, name), { recursive: true });
         await this.register('main');
     }
     async register(page: string) {
         const root = parseSExpression(await readFile(this.path(page), 'utf8'));
-        this.pages.set(page, { uuid: scalar(root, 'uuid').replaceAll('-', ''), parts: [] });
+        const uuid = scalar(root, 'uuid').replaceAll('-', '');
+        this.pages.set(page, { uuid, parts: [] });
+        const localIds = JSON.parse(await readFile(localIdsPath, 'utf8')) as string[];
+        if (!localIds.includes(uuid)) await writeFile(localIdsPath, JSON.stringify([...localIds, uuid]));
     }
     async child(page: string, parent: string) {
         await this.call('create_doc', { doc: { doc_type: 'schematic_page', path: this.path(page), parent_path: this.path(parent) } });
@@ -72,6 +96,9 @@ class Project {
     }
     async modify(page: string, additions: CircuitMod['add_components'] = [], extra: Partial<CircuitMod> = {}) {
         const mod: CircuitMod = { add_components: additions, add_reused_blocks: [], rm_components: null, external_connect: null, external_rm_connect: null, ...extra };
+        // Refresh detached sources: a prior operation may have removed the last in-project instance.
+        for (const file of ['main.kicad_sch', 'buck.kicad_sch'])
+            await this.call('get_schematic', { path: join(seed, file) });
         await this.call('extract_circuit', { path: this.path(page), ...mod });
         const model = this.pages.get(page)!;
         model.parts = model.parts.filter(p => !mod.rm_components?.includes(p.ref));
@@ -106,6 +133,8 @@ class Project {
         await writeFile(this.path(page), printSExpression(root));
         const result = await this.call('get_schematic', { path: this.path(page) });
         const uuid = result.components[0].part_uuid;
+        const localIds = JSON.parse(await readFile(localIdsPath, 'utf8')) as string[];
+        if (!localIds.includes(uuid)) await writeFile(localIdsPath, JSON.stringify([...localIds, uuid]));
         this.pages.get(page)!.parts.push({ ref: 'R1', uuid, nets: { '1': '', '2': '' } });
         const found = await this.call('component_search', { part_uuid: uuid });
         assert.equal(found.bestComponent.part_uuid, uuid);
@@ -311,7 +340,7 @@ try {
     await scenario('buck-controller-vin', async p => {
         await p.child('buck', 'main');
         await p.modify('buck', [
-            add('U1', '2e6cd0fdb8d74fc78dfca927dec3a2fb', {
+            add('U1', ids.buck, {
                 '1': 'hier_passive:buck:GND', '2': 'local:buck:SW', '3': 'hier_input:buck:VIN',
                 '4': 'local:buck:FB', '5': 'hier:buck:VIN', '6': 'local:buck:BOOT',
             }, 'Controller', 'TPS54302DDCR'),
