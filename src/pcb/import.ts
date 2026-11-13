@@ -3,7 +3,7 @@ import { basename } from 'node:path';
 import { saveCheckpoint } from '../checkpoints/store';
 import { resolveFootprintDefinition } from '../kicad/footprint-library';
 import { normalizeEasyEdaFootprintGeometry } from '../kicad/footprint-normalization';
-import { setFootprintSide } from '../kicad/board-assemble';
+import { setFootprintAt, setFootprintSide } from '../kicad/board-assemble';
 import {
     childText,
     footprintAt,
@@ -320,7 +320,7 @@ export async function importPcbChanges(pcbPathInput: string, schematicOverride?:
             const placement = current ? footprintAt(current) : stagingAt(pcb.root, added++);
             const layer = current ? footprintLayer(current) : 'F.Cu';
             setFootprintSide(next, layer === 'B.Cu' ? 'B.Cu' : 'F.Cu');
-            setChild(next, 'at', [token(String(placement.x)), token(String(placement.y)), token(String(placement.rotate))]);
+            setFootprintAt(next, placement.x, placement.y, placement.rotate);
             updateFootprintMetadata(pcb.root, next, component, schematicPath, pcb.version);
             normalizeEasyEdaFootprintGeometry(next);
             if (current) replaceRootItem(pcb.root, current, next);

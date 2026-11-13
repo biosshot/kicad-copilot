@@ -28,6 +28,15 @@ function setChild(node: SExpression[], head: string, values: SExpression[]) {
     else node.push(next);
 }
 
+/** KiCad must encounter the footprint transform before reading its child pads. */
+export function setFootprintAt(node: SExpression[], x: number, y: number, rotation: number) {
+    const existing = findChild(node, 'at');
+    if (existing) node.splice(node.indexOf(existing), 1);
+    const layer = findChild(node, 'layer');
+    const index = layer ? node.indexOf(layer) + 1 : 2;
+    node.splice(index, 0, [token('at'), token(String(x)), token(String(y)), token(String(rotation))]);
+}
+
 function removeChildren(node: SExpression[], head: string) {
     for (let index = node.length - 1; index >= 0; index -= 1) {
         if (isSExpressionList(node[index]) && listHead(node[index]) === head) node.splice(index, 1);
@@ -229,9 +238,7 @@ function moveComponents(root: SExpression[], assemble: BoardAssemble, offset: { 
         // angles are absolute in a board file. Apply the parent's rotation delta so the
         // children keep their orientation relative to the footprint.
         rotateFootprintChildAngles(footprint, rotation - previousRotation);
-        setChild(footprint, 'at', [
-            token(String(x)), token(String(y)), token(String(rotation)),
-        ]);
+        setFootprintAt(footprint, x, y, rotation);
         setReferenceText(footprint, placement, x, y, rotation, offset);
     }
 }
