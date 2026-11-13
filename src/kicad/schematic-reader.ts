@@ -306,7 +306,7 @@ export async function getPcbSchematic(path: string) {
     const flags = await readSchematicInstanceFlags(path);
     for (const component of parsed.components) {
         const uuid = component.identity.split('/').filter(Boolean).at(-1) || '';
-        const value = flags.byUuid.get(uuid) || flags.byReference.get(component.designator.toUpperCase());
+        const value = flags.byIdentity.get(component.identity) || flags.byUuid.get(uuid) || flags.byReference.get(component.designator.toUpperCase());
         if (!value) continue;
         component.on_board = value.on_board;
         component.in_bom = value.in_bom;
@@ -322,7 +322,7 @@ export async function getPcbSchematic(path: string) {
             footprint_name: value.footprint_name,
             footprint_uuid: value.footprint_uuid,
             block_name: value.block_name,
-            identity: `/${value.uuid}`,
+            identity: value.identity || `/${value.uuid}`,
             on_board: false,
             in_bom: value.in_bom,
             dnp: value.dnp,
@@ -333,6 +333,7 @@ export async function getPcbSchematic(path: string) {
 
 type InstanceFlags = {
     uuid: string;
+    identity?: string;
     designator: string;
     value: string;
     footprint_name: string | null;
@@ -388,6 +389,9 @@ async function reachableSchematicFiles(rootPath: string) {
 
 async function readSchematicInstanceFlags(rootPath: string) {
     const files = await reachableSchematicFiles(rootPath);
+    const root = parseSExpression(await readFile(rootPath, 'utf8'));
+    const rootUuid = sexprAtom(findSexprChild(root, 'uuid')?.[1]) || '';
+    const projectName = basename(rootPath, '.kicad_sch');
     const values: InstanceFlags[] = [];
     for (const file of files) {
         const source = await readFile(file, 'utf8');
@@ -397,7 +401,7 @@ async function readSchematicInstanceFlags(rootPath: string) {
             const designator = sexprProperty(node, 'Reference') || '';
             const uuid = sexprAtom(findSexprChild(node, 'uuid')?.[1]) || '';
             if (!designator || !uuid || designator.startsWith('#')) continue;
-            values.push({
+            const base: InstanceFlags = {
                 uuid,
                 designator: baseDesignator(designator),
                 value: sexprProperty(node, 'Value') || '',
@@ -408,7 +412,23 @@ async function readSchematicInstanceFlags(rootPath: string) {
                 on_board: yes(node, 'on_board', true),
                 in_bom: yes(node, 'in_bom', true),
                 dnp: yes(node, 'dnp', false),
-            });
+            };
+            const instances = findSexprChild(node, 'instances');
+            const project = instances?.find((item) => isSExpressionList(item)
+                && listHead(item) === 'project' && sexprAtom(item[1]) === projectName);
+            const paths = isSExpressionList(project) ? project.filter((item) => isSExpressionList(item)
+                && listHead(item) === 'path') : [];
+            let added = false;
+            for (const instance of paths) {
+                if (!isSExpressionList(instance)) continue;
+                const parts = (sexprAtom(instance[1]) || '').split('/').filter(Boolean);
+                if (!rootUuid || parts[0] !== rootUuid) continue;
+                const reference = sexprAtom(findSexprChild(instance, 'reference')?.[1]);
+                if (!reference) continue;
+                values.push({ ...base, designator: baseDesignator(reference), identity: `/${[...parts.slice(1), uuid].join('/')}` });
+                added = true;
+            }
+            if (!added) values.push(base);
         }
     }
     const byPhysicalReference = new Map<string, InstanceFlags>();
@@ -426,6 +446,7 @@ async function readSchematicInstanceFlags(rootPath: string) {
         byPhysicalReference.set(key, value);
     }
     return {
+        byIdentity: new Map(values.filter((value) => value.identity).map((value) => [value.identity!, value])),
         byUuid: new Map(values.map((value) => [value.uuid, value])),
         byReference: byPhysicalReference,
         excluded: values.filter((value) => !value.on_board),
