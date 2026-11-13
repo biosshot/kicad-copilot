@@ -1,11 +1,13 @@
 ---
-name: kicad-copilot-mcp
+name: kicad-copilot
 description: Create, modify, place, route, or review KiCad schematics and PCBs with KiCad Copilot MCP tools. Supports independent schematic, placement, copper, routing, and verification tasks.
 ---
 
-# KiCad Copilot MCP
+# KiCad Copilot
 
 Complete only the stage requested by the user. A schematic task does not authorize PCB work; placement does not authorize routing.
+
+Use the installed standalone skill launcher `scripts/kicad-copilot-cli.js` with Node.js >=20.19, or direct MCP tools when available. Resolve paths relative to this file. Read [installation and CLI usage](install-guide.md) before first use. Start a persistent CLI session for a task, keep its ID for long operations, and use `<id> tools help <tool>` for exact arguments. Reuse an existing skill rather than rebuilding for every task.
 
 ## Start
 
@@ -25,6 +27,8 @@ Complete only the stage requested by the user. A schematic task does not authori
 | Apply stackup, rules, zones, copper, or routing | `pcb-routing/instructions.md`, `pcb-routing/dsl.d.ts` | requested PCB operation is checked |
 | Release or fabrication review | `verification.md`, then only relevant domain references | required gates and skipped checks are reported |
 | Run native checks, previews, or exports | `kicad-cli.md` | requested artifact/check is complete |
+| Read component datasheets | `datasheets/SKILL.md` | relevant facts and PDF pages are checked |
+| Simulate a circuit | `spice/SKILL.md` | numerical results and model assumptions are checked |
 | Recover a file | `schematic/checkpoints.md` | user-selected checkpoint is restored |
 
 ## Required behavior
@@ -32,7 +36,7 @@ Complete only the stage requested by the user. A schematic task does not authori
 - Use exact paths. `get_schematic` reads one physical `.kicad_sch` sheet.
 - New or substantially expanded schematics must use functional hierarchical sheets.
 - Run `beautify_schematic` after removal, replacement, or connection reassignment. It rebuilds and repositions only the listed components.
-- Long operations are complete only after `wait_operation` returns a terminal result.
+- Long operations are complete only after `wait_operation` returns a terminal result in the same server session; see [installation and CLI usage](install-guide.md).
 - `make_pcb_layout` and `run_pcb_router_dsl` apply returned results after creating a PCB checkpoint, including issue-bearing results.
 - Use focused analysis flags. Do not use `all: true` by default.
 - `analyze_schematic` does not run ERC. `analyze_pcb` does not run DRC. Use native `kicad-cli` checks when verification is required.

@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
-import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
 import { extractCircuit } from '../src/circuit/extract';
 import { createDocument } from '../src/kicad/create-document';
@@ -128,7 +127,9 @@ async function main() {
         .sort();
     if (!files.length) throw new Error(`no regression payloads found: ${fixtureDirectory}`);
 
-    const outputDirectory = await mkdtemp(join(tmpdir(), 'kicad-copilot-extract-regressions-'));
+    const outputRoot = resolve('.test-output/extract-regressions');
+    await mkdir(outputRoot, { recursive: true });
+    const outputDirectory = await mkdtemp(join(outputRoot, 'run-'));
     const keepArtifacts = process.env.KICAD_COPILOT_KEEP_TEST_ARTIFACTS === '1';
     let passed = false;
     try {
@@ -146,7 +147,7 @@ async function main() {
                 try {
                     await extractCircuit(schematicPath, circuit, {
                         onAssembly: (value) => writeFile(
-                            join(caseDirectory, 'server-assembly.json'),
+                            join(caseDirectory, 'backend-assembly.json'),
                             `${JSON.stringify(value, null, 2)}\n`,
                             'utf8',
                         ),
@@ -166,7 +167,7 @@ async function main() {
             }
             const { assembly, result } = await extractCircuit(schematicPath, circuit, {
                 onAssembly: (value) => writeFile(
-                    join(caseDirectory, 'server-assembly.json'),
+                    join(caseDirectory, 'backend-assembly.json'),
                     `${JSON.stringify(value, null, 2)}\n`,
                     'utf8',
                 ),

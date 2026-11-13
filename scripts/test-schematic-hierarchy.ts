@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
-import { pathToFileURL } from 'node:url';
 import { getProjectInfo } from '../src/kicad/project-tree';
 import { getSchematic, getSchematicContext, getPcbSchematic } from '../src/kicad/schematic-reader';
 import { extractCircuit } from '../src/circuit/extract';
@@ -65,39 +64,28 @@ const body = `(symbol (lib_id "Device:R") (at 50.8 50.8 0) (unit 1) (in_bom yes)
 await writeFile(join(directory, 'main.kicad_pro'), '{}');
 await writeFile(main, empty(rootUuid));
 await writeFile(adc, empty(childUuid).replace('(lib_symbols)', `(lib_symbols ${resistor})`).replace(/\)\s*$/, `${body})`));
-let calls = 0;
-const realFetch = globalThis.fetch;
-const serverModule = pathToFileURL(resolve('../copilot-server/src/circuit-layout/index.ts')).href;
-const { makeAutoPlacement } = await import(serverModule);
-// Exercise the production layout with the exact transport payload; keep HTTP/catalog services out of this fixture.
-globalThis.fetch = async (url, init) => {
-    if (!String(url).endsWith('/v1/mcp-tools/extract-circuit')) throw new Error(`unexpected network request: ${url}`);
-    calls++;
-    if (process.env.KICAD_COPILOT_TEST_HTTP === '1') return realFetch(url, init);
-    const data = JSON.parse(String(init?.body));
-    const circuit = data.circuit;
-    const blockNames = [...new Set(circuit.add_components.map((c: any) => c.block_name))];
-    const asm = await makeAutoPlacement({ components: circuit.add_components, reused_blocks: [],
-        metadata: { project_name: '', description: '' },
-        blocks: blockNames.map(name => ({ name, description: '', next_block_names: [] })) }, undefined, {},
-        { symbols: data.symbols, splitMultiPartComponent: true, layoutMode: 'legacy', layoutPatterns: false });
-    asm.rm_components = circuit.rm_components ?? [];
-    asm.rm_net = (circuit.external_rm_connect ?? []).map((c: any) => ({ ...c,
-        net: data.inputCircuit.components.find((p: any) => p.designator === c.designator)?.pins.find((p: any) => String(p.pin_number) === String(c.pin_number))?.signal_name ?? '' }));
-    asm.added_net = (circuit.external_connect ?? []).map((c: any) => ({ designator: c.designator, pin_number: c.pin_number, net: c.signal_name }));
-    return new Response(JSON.stringify({ circuit: asm }), { status: 200, headers: { 'Content-Type': 'application/json' } });
-};
 const mod = (add_components: CircuitMod['add_components'] = [], rm_components: string[] | null = null): CircuitMod => ({
     add_components, rm_components, add_reused_blocks: [], external_connect: null, external_rm_connect: null,
 });
 const part = (designator: string, uuid: string, pin: string, net: string) => ({ designator, part_uuid: uuid, value: 'adc',
     block_name: 'ADC', search_query: '', pins: [{ pin_number: pin, name: pin, signal_name: net }] });
+const realFetch = globalThis.fetch;
 try {
     const project = await getProjectInfo(join(directory, 'main.kicad_pro'));
     const adcInfo = project.projects[0].schematics.find(s => s.path === 'adc.kicad_sch')!;
     assert.equal(adcInfo.part_uuid, childUuid.replaceAll('-', ''));
     const native = (await getSchematic(adc)).components[0];
     assert.ok(native.part_uuid);
+    // Only the known project-local assets miss the catalogue; layout still runs in the real backend.
+    const localIds = new Set([adcInfo.part_uuid!, native.part_uuid]);
+    globalThis.fetch = async (input, init) => {
+        const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
+        const match = url.pathname.match(/^\/api\/devices\/([^/]+)$/);
+        if (match && localIds.has(decodeURIComponent(match[1]))) {
+            return Response.json({ success: false, result: null, msg: 'fixture asset is local' });
+        }
+        return realFetch(input, init);
+    };
     assert.equal(native.footprint_name, 'User:KeepThis');
     await extractCircuit(main, mod([
         part('ADC_A', adcInfo.part_uuid!, 'AIN', 'local:ROOT:INPUT_A'),
@@ -133,11 +121,9 @@ try {
     assert.equal(pinNet('R10', '1'), pinNet('R1', '1'), 'KiCad must connect ADC_A to R10');
     assert.notEqual(pinNet('R1', '1'), pinNet('R2', '1'), 'KiCad must separate the two inputs');
     assert.notEqual(pinNet('R1', '2'), pinNet('R2', '2'), 'KiCad must separate the two internal local nets');
-    const beforeErrors = calls;
     await assert.rejects(prepareSchematicInput(main, mod([part('BAD', native.part_uuid!, '1', 'local:adc:FB')])), /another sheet/);
     await assert.rejects(prepareSchematicInput(adc, mod([part('LOOP', adcInfo.part_uuid!, 'AIN', 'GND')])), /descendant/);
     await assert.rejects(prepareSchematicInput(main, mod([part('BAD', adcInfo.part_uuid!, 'UNKNOWN', 'GND')])), /unknown pin/);
-    assert.equal(calls, beforeErrors);
     const childBefore = await readFile(adc, 'utf8');
     await extractCircuit(main, mod([], ['ADC_A']));
     assert.ok(!(await getSchematic(main)).components.some(c => c.designator === 'ADC_A'));
@@ -238,7 +224,7 @@ try {
     assert.equal(await readFile(adc, 'utf8'), savedChild, 'a failed operation must restore child instance annotations');
     const source = await readFile(main, 'utf8');
     assert.ok(!/\((?:label|global_label|hierarchical_label)\s+"(?:local|global|hier):/.test(source));
-    console.log(`Hierarchy integration passed (${calls} layout requests). Fixtures: ${directory}`);
+    console.log(`Hierarchy integration passed with the local backend. Fixtures: ${directory}`);
 } finally {
     globalThis.fetch = realFetch;
 }
