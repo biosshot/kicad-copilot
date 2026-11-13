@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { CACHE_DIR } from '../utils/dirs';
 
@@ -32,34 +32,39 @@ function snapshotPath(path: string, id: string) {
     return join(checkpointDirectory(path), `${id}.snapshot`);
 }
 
+// Each checkpoint is published as its own immutable record. Unique filenames and
+// atomic publication avoid a shared read-modify-write or a lock that can survive
+// a crashed process. metadata.json remains readable for caches from older builds.
 async function readMetadata(path: string): Promise<CheckpointMetadata> {
+    const directory = checkpointDirectory(path);
     const source = await readFile(metadataPath(path), 'utf8').catch((error) => {
         if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
         throw error;
     });
-    if (!source) return { path: resolve(path), checkpoints: [] };
-
-    try {
-        const metadata = JSON.parse(source) as CheckpointMetadata;
-        if (!Array.isArray(metadata.checkpoints)) throw new Error('invalid checkpoints');
-        return metadata;
-    } catch {
-        throw new Error('invalid checkpoint metadata');
+    let legacy: CheckpointMetadata = { path: resolve(path), checkpoints: [] };
+    if (source) {
+        try {
+            legacy = JSON.parse(source) as CheckpointMetadata;
+            if (!Array.isArray(legacy.checkpoints) || legacy.checkpoints.some(item => !item
+                || typeof item.id !== 'string' || typeof item.created_at !== 'string'
+                || typeof item.description !== 'string')) throw new Error('invalid checkpoints');
+        } catch { throw new Error('invalid checkpoint metadata'); }
     }
-}
-
-async function writeMetadata(path: string, metadata: CheckpointMetadata) {
-    const directory = checkpointDirectory(path);
-    await mkdir(directory, { recursive: true });
-    const target = metadataPath(path);
-    const temporary = join(directory, `.metadata-${randomUUID()}.json`);
-
-    try {
-        await writeFile(temporary, `${JSON.stringify(metadata, null, 2)}\n`, { flag: 'wx' });
-        await rename(temporary, target);
-    } finally {
-        await rm(temporary, { force: true });
-    }
+    const files = await readdir(directory).catch((error) => {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+        throw error;
+    });
+    const records = await Promise.all(files.filter(name => /^[a-z0-9]+-[a-f0-9]{8}\.checkpoint\.json$/.test(name)).map(async name => {
+        try {
+            const record = JSON.parse(await readFile(join(directory, name), 'utf8')) as Checkpoint;
+            if (record.id !== name.slice(0, -'.checkpoint.json'.length)
+                || typeof record.created_at !== 'string' || typeof record.description !== 'string') throw new Error('invalid checkpoint');
+            return record;
+        } catch { throw new Error('invalid checkpoint metadata'); }
+    }));
+    const checkpoints = [...records, ...legacy.checkpoints];
+    checkpoints.sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id));
+    return { path: resolve(path), checkpoints };
 }
 
 async function saveCheckpointBytes(path: string, bytes: Buffer, description: string) {
@@ -69,16 +74,20 @@ async function saveCheckpointBytes(path: string, bytes: Buffer, description: str
         created_at: new Date().toISOString(),
         description,
     } satisfies Checkpoint;
-    const metadata = await readMetadata(path);
     const directory = checkpointDirectory(path);
     await mkdir(directory, { recursive: true });
     await writeFile(snapshotPath(path, id), bytes, { flag: 'wx' });
 
     try {
-        await writeMetadata(path, {
-            path: resolve(path),
-            checkpoints: [checkpoint, ...metadata.checkpoints],
-        });
+        // Only the rename publishes the record; readers cannot see partial JSON.
+        const temporary = join(directory, `.${id}.${randomUUID()}.tmp`);
+        try {
+            await writeFile(temporary, `${JSON.stringify(checkpoint)}\n`, { flag: 'wx' });
+            await rename(temporary, join(directory, `${id}.checkpoint.json`));
+        } finally {
+            // A failed cleanup must not invalidate an already published record.
+            await rm(temporary, { force: true }).catch(() => undefined);
+        }
     } catch (error) {
         await rm(snapshotPath(path, id), { force: true });
         throw error;

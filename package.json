@@ -55,7 +55,8 @@
     "check": "npm run typecheck && npm run build && npm run test:unit",
     "prepack": "npm run build",
     "prepublishOnly": "npm run check:release && npm run check",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "test:checkpoint-concurrency": "node scripts/test-checkpoint-concurrency.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

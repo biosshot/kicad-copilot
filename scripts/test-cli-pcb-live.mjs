@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { randomUUID, createHash } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
@@ -74,8 +74,7 @@ try {
     const board = await readFile(pcb, 'utf8');
     assert.match(board, /Edge\.Cuts/);
     assert.match(board, /"R1"/); assert.match(board, /"R2"/);
-    const key = createHash('sha256').update(process.platform === 'win32' ? pcb.toLowerCase() : pcb).digest('hex');
-    const metadata = JSON.parse(await readFile(join(dir, 'cache', 'checkpoints', key, 'metadata.json'), 'utf8'));
+    const metadata = call('list_checkpoints', { path: pcb });
     assert.equal(metadata.checkpoints.filter(item => item.description === 'Before PCB layout assembly').length, 1);
     const native = spawnSync(env.KICAD_CLI_PATH || 'kicad-cli', ['pcb', 'upgrade', '--force', pcb], { encoding: 'utf8', timeout: 30_000 });
     assert.equal(native.status, 0, native.stderr);
