@@ -1187,13 +1187,7 @@ export async function applyCircuitAssembly(
                     kind = 'port';
                     const signal = component.pins.find(p => p.signal_name)?.signal_name;
                     if (!signal) throw new Error(`port signal missing: ${exact}`);
-                    const connected = assembly.components.filter(c => !serviceComponent(c) && c.pins.some(p => p.signal_name === signal))
-                        .map(c => componentAnchor(c, placement));
-                    const center = connected.length ? { x: connected.reduce((n, p) => n + p.x, 0) / connected.length,
-                        y: connected.reduce((n, p) => n + p.y, 0) / connected.length } : anchor;
-                    const ref = parseSignal(signal);
-                    if (ref.kind === 'global') objects.push(await namedLabel(signal, anchor, outwardLabelAngle(anchor, center)));
-                    else edgeLabels.push({ signal, point: anchor, segments: [] });
+                    edgeLabels.push({ signal, point: anchor, segments: [] });
                     for (const pin of component.pins) componentPins.set(String(pin.pin_number), anchor);
                 } else {
                     kind = 'real';
@@ -1639,6 +1633,7 @@ export async function applyCircuitAssembly(
                                         + labelRects.filter(rect => intersects(text, rect)).length * 100
                                         + crossedLabels * 10
                                         + routingObstacles.filter(s => intersects(text, segmentRect(s))).length * 5
+                                        + segments.filter(s => intersects(text, segmentRect(s))).length * 5
                                         + captionRects.filter(rect => intersects(text, rect)).length + (inPinRows ? .01 : 0);
                                 };
                                 const terminalAngle = labelAngles.sort((a, b) => overlaps(a) - overlaps(b))[0];

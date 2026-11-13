@@ -44,6 +44,7 @@
     "test:cli-sessions": "node scripts/test-cli-sessions.mjs",
     "test:operations": "node scripts/test-local-layout-operation.mjs",
     "test:local-backend": "npm run build && node dist/test-local-backend.js",
+    "test:ground-layout": "npm run build && node dist/test-ground-layout.js",
     "test:unit": "node dist/test-footprint-spec.js && node dist/test-analysis.js && npm run test:cli-sessions && npm run test:operations",
     "test:native": "node scripts/run-native-tests.mjs",
     "build:skill": "npm run build && node scripts/build-skill.mjs",

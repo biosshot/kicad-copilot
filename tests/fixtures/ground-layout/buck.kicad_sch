@@ -1,0 +1,115 @@
+(kicad_sch (version 20260306) (generator "kicad-copilot") (generator_version "0.1.0") (uuid "3bc76ee8-fd2d-4d26-bbf5-3a2e8ec39f49") (paper "A4") (lib_symbols (symbol "kicad-copilot:TPS54302DDCR_C311983" (exclude_from_sim no) (in_bom yes) (on_board yes) (in_pos_files yes) (duplicate_pin_numbers_are_jumpers no) (property "Reference" "U" (at 0 7.62 0) (show_name no) (do_not_autoplace no) (effects (font (size 1.27 1.27)))) (property "Value" "TPS54302DDCR_C311983" (at 0 -7.62 0) (show_name no) (do_not_autoplace no) (effects (font (size 1.27 1.27)))) (property "Footprint" "kicad-copilot:C311983_SOT-23-6_L2.9-W1.6-P0.95-LS2.8-BL" (at 0 -10.16 0) (show_name no) (do_not_autoplace no) (hide yes) (effects (font (size 1.27 1.27)))) (property "Datasheet" "https://lcsc.com/product-detail/Others_Texas-Instruments_TPS54302DDCR_Texas-Instruments-TI-TPS54302DDCR_C311983.html" (at 0 -12.70 0) (show_name no) (do_not_autoplace no) (hide yes) (effects (font (size 1.27 1.27)))) (property "Manufacturer" "TI(德州仪器)" (at 0 -15.24 0) (show_name no) (do_not_autoplace no) (hide yes) (effects (font (size 1.27 1.27)))) (property "MPN" "TPS54302DDCR" (at 0 -17.78 0) (show_name no) (do_not_autoplace no) (hide yes) (effects (font (size 1.27 1.27)))) (property "LCSC Part" "C311983" (at 0 -20.32 0) (show_name no) (do_not_autoplace no) (hide yes) (effects (font (size 1.27 1.27)))) (property "ki_keywords" "DC-DC Converters" (at 0 -22.86 0) (show_name no) (do_not_autoplace no) (hide yes) (effects (font (size 1.27 1.27)))) (symbol "TPS54302DDCR_C311983_0_1" (rectangle (start -10.16 5.08) (end 10.16 -5.08) (stroke (width 0) (type default)) (fill (type background))) (circle (center -8.89 3.81) (radius 0.38) (stroke (width 0) (type default)) (fill (type none))) (pin power_in line (at -12.70 2.54 0) (length 2.54) (name "GND" (effects (font (size 1.27 1.27)))) (number "1" (effects (font (size 1.27 1.27))))) (pin passive line (at -12.70 -0.00 0) (length 2.54) (name "SW" (effects (font (size 1.27 1.27)))) (number "2" (effects (font (size 1.27 1.27))))) (pin passive line (at -12.70 -2.54 0) (length 2.54) (name "VIN" (effects (font (size 1.27 1.27)))) (number "3" (effects (font (size 1.27 1.27))))) (pin passive line (at 12.70 -2.54 180) (length 2.54) (name "FB" (effects (font (size 1.27 1.27)))) (number "4" (effects (font (size 1.27 1.27))))) (pin input line (at 12.70 -0.00 180) (length 2.54) (name "EN" (effects (font (size 1.27 1.27)))) (number "5" (effects (font (size 1.27 1.27))))) (pin passive line (at 12.70 2.54 180) (length 2.54) (name "BOOT" (effects (font (size 1.27 1.27)))) (number "6" (effects (font (size 1.27 1.27)))))) (embedded_fonts no)) (symbol "kicad-copilot:CL21A106KAYNNNE" (exclude_from_sim no) (in_bom yes) (on_board yes) (in_pos_files yes) (duplicate_pin_numbers_are_jumpers no) (property "Reference" "C" (at 0 5.08 0) (show_name no) (do_not_autoplace no) (effects (font (size 1.27 1.27)))) (property "Value" "CL21A106KAYNNNE" (at 0 -5.08 0) (show_name no) (do_not_autoplace no) (effects (font (size 1.27 1.27)))) (property "Footprint" "kicad-copilot:C15850_C0805" (at 0 -7.62 0) (show_name no) (do_not_autoplace no) (hide yes) (effects (font (size 1.27 1.27)))) (property "Datasheet" "https://lcsc.com/product-detail/Multilayer-Ceramic-Capacitors-MLCC-SMD-SMT_SAMSUNG_CL21A106KAYNNNE_10uF-106-10-25V_C15850.html" (at 0 -10.16 0) (show_name no) (do_not_autoplace no) (hide yes) (effects (font (size 1.27 1.27)))) (property "Manufacturer" "SAMSUNG(三星)" (at 0 -12.70 0) (show_name no) (do_not_autoplace no) (hide yes) (effects (font (size 1.27 1.27)))) (property "MPN" "CL21A106KAYNNNE" (at 0 -15.24 0) (show_name no) (do_not_autoplace no) (hide yes) (effects (font (size 1.27 1.27)))) (property "LCSC Part" "C15850" (at 0 -17.78 0) (show_name no) (do_not_autoplace no) (hide yes) (effects (font (size 1.27 1.27)))) (property "ki_keywords" "Multilayer Ceramic Capacitors MLCC - SMD/SMT" (at 0 -20.32 0) (show_name no) (do_not_autoplace no) (hide yes) (effects (font (size 1.27 1.27)))) (property "ki_description" "10uF (106) ±10% 25V" (at 0 -22.86 0) (show_name no) (do_not_autoplace no) (hide yes) (effects (font (size 1.27 1.27)))) (symbol "CL21A106KAYNNNE_0_1" (polyline (pts (xy -0.51 -0.00) (xy -2.54 -0.00)) (stroke (width 0) (type default)) (fill (type none))) (polyline (pts (xy 0.51 2.03) (xy 0.51 -2.03)) (stroke (width 0) (type default)) (fill (type none))) (polyline (pts (xy 2.54 -0.00) (xy 0.51 -0.00)) (stroke (width 0) (type default)) (fill (type none))) (polyline (pts (xy -0.51 -2.03) (xy -0.51 2.03)) (stroke (width 0) (type default)) (fill (type none))) (pin passive line (at 5.08 -0.00 180) (length 2.54) (name "2" (effects (font (size 1.27 1.27)))) (number "2" (effects (font (size 1.27 1.27))))) (pin passive line (at -5.08 -0.00 0) (length 2.54) (name "1" (effects (font (size 1.27 1.27)))) (number "1" (effects (font (size 1.27 1.27)))))) (embedded_fonts no)))                                       	
+	(symbol (lib_id "kicad-copilot:CL21A106KAYNNNE") (at 129.54 115.57 270) (unit 1) (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no) (uuid "dab2bc38-ebdd-4d5e-b6c9-f1bc17a9edae") (property "Reference" "C1" (at 134.62 115.57 90) (show_name no) (do_not_autoplace no) (effects (font (size 1.27 1.27)))) (property "Value" "C1" (at 124.46 115.57 90) (show_name no) (do_not_autoplace no) (effects (font (size 1.27 1.27)))) (property "Footprint" "kicad-copilot:C15850_C0805" (at 129.54 115.57 0) (show_name no) (do_not_autoplace no) (hide yes) (effects (font (size 1.27 1.27)))) (property "Datasheet" "https://lcsc.com/product-detail/Multilayer-Ceramic-Capacitors-MLCC-SMD-SMT_SAMSUNG_CL21A106KAYNNNE_10uF-106-10-25V_C15850.html" (at 129.54 115.57 0) (show_name no) (do_not_autoplace no) (hide yes) (effects (font (size 1.27 1.27)))) (property "Description" "" (at 129.54 115.57 0) (show_name no) (do_not_autoplace no) (hide yes) (effects (font (size 1.27 1.27)))) (property "MPN" "CL21A106KAYNNNE" (at 129.54 115.57 0) (show_name no) (do_not_autoplace no) (hide yes) (effects (font (size 1.27 1.27)))) (property "LCSC Part" "C15850" (at 129.54 115.57 0) (show_name no) (do_not_autoplace no) (hide yes) (effects (font (size 1.27 1.27)))) (property "EasyEDA part_uuid" "e10bc30d72324129a5b7daae4e75f56f" (at 129.54 115.57 0) (show_name no) (do_not_autoplace no) (hide yes) (effects (font (size 1.27 1.27)))) (property "Block Name" "Circuit" (at 129.54 115.57 0) (show_name no) (do_not_autoplace no) (hide yes) (effects (font (size 1.27 1.27)))) (pin "2" (uuid "6728d345-b810-468d-92bb-d66387dcfae2")) (pin "1" (uuid "4f932853-d7f8-4fb4-91c8-5af128fc790d")) (instances (project "buck" (path "/3bc76ee8-fd2d-4d26-bbf5-3a2e8ec39f49" (reference "C1") (unit 1))) (project "main" (path "/8013fc52-a746-4a3c-854c-a56ef4944bbf/562f9e15-8c14-45ed-b070-2d0782054527" (reference "C1") (unit 1)) (path "/8013fc52-a746-4a3c-854c-a56ef4944bbf/39b35e46-5178-4829-8146-5b25ec50965b" (reference "C2") (unit 1)))))
+	(symbol (lib_id "kicad-copilot:CL21A106KAYNNNE") (at 162.56 83.82 180) (unit 1) (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no) (uuid "d253cdd6-b284-46a1-9404-cae4f75a12ad") (property "Reference" "C2" (at 162.56 88.9 0) (show_name no) (do_not_autoplace no) (effects (font (size 1.27 1.27)))) (property "Value" "C2" (at 162.56 78.74 0) (show_name no) (do_not_autoplace no) (effects (font (size 1.27 1.27)))) (property "Footprint" "kicad-copilot:C15850_C0805" (at 162.56 83.82 0) (show_name no) (do_not_autoplace no) (hide yes) (effects (font (size 1.27 1.27)))) (property "Datasheet" "https://lcsc.com/product-detail/Multilayer-Ceramic-Capacitors-MLCC-SMD-SMT_SAMSUNG_CL21A106KAYNNNE_10uF-106-10-25V_C15850.html" (at 162.56 83.82 0) (show_name no) (do_not_autoplace no) (hide yes) (effects (font (size 1.27 1.27)))) (property "Description" "" (at 162.56 83.82 0) (show_name no) (do_not_autoplace no) (hide yes) (effects (font (size 1.27 1.27)))) (property "MPN" "CL21A106KAYNNNE" (at 162.56 83.82 0) (show_name no) (do_not_autoplace no) (hide yes) (effects (font (size 1.27 1.27)))) (property "LCSC Part" "C15850" (at 162.56 83.82 0) (show_name no) (do_not_autoplace no) (hide yes) (effects (font (size 1.27 1.27)))) (property "EasyEDA part_uuid" "e10bc30d72324129a5b7daae4e75f56f" (at 162.56 83.82 0) (show_name no) (do_not_autoplace no) (hide yes) (effects (font (size 1.27 1.27)))) (property "Block Name" "Circuit" (at 162.56 83.82 0) (show_name no) (do_not_autoplace no) (hide yes) (effects (font (size 1.27 1.27)))) (pin "2" (uuid "6100a623-5eb6-4209-b47b-6ff381c75c32")) (pin "1" (uuid "712473b8-ce84-465e-8e72-83d5ad2cdb0e")) (instances (project "buck" (path "/3bc76ee8-fd2d-4d26-bbf5-3a2e8ec39f49" (reference "C2") (unit 1))) (project "main" (path "/8013fc52-a746-4a3c-854c-a56ef4944bbf/562f9e15-8c14-45ed-b070-2d0782054527" (reference "C3") (unit 1)) (path "/8013fc52-a746-4a3c-854c-a56ef4944bbf/39b35e46-5178-4829-8146-5b25ec50965b" (reference "C4") (unit 1)))))
+	(symbol (lib_id "kicad-copilot:CL21A106KAYNNNE") (at 180.34 115.57 270) (unit 1) (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no) (uuid "1c5c23c1-8c3a-4831-8f3a-038708050680") (property "Reference" "C3" (at 185.42 115.57 90) (show_name no) (do_not_autoplace no) (effects (font (size 1.27 1.27)))) (property "Value" "C3" (at 175.26 115.57 90) (show_name no) (do_not_autoplace no) (effects (font (size 1.27 1.27)))) (property "Footprint" "kicad-copilot:C15850_C0805" (at 180.34 115.57 0) (show_name no) (do_not_autoplace no) (hide yes) (effects (font (size 1.27 1.27)))) (property "Datasheet" "https://lcsc.com/product-detail/Multilayer-Ceramic-Capacitors-MLCC-SMD-SMT_SAMSUNG_CL21A106KAYNNNE_10uF-106-10-25V_C15850.html" (at 180.34 115.57 0) (show_name no) (do_not_autoplace no) (hide yes) (effects (font (size 1.27 1.27)))) (property "Description" "" (at 180.34 115.57 0) (show_name no) (do_not_autoplace no) (hide yes) (effects (font (size 1.27 1.27)))) (property "MPN" "CL21A106KAYNNNE" (at 180.34 115.57 0) (show_name no) (do_not_autoplace no) (hide yes) (effects (font (size 1.27 1.27)))) (property "LCSC Part" "C15850" (at 180.34 115.57 0) (show_name no) (do_not_autoplace no) (hide yes) (effects (font (size 1.27 1.27)))) (property "EasyEDA part_uuid" "e10bc30d72324129a5b7daae4e75f56f" (at 180.34 115.57 0) (show_name no) (do_not_autoplace no) (hide yes) (effects (font (size 1.27 1.27)))) (property "Block Name" "Circuit" (at 180.34 115.57 0) (show_name no) (do_not_autoplace no) (hide yes) (effects (font (size 1.27 1.27)))) (pin "2" (uuid "e0236194-f1fb-4fae-aa10-008143c84e02")) (pin "1" (uuid "4534182d-eb8f-48cd-b236-53d5b22f402d")) (instances (project "buck" (path "/3bc76ee8-fd2d-4d26-bbf5-3a2e8ec39f49" (reference "C3") (unit 1))) (project "main" (path "/8013fc52-a746-4a3c-854c-a56ef4944bbf/562f9e15-8c14-45ed-b070-2d0782054527" (reference "C5") (unit 1)) (path "/8013fc52-a746-4a3c-854c-a56ef4944bbf/39b35e46-5178-4829-8146-5b25ec50965b" (reference "C6") (unit 1)))))
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	(wire (pts (xy 129.54 120.65) (xy 128.27 120.65))
+        (stroke (width 0) (type default)) (uuid "e39687d8-9afa-4960-86e4-399cdc270a9e"))
+	(wire (pts (xy 128.27 120.65) (xy 128.27 125.73))
+        (stroke (width 0) (type default)) (uuid "175ccd73-1bd5-44a2-a574-87098e02b9f3"))
+	(hierarchical_label "GND" (shape passive) (at 128.27 125.73 180)
+            (effects (font (size 1.27 1.27)) (justify right))
+            (uuid "fccfb549-9b84-4600-9635-fa2ded265e8e"))
+	(wire (pts (xy 180.34 120.65) (xy 179.07 120.65))
+        (stroke (width 0) (type default)) (uuid "1ac80b23-288a-43a3-8707-46ed8ae14bd0"))
+	(wire (pts (xy 179.07 120.65) (xy 179.07 125.73))
+        (stroke (width 0) (type default)) (uuid "39eafb88-0ab4-4eb0-b503-cb00b8bfb594"))
+	(hierarchical_label "GND" (shape passive) (at 179.07 125.73 180)
+            (effects (font (size 1.27 1.27)) (justify right))
+            (uuid "93be12c9-ded8-4a6e-b855-af5975a97da3"))
+	(symbol (lib_id "kicad-copilot:TPS54302DDCR_C311983") (at 113.03 142.24 0) (unit 1) (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no) (uuid "07f40df2-fc52-4d51-9879-bdeb277f9044") (property "Reference" "U1" (at 113.03 134.62 0) (show_name no) (do_not_autoplace no) (effects (font (size 1.27 1.27)))) (property "Value" "TPS54302DDCR" (at 113.03 149.86 0) (show_name no) (do_not_autoplace no) (effects (font (size 1.27 1.27)))) (property "Footprint" "kicad-copilot:C311983_SOT-23-6_L2.9-W1.6-P0.95-LS2.8-BL" (at 113.03 142.24 0) (show_name no) (do_not_autoplace no) (hide yes) (effects (font (size 1.27 1.27)))) (property "Datasheet" "https://lcsc.com/product-detail/Others_Texas-Instruments_TPS54302DDCR_Texas-Instruments-TI-TPS54302DDCR_C311983.html" (at 113.03 142.24 0) (show_name no) (do_not_autoplace no) (hide yes) (effects (font (size 1.27 1.27)))) (property "Description" "" (at 113.03 142.24 0) (show_name no) (do_not_autoplace no) (hide yes) (effects (font (size 1.27 1.27)))) (property "MPN" "TPS54302DDCR" (at 113.03 142.24 0) (show_name no) (do_not_autoplace no) (hide yes) (effects (font (size 1.27 1.27)))) (property "LCSC Part" "C311983" (at 113.03 142.24 0) (show_name no) (do_not_autoplace no) (hide yes) (effects (font (size 1.27 1.27)))) (property "EasyEDA part_uuid" "2e6cd0fdb8d74fc78dfca927dec3a2fb" (at 113.03 142.24 0) (show_name no) (do_not_autoplace no) (hide yes) (effects (font (size 1.27 1.27)))) (property "Block Name" "Controller" (at 113.03 142.24 0) (show_name no) (do_not_autoplace no) (hide yes) (effects (font (size 1.27 1.27)))) (pin "1" (uuid "b680857d-ee9a-45e8-9d3e-d3e019107e18")) (pin "2" (uuid "9d6e440c-d0e5-40fc-90ae-7f2f21f2e023")) (pin "3" (uuid "800573f2-5ec2-42e4-a619-d88df5aceb3c")) (pin "4" (uuid "5b5721ab-2360-43e9-ba41-5c6108f729e4")) (pin "5" (uuid "5beb1413-ef5b-4ddc-ab12-79c7d36e73ed")) (pin "6" (uuid "207416fa-402a-41d9-87e2-da947fe3162b")) (instances (project "buck" (path "/3bc76ee8-fd2d-4d26-bbf5-3a2e8ec39f49" (reference "U1") (unit 1))) (project "main" (path "/8013fc52-a746-4a3c-854c-a56ef4944bbf/562f9e15-8c14-45ed-b070-2d0782054527" (reference "U1") (unit 1)) (path "/8013fc52-a746-4a3c-854c-a56ef4944bbf/39b35e46-5178-4829-8146-5b25ec50965b" (reference "U2") (unit 1)))))
+	(wire (pts (xy 157.48 135.89) (xy 157.48 139.7))
+        (stroke (width 0) (type default)) (uuid "2f324202-8b29-4679-9a88-969d5d6c9668"))
+	(wire (pts (xy 125.73 139.7) (xy 157.48 139.7))
+        (stroke (width 0) (type default)) (uuid "47b9854b-c4a1-4b8d-8972-829c462e9bb2"))
+	
+	(wire (pts (xy 125.73 144.78) (xy 157.48 144.78))
+        (stroke (width 0) (type default)) (uuid "f927928e-8554-4f79-ab3a-34dd4c15f955"))
+	
+(wire (pts (xy 58.42 142.24) (xy 100.33 142.24))
+        (stroke (width 0) (type default)) (uuid "5a86ebf2-75c0-487e-b90f-c65194ab71d9"))
+	
+	
+	
+	
+	
+	
+	
+	(label "SW" (at 58.42 142.24 0)
+        (effects (font (size 1.27 1.27)) (justify left bottom))
+        (uuid "743a3da0-92ad-42cf-9964-1032f16a513e"))
+	(label "BOOT" (at 157.48 135.89 0)
+        (effects (font (size 1.27 1.27)) (justify left bottom))
+        (uuid "5282143f-86e8-4420-9c7b-81262d19805f"))
+	(label "FB" (at 157.48 144.78 0)
+        (effects (font (size 1.27 1.27)) (justify left bottom))
+        (uuid "b3823953-2bd4-4dbe-bf2c-cd2cf6c2de38"))
+	(wire (pts (xy 129.54 110.49) (xy 129.54 111.76))
+        (stroke (width 0) (type default)) (uuid "7dae6dd5-9981-40bd-9bd8-838a7bc15c3a"))
+	(wire (pts (xy 129.54 111.76) (xy 124.46 111.76))
+        (stroke (width 0) (type default)) (uuid "570e37ab-8955-4a04-941b-049a289c6671"))
+	(hierarchical_label "VIN" (shape input) (at 124.46 111.76 180)
+            (effects (font (size 1.27 1.27)) (justify right))
+            (uuid "bbb40eba-48cd-4932-801c-a3a8d17c3d6c"))
+	(wire (pts (xy 157.48 83.82) (xy 152.4 83.82))
+        (stroke (width 0) (type default)) (uuid "511bfe1b-a46e-4087-bed4-54ae41961827"))
+	(label "SW" (at 152.4 83.82 0)
+        (effects (font (size 1.27 1.27)) (justify right bottom))
+        (uuid "d2222bd6-c2c4-4411-830c-3ec923ed81d5"))
+	(wire (pts (xy 180.34 110.49) (xy 180.34 105.41))
+        (stroke (width 0) (type default)) (uuid "53a65f7c-518b-4007-9fa1-a7c0fd05e0ee"))
+	(label "FB" (at 180.34 105.41 0)
+        (effects (font (size 1.27 1.27)) (justify left bottom))
+        (uuid "a085e469-7fad-4483-8e7c-5c8e46f2f309"))
+	(wire (pts (xy 167.64 83.82) (xy 172.72 83.82))
+        (stroke (width 0) (type default)) (uuid "4008880f-9030-4985-8844-31fa0b46e6a6"))
+	(label "BOOT" (at 172.72 83.82 0)
+        (effects (font (size 1.27 1.27)) (justify left bottom))
+        (uuid "4b2cf63b-e9ff-4691-84cc-8d5be42caa2c"))
+	(wire (pts (xy 100.33 139.7) (xy 69.85 139.7))
+        (stroke (width 0) (type default)) (uuid "749e5bbd-c577-46c1-8651-8dc51e2f1625"))
+	(hierarchical_label "GND" (shape passive) (at 69.85 139.7 180)
+            (effects (font (size 1.27 1.27)) (justify right))
+            (uuid "7bf85526-c58a-4902-8a80-8ba09dcb13dc"))
+	(wire (pts (xy 100.33 144.78) (xy 69.85 144.78))
+        (stroke (width 0) (type default)) (uuid "cf96b327-6c27-4af1-91ea-9c4394220eb5"))
+	(hierarchical_label "VIN" (shape input) (at 69.85 144.78 180)
+            (effects (font (size 1.27 1.27)) (justify right))
+            (uuid "f97c125c-80f6-4bd0-ac2a-4407d04002db"))
+	(wire (pts (xy 125.73 142.24) (xy 176.53 142.24))
+        (stroke (width 0) (type default)) (uuid "cd4a86db-f356-45ce-aaf1-f43d95039586"))
+	(hierarchical_label "VIN" (shape input) (at 176.53 142.24 0)
+            (effects (font (size 1.27 1.27)) (justify left))
+            (uuid "53e340d3-b45f-4c1c-9e87-489cdbcc5696"))
+(embedded_fonts no))

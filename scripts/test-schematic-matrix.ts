@@ -209,6 +209,18 @@ class Project {
             const root = parseSExpression(source);
             const wires = planWireRemoval(source, [], []).retained;
             const pointKey = (p: { x: number; y: number }) => `${p.x.toFixed(4)},${p.y.toFixed(4)}`;
+            // The ground glyph and value lie below the anchor.
+            if (this.name === 'buck-controller-vin' && page === 'main') {
+                for (const ground of children(root, 'symbol').filter(s => scalar(s, 'lib_id') === 'power:GNDREF')) {
+                    const p = position(ground);
+                    for (const wire of wires) {
+                        const left = Math.min(wire.start.x, wire.end.x), right = Math.max(wire.start.x, wire.end.x);
+                        const top = Math.min(wire.start.y, wire.end.y), bottom = Math.max(wire.start.y, wire.end.y);
+                        if (right > p.x - 2 && left < p.x + 2 && bottom > p.y + .5 && top < p.y + 5)
+                            layoutErrors.push(`${page}: wire crosses ground symbol/value at ${p.x},${p.y}`);
+                    }
+                }
+            }
             const dots = new Set(children(root, 'junction').map(j => pointKey(position(j))));
             for (const [key, p] of new Map(wires.flatMap(w => [w.start, w.end]).map(p => [pointKey(p), p]))) {
                 if (wireDirectionsAtPoint(p, wires) >= 3 && !dots.has(key)) layoutErrors.push(`${page}: missing junction at ${key}`);

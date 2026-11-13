@@ -6,7 +6,7 @@ import { resolve } from 'node:path';
 // installed router assets. Missing native dependencies are failures, not skips.
 const root = resolve('.test-output/native-acceptance');
 await mkdir(root, { recursive: true });
-for (const name of ['schematic-hierarchy', 'pcb-scenarios', 'local-backend', 'routing-integration']) {
+for (const name of ['schematic-hierarchy', 'ground-layout', 'pcb-scenarios', 'local-backend', 'routing-integration']) {
     const result = spawnSync(process.execPath, [`dist/test-${name}.js`], {
         stdio: 'inherit', windowsHide: true, timeout: 600_000,
         env: { ...process.env, KICAD_COPILOT_CACHE_DIR: resolve(root, name) },
