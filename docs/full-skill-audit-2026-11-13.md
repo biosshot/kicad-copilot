@@ -1,5 +1,13 @@
 # Local bundled skill audit — 2026-11-13
 
+## Follow-up fixes
+
+- `ab2bc7b`: PCB import now reconciles unambiguous copper net renames (segments, arcs, vias and zones; modern and legacy formats). Ambiguous splits/merges/removals with copper are rejected before writing. Bundled CLI minimal reproduction now has both pads and the segment on NEW; subsequent synthetic routing passes with native DRC 0 violations/0 unconnected. RP2350 is explicitly rejected on ambiguous +3V3 and remains byte-identical; this is safe refusal, not automatic repair of that board. Evidence: `.test-output/full-audit/pcb/fixed-cli/verification.md`.
+- `d6aaa49`: checkpoint publication uses independent atomic records, preserving legacy metadata reading and avoiding concurrent shared-list overwrite. The regression passed through both source CLI and the rebuilt bundled launcher: 2/8 sessions, four fresh targets each, restoration of every ID, pagination and legacy caches. `0665964` adds `KICAD_COPILOT_TEST_CLI` to select the packaged launcher. This does not provide a general transaction lock against external file edits during restore.
+- `994f837`: the hierarchical-label P2 was withdrawn after independent native KiCad controls. A single parent-page label on a sheet pin legitimately produces ERC; adding the intended second parent endpoint through the normal tool eliminates it. A regression checks both cases and the resulting native netlist. No ERC suppression or invented connection was added.
+
+The findings below retain the original audit baseline unless explicitly corrected. The two P1 fixes passed `npm run check`, bundled build and `check:skill`. The downloader/search gaps remain outside this follow-up's requested scope.
+
 ## Scope and baseline
 
 This is an audit, not a production fix. KiCad baseline: `cb22544462749b69ff6b7f05ec9b126d1e1c38f0`; isolated backend: `b4d66045969288ae8d1bd38cf484d2b2f6baef97`. The other backend checkout was not modified. Runtime acceptance targets `skill/scripts/kicad-copilot-cli.js`, not merely imports of source functions. Windows x64, KiCad 10.0.0, ngspice 47. Tests use scratch copies and isolated caches.
