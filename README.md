@@ -166,19 +166,24 @@ Catalog search and first-use downloads still require network access. KiCad suppl
 its symbol and footprint geometry as UUID-keyed fallback maps; catalog geometry wins
 when it resolves successfully.
 
-This development branch uses `file:../eda-copilot-backend-kicad` while the compatible
-backend changes await release. `backend-source.json` pins the companion commit;
-that commit must be available on the backend remote before the two-repository CI
-can run. Build that sibling checkout first (including `npm run native:build` for
-native PCB placement), then run
-`npm install --install-links` here. The source checkout is not a standalone npm release;
-`npm run check:release` prevents publishing this local dependency by mistake.
+This branch uses backend 0.5.0 with the existing KiCad geometry fallback. In a
+sibling checkout named `eda-copilot-backend-kicad-v05`, check out the release
+revision in `backend-source.json`, apply `patches/backend-local-geometry.patch`,
+then run `npm ci --ignore-scripts` and `npm run build`. For native analysis and PCB
+placement, copy the matching platform binary from the 0.5.0 npm tarball into
+`native/node-addon/` in that checkout, or run `npm run native:build` there.
+Run `npm ci --install-links` in KiCad Copilot. `npm run check:release` prevents
+publishing the local dependency.
 
 Run `npm run build:skill:bundled` for a self-contained skill runtime for the current
 platform, then `npm run check:skill`. The result is `skill/`; its entrypoint explains
 persistent CLI sessions, SPICE simulation and datasheet tools. Native KiCad and Python
 remain system prerequisites. A lightweight `npm run build:skill` records an installation
 blocker until the backend dependency has a published version.
+
+Use `export_pcb_routing_board` for a saved Board V2 snapshot and
+`run_pcb_analysis` for local DSL calculations and JSON/PNG reports. See the
+[PCB analysis skill](docs/pcb-analysis/SKILL.md).
 
 Development checks: `npm run check` runs types, build and fast regression tests.
 `npm run test:native` runs native KiCad acceptance; `npm run test:local-backend` checks

@@ -1,6 +1,6 @@
 ---
 name: kicad-copilot
-description: Create, modify, place, route, or review KiCad schematics and PCBs with KiCad Copilot MCP tools. Supports independent schematic, placement, copper, routing, and verification tasks.
+description: Create, modify, place, route, or review KiCad schematics and PCBs. Use for Board V2 export and electrical or thermal analysis of saved KiCad boards.
 ---
 
 # KiCad Copilot
@@ -21,7 +21,8 @@ Use the installed standalone skill launcher `scripts/kicad-copilot-cli.js` with 
 | Complete schematic-to-PCB project | `workflow.md`, then each stage reference when reached | requested final stage is checked |
 | Inspect or create project/sheets | `schematic/project-and-sheets.md` | hierarchy is known or created |
 | Create/modify/beautify schematic | `schematic/workflow.md`, then `schematic/circuit-mod.md` | schematic checks are reported |
-| Analyze only | `analysis.md` | requested report is returned; make no mutations |
+| Inspect schematic or PCB design, audit parts | `analysis.md` | requested checks are reported |
+| Export Board V2 or run electrical or thermal PCB analysis | `pcb-analysis/SKILL.md` | capture, calculation status and artifacts are reviewed |
 | Place or update PCB components | `pcb-layout/instructions.md`, `pcb-layout/dsl.ts` | placement is checked; do not route |
 | Change connectors, outline, holes, controls, displays, or antennas | `pcb-layout/mechanical-validation.md` plus placement docs | LLM and user review mechanics |
 | Apply stackup, rules, zones, copper, or routing | `pcb-routing/instructions.md`, `pcb-routing/dsl.d.ts` | requested PCB operation is checked |

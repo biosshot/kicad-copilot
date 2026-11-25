@@ -1,5 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp';
 import * as z from 'zod/v4';
+import { runPcbAnalysis } from '../../analysis/pcb-operation';
+import { exportBoardV2 } from '../../pcb/board-v2';
 import { getPcbComponentSizes } from '../../pcb/component-sizes';
 import { importPcbChanges } from '../../pcb/import';
 import { makePcbLayout } from '../../pcb/layout-operation';
@@ -10,8 +12,27 @@ import { runTool } from '../../utils/tool-result';
 import { join } from 'node:path';
 
 const PCB_DOC_PATH = join(DOCS_DIR, 'pcb-layout', 'instructions.md');
+const ANALYSIS_DOC_PATH = join(DOCS_DIR, 'pcb-analysis', 'SKILL.md');
 
 export function registerPcbTools(server: McpServer) {
+    server.registerTool('export_pcb_routing_board', {
+        title: 'Export PCB Routing Board V2',
+        description: 'Export a read-only .kicad_pcb snapshot as JSON with RoutingBoardV2 and capture diagnostics.',
+        annotations: { readOnlyHint: true, openWorldHint: false },
+        inputSchema: z.object({ path: z.string().min(1).describe('Source .kicad_pcb path.') }),
+    }, async ({ path }) => runTool(() => exportBoardV2(path)));
+
+    server.registerTool('run_pcb_analysis', {
+        title: 'Run PCB Analysis',
+        description: `Run a trusted local analysis DSL against a read-only KiCad Board V2 snapshot. Returns a report or an operation ID for wait_operation. Instructions: ${ANALYSIS_DOC_PATH}`,
+        annotations: { readOnlyHint: true, openWorldHint: false },
+        inputSchema: z.object({
+            path: z.string().min(1).describe('Source .kicad_pcb path.'),
+            file: z.string().min(1).describe('Trusted JavaScript analysis DSL file.'),
+            wait_ms: z.number().int().min(1_000).max(55_000).default(30_000),
+        }),
+    }, async ({ path, file, wait_ms }) => runTool(() => runPcbAnalysis(path, file, wait_ms)));
+
     server.registerTool(
         'import_pcb_changes',
         {

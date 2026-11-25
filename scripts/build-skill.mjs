@@ -123,8 +123,8 @@ try {
     try { backendSource = JSON.parse(await readFile(join(mcpRoot, 'backend-source.json'), 'utf8')); }
     catch (error) { if (error.code !== 'ENOENT') throw error; }
     let nativeSolver;
+    const nativeDir = join(runtime, 'node_modules', 'eda-copilot-backend', 'native', 'node-addon');
     if (bundled) {
-        const nativeDir = join(runtime, 'node_modules', 'eda-copilot-backend', 'native', 'pcb-board-packer');
         const filename = createRequire(import.meta.url)(join(nativeDir, 'platform.cjs')).nativeFilename();
         const bytes = await readFile(join(nativeDir, filename));
         nativeSolver = { filename, sha256: createHash('sha256').update(bytes).digest('hex') };
@@ -136,7 +136,7 @@ try {
     }, null, 2) + '\n');
     if (bundled) {
         // Verify the backend's platform-native solver in a child so Windows releases the file.
-        const native = join(runtime, 'node_modules', 'eda-copilot-backend', 'native', 'pcb-board-packer', 'index.cjs');
+        const native = join(nativeDir, 'index.cjs');
         execFileSync(process.execPath, ['-e', `require(${JSON.stringify(native)})`], { cwd: staging, stdio: 'pipe', windowsHide: true });
         execFileSync(process.execPath, [join(staging, 'scripts', 'kicad-copilot-cli.js'), '--help'], { cwd: staging, stdio: 'pipe', windowsHide: true });
     }

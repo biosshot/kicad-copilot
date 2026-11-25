@@ -38,6 +38,7 @@
     "test:routing-live": "npm run build && node dist/test-routing-live.js",
     "test:routing-integration": "npm run build && node dist/test-routing-integration.js",
     "test:analysis": "npm run build && node dist/test-analysis.js",
+    "test:pcb-analysis": "node scripts/test-pcb-analysis-v2.mjs",
     "test:schematic-hierarchy": "npm run build && node dist/test-schematic-hierarchy.js",
     "test:mcp-ldo": "npm run build && node dist/test-mcp-ldo.js",
     "test:schematic-matrix": "npm run build && node dist/test-schematic-matrix.js",
@@ -60,7 +61,8 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "eda-copilot-backend": "file:../eda-copilot-backend-kicad",
+    "clipper-lib": "6.4.2",
+    "eda-copilot-backend": "file:../eda-copilot-backend-kicad-v05",
     "eda-copilot-router": "0.3.2",
     "fast-xml-parser": "^5.10.1",
     "find-up": "^5.0.0",
@@ -69,6 +71,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@types/clipper-lib": "6.4.0",
     "@types/node": "^25.0.0",
     "esbuild": "^0.27.7",
     "rimraf": "^6.1.2",

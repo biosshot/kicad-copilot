@@ -27,7 +27,7 @@ function polygonArea(points: Point[]) {
     }, 0) / 2);
 }
 
-function arcPoints(node: SExpression[]) {
+export function arcPoints(node: SExpression[]) {
     const start = pointAt(findChild(node, 'start'));
     const mid = pointAt(findChild(node, 'mid'));
     const end = pointAt(findChild(node, 'end'));

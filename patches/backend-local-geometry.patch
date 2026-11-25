@@ -1,0 +1,239 @@
+diff --git a/src/circuit-layout/index.ts b/src/circuit-layout/index.ts
+index c1b4dd6d..7634f31b 100644
+--- a/src/circuit-layout/index.ts
++++ b/src/circuit-layout/index.ts
+@@ -1,6 +1,6 @@
+ import type { CircuitAssembly, Circuit, CircuitComponent } from "#types/circuit.ts";
+ import type { EdaEdition } from '#devices/eda-api.ts';
+-import { circuitToSymbols, getSymbol } from "#devices/symbols/symbol-parser.ts";
++import { circuitToSymbols, createSymbolResolver } from "#devices/symbols/symbol-parser.ts";
+ import type { ElkEdgeSection, LayoutOptions, ElkNode, ElkPort, ElkExtendedEdge } from 'elkjs';
+ import type { SymbolData, SymbolPin, SymbolWithMeta, ShortSymbol } from "#types/symbol.ts";
+ import { shortSymbolsMap, stableShortSymbolId } from "./short-symbol.ts";
+@@ -1200,6 +1200,7 @@ export async function autoPlaceCircuitWithHierarchy(sch: Circuit, nodes: SymbolW
+
+ export async function makeAutoPlacement(circuit: Circuit, previewImg?: string, hooks?: Hooks, options?: {
+     edaEdition?: EdaEdition;
++    symbols?: Readonly<Record<string, SymbolData>>;
+     splitMultiPartComponent?: boolean;
+     externalSignals?: string[];
+     requiredExternalSignals?: string[];
+@@ -1214,7 +1215,8 @@ export async function makeAutoPlacement(circuit: Circuit, previewImg?: string, h
+     // if (nullComponents.length > 0)
+     //     throw new Error(`Not found component: ${JSON.stringify(nullComponents.map(c => c.designator))}`)
+
+-    const loadSymbol: typeof getSymbol = (partUuid, partId) => getSymbol(partUuid, partId, options?.edaEdition);
++    if (options?.symbols) circuit = structuredClone(circuit);
++    const loadSymbol = createSymbolResolver(options?.symbols, options?.edaEdition);
+     if (options?.splitMultiPartComponent)
+         circuit = await splitMultiPartComponent(circuit, loadSymbol);
+
+diff --git a/src/devices/symbols/symbol-parser.ts b/src/devices/symbols/symbol-parser.ts
+index 81e0b42f..6eb2bf7b 100644
+--- a/src/devices/symbols/symbol-parser.ts
++++ b/src/devices/symbols/symbol-parser.ts
+@@ -220,6 +220,19 @@ export const getSymbol = memoize(async function getSymbol(partUuid: PartUuid, pa
+     }
+ });
+
++export function createSymbolResolver(symbols?: Readonly<Record<string, SymbolData>>, edaEdition?: EdaEdition): typeof getSymbol {
++    return async (partUuid, partId) => {
++        const catalog = await getSymbol(partUuid, partId, edaEdition);
++        if (catalog) return catalog;
++        const symbol = symbols?.[getPartUuidKey(partUuid)] ?? symbols?.[typeof partUuid === 'string' ? partUuid : partUuid.uuid];
++        if (!symbol) return null;
++        const { center, width, height } = symbol;
++        return { dataStr: '', rect: [-center.x, center.y - height, width - center.x, center.y],
++            pins: symbol.pins.map(pin => ({ ...pin, x: pin.x - center.x, y: center.y - pin.y })),
++            partIds: [symbol.pins[0]?.part ?? '1'] };
++    };
++}
++
+ function checkPinNumbers(designator: string, componentPins: CircuitWithoutBlocks['components'][0]['pins'], symbolPins: SymbolPin[]) {
+     const availableNumbers = new Set(symbolPins.map(pin => String(pin.num)));
+     for (const componentPin of componentPins) {
+@@ -246,8 +259,7 @@ export const circuitToSymbols = async (sch: { components: CircuitWithoutBlocks['
+         const sym = await loadSymbol(component.part_uuid, partId);
+
+         if (!sym) {
+-            logger.error(component, "Fail get symbol partUuid");
+-            continue;
++            throw new Error(`Missing symbol for ${component.designator}: ${getPartUuidKey(component.part_uuid)}`);
+         }
+
+         checkPinNumbers(component.designator, component.pins, sym.pins);
+diff --git a/src/pcb-layout/footprints.ts b/src/pcb-layout/footprints.ts
+index 0a6b1984..e361b0ae 100644
+--- a/src/pcb-layout/footprints.ts
++++ b/src/pcb-layout/footprints.ts
+@@ -15,16 +15,14 @@ export async function resolveComponentFootprint(
+     footprints?: Readonly<Record<string, FootprintSpec>>,
+     edaEdition: EdaEdition = 'easyeda',
+ ) {
+-    const provided = providedComponentFootprint(component, footprints);
+-    if (provided) return provided;
+-
+     const footprintUuid = validEasyEdaUuid(component.footprint_uuid) ? component.footprint_uuid : null;
+     const partUuid = validPartUuid(component.part_uuid) ? component.part_uuid : null;
+
+     if (footprintUuid) {
+         const cacheKey = `${edaEdition}:footprint:${footprintUuid}`;
+         const cached = cache.get(cacheKey);
+-        if (cached) return cached;
++        if (cached) return (await cached) ?? (partUuid ? await resolveFootprintByPartUuid(component, partUuid, cache, edaEdition) : null)
++            ?? providedComponentFootprint(component, footprints);
+
+         const promise = resolveEasyEdaFootprintByUuid(footprintUuid, undefined, edaEdition)
+             .catch((error) => {
+@@ -32,10 +30,12 @@ export async function resolveComponentFootprint(
+                 return partUuid ? resolveFootprintByPartUuid(component, partUuid, cache, edaEdition) : null;
+             });
+         cache.set(cacheKey, promise);
+-        return promise;
++        return (await promise) ?? (partUuid ? await resolveFootprintByPartUuid(component, partUuid, cache, edaEdition) : null)
++            ?? providedComponentFootprint(component, footprints);
+     }
+
+-    return partUuid ? resolveFootprintByPartUuid(component, partUuid, cache, edaEdition) : null;
++    return (partUuid ? await resolveFootprintByPartUuid(component, partUuid, cache, edaEdition) : null)
++        ?? providedComponentFootprint(component, footprints);
+ }
+
+ export async function requireResolvedComponentFootprint(
+diff --git a/src/schematic.ts b/src/schematic.ts
+index ce3880b4..2b5e3142 100644
+--- a/src/schematic.ts
++++ b/src/schematic.ts
+@@ -3,7 +3,7 @@ import { CircuitModStruct, ExplainCircuitStruct, type CircuitMod, type ExplainCi
+ import { makeAutoPlacement } from './circuit-layout/index.ts';
+ import { shortSymbolsMap } from './circuit-layout/short-symbol.ts';
+ import { hasConnection } from './circuit-layout/signals.ts';
+-import { getSymbol } from './devices/symbols/symbol-parser.ts';
++import { createSymbolResolver } from './devices/symbols/symbol-parser.ts';
+ import { rotatePointClockwise } from './utils/math.ts';
+ import { recalculateRootBlock } from './utils/circuit-merge.ts';
+ import type { SymbolPin } from './types/symbol.ts';
+@@ -13,8 +13,22 @@ import { getPartUuid, isMissingPartUuid } from './types/lcsc.ts';
+ import { canonicalEasyEdaPartUuid, getEasyEdaDevice } from './devices/easy-eda.ts';
+
+ const logger = masterLogger.child({ TAG: 'extract-circuit' });
++const pointSchema = z.object({ x: z.number().finite(), y: z.number().finite() });
++const symbolSchema = z.object({
++  width: z.number().finite().positive(),
++  height: z.number().finite().positive(),
++  center: pointSchema,
++  padding: z.number().finite().optional(),
++  pins: z.array(z.object({
++    num: z.union([z.string(), z.number().finite()]),
++    name: z.string(), x: z.number().finite(), y: z.number().finite(),
++    signal_name: z.string(), part: z.string(),
++    port_style: z.enum(['in', 'out', 'bi']).optional(),
++  })),
++});
+ const inputSchema = z.object({
+   circuit: CircuitModStruct(),
++  symbols: z.record(z.string(), symbolSchema).optional(),
+   inputCircuit: ExplainCircuitStruct().optional(),
+   assemblyOptions: z.object({ otherPageSignals: z.array(z.string()).optional() }).optional(),
+ });
+@@ -38,10 +52,16 @@ export async function extractCircuit(input: ExtractCircuitInput, options: EdaApi
+   const data = inputSchema.parse(input);
+   const missing = data.circuit.add_components.filter(c => isMissingPartUuid(c.part_uuid));
+   if (missing.length) throw new Error('All add_components must have part_uuid: ' + missing.map(c => c.designator).join(', '));
++  const loadSymbol = createSymbolResolver(data.symbols, options.edaEdition);
+   data.circuit.add_components = await Promise.all(data.circuit.add_components.map(async component => {
+     if (!component.part_uuid || typeof component.part_uuid === 'string' || component.part_uuid.libraryUuid !== 'user') return component;
+-    const device = await getEasyEdaDevice(component.part_uuid, options.edaEdition);
+-    return { ...component, part_uuid: canonicalEasyEdaPartUuid(device, component.part_uuid) };
++    try {
++      const device = await getEasyEdaDevice(component.part_uuid, options.edaEdition);
++      return { ...component, part_uuid: canonicalEasyEdaPartUuid(device, component.part_uuid) };
++    } catch (error) {
++      if (!data.symbols?.[component.part_uuid.uuid]) throw error;
++      return component;
++    }
+   }));
+   const state: CircuitState = {
+     circuit: data.circuit,
+@@ -81,8 +101,8 @@ export async function extractCircuit(input: ExtractCircuitInput, options: EdaApi
+                 return symbolPins.map((spin) => ({ ...spin, signal_name: component.pins.find(cpin => cpin.pin_number == spin.num)?.signal_name ?? crypto.randomUUID().slice(0, 8) }));
+             }
+
+-            const oldSymbol = await getSymbol(schComponent.part_uuid, undefined, options.edaEdition);
+-            const newSymbol = await getSymbol(component.part_uuid, undefined, options.edaEdition);
++            const oldSymbol = await loadSymbol(schComponent.part_uuid);
++            const newSymbol = await loadSymbol(component.part_uuid);
+
+             if (!oldSymbol || !newSymbol) {
+                 logger.warn({ designator }, 'not found symbol')
+@@ -289,6 +309,7 @@ export async function extractCircuit(input: ExtractCircuitInput, options: EdaApi
+
+         const result: CircuitAssembly = await makeAutoPlacement(circuit, undefined, {}, {
+             edaEdition: options.edaEdition,
++            symbols: data.symbols,
+             splitMultiPartComponent: true,
+             layoutRefinement: true,
+             externalSignals: [...new Set([...externalSignals, ...otherPageSignals])],
+diff --git a/tests/local-geometry.test.ts b/tests/local-geometry.test.ts
+new file mode 100644
+index 00000000..793e2c85
+--- /dev/null
++++ b/tests/local-geometry.test.ts
+@@ -0,0 +1,57 @@
++import assert from 'node:assert/strict';
++import test from 'node:test';
++import { createSymbolResolver, circuitToSymbols } from '../src/devices/symbols/symbol-parser.ts';
++import { requireResolvedComponentFootprint } from '../src/pcb-layout/footprints.ts';
++import { extractCircuit } from '../src/schematic.ts';
++import { installEasyEdaFixture, PART_UUID, schematicInput } from './fixtures/api-fixtures.mjs';
++
++const localId = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
++const unknownId = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
++const symbol = { width: 40, height: 20, center: { x: 20, y: 10 }, pins: [
++  { num: '1', name: 'A', x: 0, y: 10, signal_name: '', part: '1' },
++  { num: '2', name: 'B', x: 40, y: 10, signal_name: '', part: '1' },
++] };
++const localFootprint = { name: 'LOCAL', width: 2, height: 1, pads: [] };
++
++test('catalogue wins, local geometry fills misses, and inputs remain unchanged', async () => {
++  const fixture = installEasyEdaFixture();
++  const original = globalThis.fetch;
++  globalThis.fetch = async (input, init) => String(input).includes(localId) || String(input).includes(unknownId)
++    ? Response.json({ success: false }, { status: 404 }) : original(input, init);
++  try {
++    const symbols = { [PART_UUID]: symbol, [localId]: symbol };
++    const before = structuredClone(symbols);
++    const resolve = createSymbolResolver(symbols);
++    assert.notEqual((await resolve(PART_UUID))!.pins[0].name, 'A');
++    assert.equal((await resolve(localId))!.pins[0].name, 'A');
++    const component = { ...schematicInput.circuit.add_components[0], part_uuid: localId };
++    await circuitToSymbols({ components: [component] }, resolve);
++    assert.deepEqual(symbols, before);
++    await assert.rejects(circuitToSymbols({ components: [{ ...component, part_uuid: unknownId }] }, resolve), /Missing symbol/);
++    const input = structuredClone(schematicInput);
++    input.circuit.add_components = [{ ...component }];
++    const extraction = { ...input, symbols };
++    const snapshot = structuredClone(extraction);
++    assert.equal((await extractCircuit(extraction)).circuit.components[0].designator, 'R1');
++    assert.deepEqual(extraction, snapshot);
++    assert.notEqual((await requireResolvedComponentFootprint({ ...component, part_uuid: PART_UUID }, new Map(), { [PART_UUID]: localFootprint })).name, 'LOCAL');
++    assert.equal((await requireResolvedComponentFootprint(component, new Map(), { [localId]: localFootprint })).name, 'LOCAL');
++    await assert.rejects(requireResolvedComponentFootprint({ ...component, part_uuid: unknownId }), /Missing real footprint/);
++  } finally { globalThis.fetch = original; fixture.restore(); }
++});
++
++test('extraction rejects malformed local symbol geometry before network access', async () => {
++  const badSymbols = [
++    { ...symbol, width: 0 }, { ...symbol, height: Infinity },
++    { ...symbol, center: { x: NaN, y: 0 } },
++    { ...symbol, pins: [{ ...symbol.pins[0], x: Infinity }] },
++    { ...symbol, pins: [{ ...symbol.pins[0], name: 123 }] }, null,
++  ];
++  const original = globalThis.fetch;
++  globalThis.fetch = async () => { throw new Error('unexpected network access'); };
++  try {
++    for (const bad of badSymbols) {
++      await assert.rejects(extractCircuit({ ...schematicInput, symbols: { [localId]: bad } } as never), /symbols/);
++    }
++  } finally { globalThis.fetch = original; }
++});

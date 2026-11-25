@@ -26,9 +26,15 @@ jobs:
         with:
           repository: ${{ steps.backend.outputs.repository }}
           ref: ${{ steps.backend.outputs.revision }}
-          path: eda-copilot-backend-kicad
+          path: eda-copilot-backend-kicad-v05
       - name: Build companion backend
-        working-directory: eda-copilot-backend-kicad
-        run: npm ci --ignore-scripts && npm run build
+        working-directory: eda-copilot-backend-kicad-v05
+        run: |
+          git apply ../kicad-copilot/patches/backend-local-geometry.patch
+          npm ci --ignore-scripts
+          npm run build
+          npm pack eda-copilot-backend@0.5.0 --ignore-scripts --pack-destination "$RUNNER_TEMP" --silent
+          tar -xzf "$RUNNER_TEMP/eda-copilot-backend-0.5.0.tgz" -C native/node-addon --strip-components=3 +            package/native/node-addon/eda-copilot-node.linux-x64-gnu.node
       - run: npm ci --install-links
       - run: npm run check
+      - run: npm run test:pcb-analysis

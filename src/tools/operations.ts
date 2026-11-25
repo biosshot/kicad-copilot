@@ -14,7 +14,7 @@ export function registerOperationTools(server: McpServer) {
         'wait_operation',
         {
             title: 'Wait Operation',
-            description: 'Wait for any running PCB layout, PCB DSL, or lifecycle audit operation.',
+            description: 'Wait for a running PCB layout, routing, analysis, or lifecycle audit operation.',
             inputSchema: z.object({
                 operation_id: operationId,
                 wait_ms: z.number().int().min(1_000).max(55_000).default(30_000)
@@ -30,7 +30,7 @@ export function registerOperationTools(server: McpServer) {
         'cancel_operation',
         {
             title: 'Cancel Operation',
-            description: 'Cancel any running PCB layout, PCB DSL, or lifecycle audit operation.',
+            description: 'Cancel a running PCB layout, routing, analysis, or lifecycle audit operation.',
             inputSchema: z.object({ operation_id: operationId }),
         },
         async ({ operation_id }) => runCompactTool(() => cancelOperation(operation_id)),
