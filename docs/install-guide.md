@@ -1,6 +1,6 @@
 # Installation and CLI
 
-The generated skill contains the launcher, runtime and documentation. Node.js >=20.19 is required. Check `build-info.json`: for `distribution: "npm"`, run `npm install --omit=dev` in `scripts/runtime` before first use. A matching-platform `bundled` build already contains dependencies. Stop if `installationBlockers` is nonempty. KiCad and its `kicad-cli` are separate dependencies for native checks and exports; ngspice and the SPICE model library are prepared separately when needed.
+Download `kicad-copilot-skill.zip` from [GitHub Releases](https://github.com/biosshot/kicad-copilot/releases/latest), then extract the complete skill into the agent's skills directory. Node.js >=20.19 is required. For `distribution: "npm"` in `build-info.json`, run `npm ci --omit=dev` in `scripts/runtime` before first use. A matching-platform `bundled` build already contains dependencies. KiCad provides `kicad-cli` for native checks and exports. ngspice and the SPICE model library are prepared when needed.
 
 ```sh
 node /absolute/path/to/skill/scripts/kicad-copilot-cli.js --help

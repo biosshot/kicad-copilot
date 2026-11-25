@@ -1,30 +1,12 @@
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
-import { defineConfig } from 'tsup';
+import { defineConfig, type Options } from 'tsup';
 
 const require = createRequire(import.meta.url);
 const sdkDistDir = dirname(dirname(require.resolve('@modelcontextprotocol/sdk/package.json')));
 const sdkEsmPath = (...parts: string[]) => join(sdkDistDir, 'esm', ...parts);
 
-export default defineConfig({
-    entry: {
-        index: 'src/index.ts',
-        cli: 'src/cli.ts',
-        'assemble-schematic': 'scripts/assemble-schematic.ts',
-        'test-assembly-scenarios': 'scripts/test-assembly-scenarios.ts',
-        'test-extract-regressions': 'scripts/test-extract-regressions.ts',
-        'test-pcb-scenarios': 'scripts/test-pcb-scenarios.ts',
-        'test-footprint-spec': 'scripts/test-footprint-spec.ts',
-        'test-pcb-live': 'scripts/test-pcb-live.ts',
-        'test-local-backend': 'scripts/test-local-backend.ts',
-        'test-ground-layout': 'scripts/test-ground-layout.ts',
-        'test-routing-live': 'scripts/test-routing-live.ts',
-        'test-routing-integration': 'scripts/test-routing-integration.ts',
-        'test-analysis': 'scripts/test-analysis.ts',
-        'test-schematic-hierarchy': 'scripts/test-schematic-hierarchy.ts',
-        'test-mcp-ldo': 'scripts/test-mcp-ldo.ts',
-        'test-schematic-matrix': 'scripts/test-schematic-matrix.ts',
-    },
+const shared: Options = {
     format: ['esm'],
     clean: true,
     dts: false,
@@ -50,4 +32,9 @@ export default defineConfig({
             },
         },
     ],
-});
+};
+
+export default defineConfig([
+    { ...shared, entry: { index: 'src/index.ts', cli: 'src/cli.ts' } },
+    { ...shared, outDir: 'dist-tests', entry: ['scripts/assemble-schematic.ts', 'scripts/test-*.ts'] },
+]);

@@ -6,7 +6,7 @@ const [path, dslFile] = process.argv.slice(2);
 
 async function main() {
     if (!path || !dslFile) {
-        throw new Error('Usage: node dist/test-routing-live.js path/to/board.kicad_pcb path/to/pcb-dsl.js');
+        throw new Error('Usage: node dist-tests/test-routing-live.js path/to/board.kicad_pcb path/to/pcb-dsl.js');
     }
     const target = resolve(path);
     let result = await runPcbRouterDsl(target, resolve(dslFile), 55_000);

@@ -7,7 +7,7 @@ import { SKILL_DOC_PATH } from '../utils/dirs';
 import { diagnosticToolResult } from '../utils/diagnostics';
 import { enqueueMutation } from '../utils/mutation-queue';
 import { componentSearch, searchReusedBlock } from 'eda-copilot-backend/components';
-import { runTool, textResult } from '../utils/tool-result';
+import { runTool } from '../utils/tool-result';
 import { registeredAsset, nativeProperty } from '../kicad/schematic-assets';
 import { basename } from 'node:path';
 
@@ -20,13 +20,9 @@ export function registerCircuitTools(server: McpServer) {
             inputSchema: z.object({
                 part_uuid: z.string().nullable().optional(),
                 MPN: z.string().nullable().optional(),
-            }),
+            }).refine(({ part_uuid, MPN }) => Boolean(part_uuid || MPN), 'Fill one: part_uuid or MPN'),
         },
         async ({ part_uuid, MPN }) => {
-            if (!part_uuid && !MPN) {
-                return textResult('Fill one: part_uuid or MPN');
-            }
-
             return runTool(async () => {
                 const asset = part_uuid ? await registeredAsset(part_uuid) : undefined;
                 if (!asset) return componentSearch({ part_uuid, MPN });
@@ -47,7 +43,7 @@ export function registerCircuitTools(server: McpServer) {
         'search_reused_block',
         {
             title: 'Search Reused Block',
-            description: `Search reusable circuit blocks by function. For circuit workflow docs, read: ${SKILL_DOC_PATH}`,
+            description: 'The backend reusable-block catalog is currently disabled. Use get_project_info to find reusable sheets in the current project.',
             inputSchema: z.object({
                 query: z.string().min(1).describe('Query example: "3.3V power regulator"'),
                 page: z.number().int().min(1).default(1).describe('Current results page.'),

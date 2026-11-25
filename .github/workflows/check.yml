@@ -7,34 +7,12 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: kicad-copilot
     steps:
       - uses: actions/checkout@v4
-        with:
-          path: kicad-copilot
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: kicad-copilot/package-lock.json
-      - name: Read companion backend revision
-        id: backend
-        run: node -e "const fs=require('fs');const p=require('./backend-source.json');fs.appendFileSync(process.env.GITHUB_OUTPUT,'repository='+p.repository+'\nrevision='+p.revision+'\n')"
-      - uses: actions/checkout@v4
-        with:
-          repository: ${{ steps.backend.outputs.repository }}
-          ref: ${{ steps.backend.outputs.revision }}
-          path: eda-copilot-backend-kicad-v05
-      - name: Build companion backend
-        working-directory: eda-copilot-backend-kicad-v05
-        run: |
-          git apply ../kicad-copilot/patches/backend-local-geometry.patch
-          npm ci --ignore-scripts
-          npm run build
-          npm pack eda-copilot-backend@0.5.0 --ignore-scripts --pack-destination "$RUNNER_TEMP" --silent
-          tar -xzf "$RUNNER_TEMP/eda-copilot-backend-0.5.0.tgz" -C native/node-addon --strip-components=3 package/native/node-addon/eda-copilot-node.linux-x64-gnu.node
-      - run: npm ci --install-links
+      - run: npm ci
       - run: npm run check
       - run: npm run test:pcb-analysis

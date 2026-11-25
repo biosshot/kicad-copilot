@@ -48,12 +48,12 @@ A hierarchical ATmega328P design with the MCU core, clock, reset, decoupling, US
 
 <table>
   <tr>
-    <td align="center" width="50%"><a href="docs/media/examples/atmega328p/overview.png"><img src="docs/media/examples/atmega328p/overview.png" alt="ATmega328P project overview" width="100%"></a><br><sub>Project overview</sub></td>
-    <td align="center" width="50%"><a href="docs/media/examples/atmega328p/usb-uart-power.png"><img src="docs/media/examples/atmega328p/usb-uart-power.png" alt="ATmega328P USB-UART and power sheet" width="100%"></a><br><sub>USB-UART and power</sub></td>
+    <td align="center" width="50%"><a href="media/examples/atmega328p/overview.png"><img src="media/examples/atmega328p/overview.png" alt="ATmega328P project overview" width="100%"></a><br><sub>Project overview</sub></td>
+    <td align="center" width="50%"><a href="media/examples/atmega328p/usb-uart-power.png"><img src="media/examples/atmega328p/usb-uart-power.png" alt="ATmega328P USB-UART and power sheet" width="100%"></a><br><sub>USB-UART and power</sub></td>
   </tr>
   <tr>
-    <td align="center" width="50%"><a href="docs/media/examples/atmega328p/mcu-core.png"><img src="docs/media/examples/atmega328p/mcu-core.png" alt="ATmega328P MCU core sheet" width="100%"></a><br><sub>MCU core</sub></td>
-    <td align="center" width="50%"><a href="docs/media/examples/atmega328p/nano-headers-debug.png"><img src="docs/media/examples/atmega328p/nano-headers-debug.png" alt="ATmega328P Nano headers and debug sheet" width="100%"></a><br><sub>Nano headers and debug</sub></td>
+    <td align="center" width="50%"><a href="media/examples/atmega328p/mcu-core.png"><img src="media/examples/atmega328p/mcu-core.png" alt="ATmega328P MCU core sheet" width="100%"></a><br><sub>MCU core</sub></td>
+    <td align="center" width="50%"><a href="media/examples/atmega328p/nano-headers-debug.png"><img src="media/examples/atmega328p/nano-headers-debug.png" alt="ATmega328P Nano headers and debug sheet" width="100%"></a><br><sub>Nano headers and debug</sub></td>
   </tr>
 </table>
 
@@ -65,23 +65,23 @@ A larger multi-sheet design covering power input, 3.3 V regulation, the high-vol
 
 <table>
   <tr>
-    <td align="center" width="50%"><a href="docs/media/examples/geiger-hv/overview.png"><img src="docs/media/examples/geiger-hv/overview.png" alt="Geiger HV project overview" width="100%"></a><br><sub>Project overview</sub></td>
-    <td align="center" width="50%"><a href="docs/media/examples/geiger-hv/power.png"><img src="docs/media/examples/geiger-hv/power.png" alt="Geiger HV power input sheet" width="100%"></a><br><sub>Power input</sub></td>
+    <td align="center" width="50%"><a href="media/examples/geiger-hv/overview.png"><img src="media/examples/geiger-hv/overview.png" alt="Geiger HV project overview" width="100%"></a><br><sub>Project overview</sub></td>
+    <td align="center" width="50%"><a href="media/examples/geiger-hv/power.png"><img src="media/examples/geiger-hv/power.png" alt="Geiger HV power input sheet" width="100%"></a><br><sub>Power input</sub></td>
   </tr>
   <tr>
-    <td align="center" width="50%"><a href="docs/media/examples/geiger-hv/high-voltage.png"><img src="docs/media/examples/geiger-hv/high-voltage.png" alt="Geiger high-voltage generator sheet" width="100%"></a><br><sub>High-voltage generator</sub></td>
-    <td align="center" width="50%"><a href="docs/media/examples/geiger-hv/detector.png"><img src="docs/media/examples/geiger-hv/detector.png" alt="Geiger detector sheet" width="100%"></a><br><sub>Detector</sub></td>
+    <td align="center" width="50%"><a href="media/examples/geiger-hv/high-voltage.png"><img src="media/examples/geiger-hv/high-voltage.png" alt="Geiger high-voltage generator sheet" width="100%"></a><br><sub>High-voltage generator</sub></td>
+    <td align="center" width="50%"><a href="media/examples/geiger-hv/detector.png"><img src="media/examples/geiger-hv/detector.png" alt="Geiger detector sheet" width="100%"></a><br><sub>Detector</sub></td>
   </tr>
   <tr>
-    <td align="center" width="50%"><a href="docs/media/examples/geiger-hv/controller-ui.png"><img src="docs/media/examples/geiger-hv/controller-ui.png" alt="Geiger controller UI sheet" width="100%"></a><br><sub>Controller UI</sub></td>
-    <td align="center" width="50%"><a href="docs/media/examples/geiger-hv/power-3v3.png"><img src="docs/media/examples/geiger-hv/power-3v3.png" alt="Geiger 3.3 V power sheet" width="100%"></a><br><sub>3.3 V power</sub></td>
+    <td align="center" width="50%"><a href="media/examples/geiger-hv/controller-ui.png"><img src="media/examples/geiger-hv/controller-ui.png" alt="Geiger controller UI sheet" width="100%"></a><br><sub>Controller UI</sub></td>
+    <td align="center" width="50%"><a href="media/examples/geiger-hv/power-3v3.png"><img src="media/examples/geiger-hv/power-3v3.png" alt="Geiger 3.3 V power sheet" width="100%"></a><br><sub>3.3 V power</sub></td>
   </tr>
   <tr>
-    <td align="center" width="50%"><a href="docs/media/examples/geiger-hv/hv-flyback.png"><img src="docs/media/examples/geiger-hv/hv-flyback.png" alt="Geiger HV flyback sheet" width="100%"></a><br><sub>HV flyback</sub></td>
-    <td align="center" width="50%"><a href="docs/media/examples/geiger-hv/hv-feedback.png"><img src="docs/media/examples/geiger-hv/hv-feedback.png" alt="Geiger HV feedback sheet" width="100%"></a><br><sub>HV feedback</sub></td>
+    <td align="center" width="50%"><a href="media/examples/geiger-hv/hv-flyback.png"><img src="media/examples/geiger-hv/hv-flyback.png" alt="Geiger HV flyback sheet" width="100%"></a><br><sub>HV flyback</sub></td>
+    <td align="center" width="50%"><a href="media/examples/geiger-hv/hv-feedback.png"><img src="media/examples/geiger-hv/hv-feedback.png" alt="Geiger HV feedback sheet" width="100%"></a><br><sub>HV feedback</sub></td>
   </tr>
   <tr>
-    <td align="center" colspan="2"><a href="docs/media/examples/geiger-hv/user-interface.png"><img src="docs/media/examples/geiger-hv/user-interface.png" alt="Geiger user interface sheet" width="50%"></a><br><sub>User interface</sub></td>
+    <td align="center" colspan="2"><a href="media/examples/geiger-hv/user-interface.png"><img src="media/examples/geiger-hv/user-interface.png" alt="Geiger user interface sheet" width="50%"></a><br><sub>User interface</sub></td>
   </tr>
 </table>
 
@@ -93,21 +93,21 @@ A hierarchical RP2350 design with power, clock, flash, USB/debug, GPIO headers, 
 
 <table>
   <tr>
-    <td align="center" width="50%"><a href="docs/media/examples/rp2350/overview.png"><img src="docs/media/examples/rp2350/overview.png" alt="RP2350 project overview" width="100%"></a><br><sub>Project overview</sub></td>
-    <td align="center" width="50%"><a href="docs/media/examples/rp2350/power.png"><img src="docs/media/examples/rp2350/power.png" alt="RP2350 power sheet" width="100%"></a><br><sub>Power</sub></td>
+    <td align="center" width="50%"><a href="media/examples/rp2350/overview.png"><img src="media/examples/rp2350/overview.png" alt="RP2350 project overview" width="100%"></a><br><sub>Project overview</sub></td>
+    <td align="center" width="50%"><a href="media/examples/rp2350/power.png"><img src="media/examples/rp2350/power.png" alt="RP2350 power sheet" width="100%"></a><br><sub>Power</sub></td>
   </tr>
   <tr>
-    <td align="center" width="50%"><a href="docs/media/examples/rp2350/rp2350-clock.png"><img src="docs/media/examples/rp2350/rp2350-clock.png" alt="RP2350 and clock sheet" width="100%"></a><br><sub>RP2350 and clock</sub></td>
-    <td align="center" width="50%"><a href="docs/media/examples/rp2350/flash.png"><img src="docs/media/examples/rp2350/flash.png" alt="RP2350 flash sheet" width="100%"></a><br><sub>Flash</sub></td>
+    <td align="center" width="50%"><a href="media/examples/rp2350/rp2350-clock.png"><img src="media/examples/rp2350/rp2350-clock.png" alt="RP2350 and clock sheet" width="100%"></a><br><sub>RP2350 and clock</sub></td>
+    <td align="center" width="50%"><a href="media/examples/rp2350/flash.png"><img src="media/examples/rp2350/flash.png" alt="RP2350 flash sheet" width="100%"></a><br><sub>Flash</sub></td>
   </tr>
   <tr>
-    <td align="center" width="50%"><a href="docs/media/examples/rp2350/usb-debug.png"><img src="docs/media/examples/rp2350/usb-debug.png" alt="RP2350 USB and debug sheet" width="100%"></a><br><sub>USB and debug</sub></td>
-    <td align="center" width="50%"><a href="docs/media/examples/rp2350/gpio-headers.png"><img src="docs/media/examples/rp2350/gpio-headers.png" alt="RP2350 GPIO headers sheet" width="100%"></a><br><sub>GPIO headers</sub></td>
+    <td align="center" width="50%"><a href="media/examples/rp2350/usb-debug.png"><img src="media/examples/rp2350/usb-debug.png" alt="RP2350 USB and debug sheet" width="100%"></a><br><sub>USB and debug</sub></td>
+    <td align="center" width="50%"><a href="media/examples/rp2350/gpio-headers.png"><img src="media/examples/rp2350/gpio-headers.png" alt="RP2350 GPIO headers sheet" width="100%"></a><br><sub>GPIO headers</sub></td>
   </tr>
 </table>
 
 <p align="center">
-  <img src="docs/media/examples/rp2350-pcb.png" alt="3D render of the RP2350 PCB placement generated with KiCad Copilot" width="90%">
+  <img src="media/examples/rp2350-pcb.png" alt="3D render of the RP2350 PCB placement generated with KiCad Copilot" width="90%">
   <br><sub>KiCad 3D render of the generated PCB placement</sub>
 </p>
 
@@ -166,20 +166,13 @@ Catalog search and first-use downloads still require network access. KiCad suppl
 its symbol and footprint geometry as UUID-keyed fallback maps; catalog geometry wins
 when it resolves successfully.
 
-This branch uses backend 0.5.0 with the existing KiCad geometry fallback. In a
-sibling checkout named `eda-copilot-backend-kicad-v05`, check out the release
-revision in `backend-source.json`, apply `patches/backend-local-geometry.patch`,
-then run `npm ci --ignore-scripts` and `npm run build`. For native analysis and PCB
-placement, copy the matching platform binary from the 0.5.0 npm tarball into
-`native/node-addon/` in that checkout, or run `npm run native:build` there.
-Run `npm ci --install-links` in KiCad Copilot. `npm run check:release` prevents
-publishing the local dependency.
+The npm package pins `eda-copilot-backend@0.5.1`. Download
+`kicad-copilot-skill.zip` from [GitHub Releases](https://github.com/biosshot/kicad-copilot/releases/latest)
+and follow the [installation guide](docs/install-guide.md).
 
-Run `npm run build:skill:bundled` for a self-contained skill runtime for the current
-platform, then `npm run check:skill`. The result is `skill/`; its entrypoint explains
-persistent CLI sessions, SPICE simulation and datasheet tools. Native KiCad and Python
-remain system prerequisites. A lightweight `npm run build:skill` records an installation
-blocker until the backend dependency has a published version.
+From source, run `npm ci` and `npm run build:skill` for the portable skill, or
+`npm run build:skill:bundled` to include dependencies for the current platform.
+`npm run check:skill` validates the generated `skill/`.
 
 Use `export_pcb_routing_board` for a saved Board V2 snapshot and
 `run_pcb_analysis` for local DSL calculations and JSON/PNG reports. See the
@@ -299,7 +292,7 @@ node dist/cli.js batch @calls.json
 `calls.json` contains an array of `{ "name": "get_schematic", "arguments": { "path": "..." } }` requests.
 Use `-` instead of `@file.json` to read JSON from stdin. A batch uses one stdio MCP session and stops on the first error. Results are MCP JSON; tool errors produce exit code 1. Installed packages expose the same commands as `kicad-copilot-cli`.
 
-Run `npm run test:mcp-ldo` to reproduce creation and beautification of two reusable AP2112 LDO sheets connected to three catalogue headers. It uses the configured Copilot Server and native KiCad CLI, saves requests/results under `.test-output/mcp-ldo`, and also verifies local sheet lookup after an MCP restart with an unreachable server.
+Run `npm run test:mcp-ldo` to reproduce creation and beautification of two reusable AP2112 LDO sheets connected to three catalogue headers. It uses the local backend and native KiCad CLI, saves requests and results under `.test-output/mcp-ldo`, and verifies local sheet lookup after an MCP restart.
 
 ```bash
 git clone https://github.com/biosshot/kicad-copilot.git

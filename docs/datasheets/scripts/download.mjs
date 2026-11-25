@@ -1,4 +1,5 @@
-import { mkdir, open, link, unlink, readFile } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { copyFile, mkdir, open, link, unlink, readFile } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { args, fail, isMain, output } from './common.mjs';
@@ -73,7 +74,13 @@ export async function download(url, options = {}) {
     try {
       const file = await open(temporary, 'wx');
       try { await file.writeFile(data); } finally { await file.close(); }
-      try { await link(temporary, target); }
+      try {
+        try { await link(temporary, target); }
+        catch (error) {
+          if (!['EPERM', 'EACCES', 'ENOTSUP', 'EOPNOTSUPP', 'ENOSYS'].includes(error.code)) throw error;
+          await copyFile(temporary, target, constants.COPYFILE_EXCL);
+        }
+      }
       catch (error) {
         if (error.code !== 'EEXIST') throw error;
         const existing = await readFile(target);

@@ -5,6 +5,8 @@ import { isMain, args, cacheRoot, exists, locked, run, json, output, fail } from
 
 export async function sharpRuntime(options = {}) {
   try { return createRequire(import.meta.url)('sharp'); } catch { /* standalone skill */ }
+  try { return createRequire(new URL('../../scripts/runtime/package.json', import.meta.url))('sharp'); }
+  catch { /* skill outside the KiCad runtime */ }
   const root = join(cacheRoot(options), 'node-runtime', 'sharp-0.35.0');
   const load = () => createRequire(join(root, 'package.json'))('sharp');
   try { return load(); } catch { /* prepare dependency */ }

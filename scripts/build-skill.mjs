@@ -50,7 +50,7 @@ async function copyPackage(source, destination, isRoot = false, ancestors = new 
     for (const { path } of listing.files) {
         const rel = relative(source, resolve(source, path));
         if (isAbsolute(rel) || rel.startsWith('..')) throw new Error(`Unsafe package path: ${path}`);
-        if (isRoot && (path === 'docs' || path.startsWith('docs/'))) continue;
+        if (isRoot && (path.startsWith('docs/') || path === 'README.md' || path === 'server.json')) continue;
         await mkdir(dirname(join(destination, path)), { recursive: true });
         await cp(join(source, path), join(destination, path), { dereference: true });
     }
@@ -76,7 +76,9 @@ async function copyPackage(source, destination, isRoot = false, ancestors = new 
         const dependencyPkg = JSON.parse(await readFile(join(dependency, 'package.json'), 'utf8'));
         if (isRoot) {
             const field = pkg.optionalDependencies?.[name] ? 'optionalDependencies' : 'dependencies';
-            installed[field][name] = dependencyPkg.version;
+            if (bundled || /^(file:|link:|workspace:)/.test(pkg[field][name])) {
+                installed[field][name] = dependencyPkg.version;
+            }
             if (!bundled && /^(file:|link:|workspace:)/.test(pkg[field][name])) {
                 installationBlockers.push(`${name}@${dependencyPkg.version}: source dependency is ${pkg[field][name]}; publish the package (including native assets) and switch the source manifest to its registry version before distributing the lightweight skill.`);
             }
@@ -111,6 +113,9 @@ try {
     await mkdir(staging, { recursive: false });
     ownsStaging = true;
     await copyPackage(mcpRoot, runtime, true);
+    if (!bundled && !installationBlockers.length) {
+        await cp(join(mcpRoot, 'package-lock.json'), join(runtime, 'package-lock.json'));
+    }
     for (const entry of await readdir(join(mcpRoot, 'docs'))) {
         await cp(join(mcpRoot, 'docs', entry), join(staging, entry), { recursive: true });
     }
@@ -119,9 +124,6 @@ try {
         private: true,
         type: 'module',
     }, null, 2) + '\n');
-    let backendSource;
-    try { backendSource = JSON.parse(await readFile(join(mcpRoot, 'backend-source.json'), 'utf8')); }
-    catch (error) { if (error.code !== 'ENOENT') throw error; }
     let nativeSolver;
     const nativeDir = join(runtime, 'node_modules', 'eda-copilot-backend', 'native', 'node-addon');
     if (bundled) {
@@ -132,7 +134,7 @@ try {
     await writeFile(join(staging, 'build-info.json'), JSON.stringify({
         name: 'kicad-copilot', version: rootPackage.version,
         distribution: bundled ? 'bundled' : 'npm', platform: bundled ? platform : null,
-        node: rootPackage.engines.node, dependencies, installationBlockers, backendSource, nativeSolver,
+        node: rootPackage.engines.node, dependencies, installationBlockers, nativeSolver,
     }, null, 2) + '\n');
     if (bundled) {
         // Verify the backend's platform-native solver in a child so Windows releases the file.

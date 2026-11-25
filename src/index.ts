@@ -18,7 +18,7 @@ const disposeOperations = () => Promise.all([disposePcbLayoutBackend(), disposeP
 function createServer() {
     const server = new McpServer({
         name: 'kicad-copilot',
-        version: '0.1.0',
+        version: '0.1.1',
     });
 
     registerAgentDocs(server);

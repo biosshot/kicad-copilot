@@ -7,7 +7,7 @@ Use this workflow to create, modify, or beautify schematics without continuing t
 1. Use `get_project_info` once if the root and target sheet paths are unknown.
 2. For a new project, plan functional sheets and create them before adding circuits. See `project-and-sheets.md`.
 3. Read each affected physical sheet with `get_schematic`.
-4. Search only unknown parts. Prefer a suitable proven `search_reused_block` result for a standard function.
+4. Search only unknown parts. For reusable sheets in the current project, look up their IDs with `get_project_info`.
 5. Apply related known changes with `extract_circuit`. Prefer one call per coherent change or sheet; multiple calls are allowed when staged verification is safer.
 6. Run `beautify_schematic` once for all affected blocks on that sheet:
    - required after component removal, replacement, or pin/net reassignment;

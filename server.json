@@ -2,17 +2,17 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.biosshot/kicad-copilot",
   "title": "KiCad Copilot",
-  "description": "File-oriented MCP server for KiCad schematics, PCB placement, and routing DSL workflows.",
+  "description": "Local KiCad MCP server for schematics, PCB placement, routing, and electrical and thermal analysis.",
   "repository": {
     "url": "https://github.com/biosshot/kicad-copilot",
     "source": "github"
   },
-  "version": "0.1.0",
+  "version": "0.1.1",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "kicad-copilot-mcp",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "transport": {
         "type": "stdio"
       }

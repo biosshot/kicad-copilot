@@ -1,7 +1,0 @@
-{
-  "repository": "biosshot/eda-copilot-backend",
-  "revision": "932e6885e351b4557425bb4749078833122ba6fb",
-  "version": "0.5.0",
-  "patch": "patches/backend-local-geometry.patch",
-  "directory": "eda-copilot-backend-kicad-v05"
-}

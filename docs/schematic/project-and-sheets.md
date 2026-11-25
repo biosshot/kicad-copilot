@@ -34,7 +34,7 @@ Each `.kicad_sch` is read and modified separately. Resolve returned relative pat
 
 `get_schematic` returns only objects on the requested page. Child sheets appear in `components`; their contents are read separately. Native symbols without catalogue IDs receive local geometry IDs and use the same layout path.
 
-Sheet and native-symbol lookup in `component_search` is local. The local cache records source paths so lookup also works after restarting MCP; the source is reread to obtain the current interface. Known local UUIDs never fall back to catalogue search. Nothing is imported into Copilot Server: only normalized geometry is supplied with a layout request.
+Sheet and native-symbol lookup in `component_search` is local. The cache records source paths so lookup also works after restarting MCP, and the source is reread to obtain the current interface. Local UUIDs resolve to their registered KiCad assets. Layout receives normalized geometry as a fallback.
 
 One file means shared contents and interface. Editing that file affects all its inclusions; their local nets remain electrically separate. Independent contents require separate files. A circular inclusion, missing pin, ambiguous duplicate file UUID, or foreign local signal is an error. No `reuse_existing` flag or separate placement tool is required.
 

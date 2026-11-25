@@ -26,6 +26,7 @@ jobs:
         if: github.event_name == 'push'
         run: node -e "const fs=require('fs');const p=require('./package.json');const s=require('./server.json');const tag=process.env.GITHUB_REF_NAME.slice(1);if(p.version!==tag||s.version!==tag||s.packages[0].version!==tag)throw new Error('version mismatch')"
       - run: npm run check
+      - run: npm run test:pcb-analysis
       - run: npm publish --provenance --access public
         if: github.event_name == 'push'
       - name: Install MCP Registry publisher
