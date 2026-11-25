@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
 
 await mkdir('.test-output', { recursive: true });
@@ -58,9 +59,22 @@ try {
     call('import_pcb_changes', { path: pcb });
     const imported = await readFile(pcb, 'utf8');
     call('import_pcb_changes', { path: pcb });
-    const rootIds = source => [...source.matchAll(/\(at [-.\d]+ [-.\d]+ 0\) \(uuid "([^"]+)"\)/g)].map(match => match[1]);
-    assert.equal(rootIds(imported).length, 2);
-    assert.deepEqual(rootIds(await readFile(pcb, 'utf8')), rootIds(imported), 'reimport must preserve footprint identities');
+    const parser = join(dir, 'pcb-parser.mjs');
+    await build({
+        stdin: {
+            contents: `export { parseSExpression } from './src/kicad/sexpr/ast';
+                       export { pcbFootprints, childText } from './src/kicad/pcb-reader';`,
+            resolveDir: resolve('.'),
+        },
+        outfile: parser, bundle: true, platform: 'node', format: 'esm',
+    });
+    const { parseSExpression, pcbFootprints, childText } = await import(pathToFileURL(parser));
+    const footprintIds = source => pcbFootprints(parseSExpression(source)).map(item => childText(item, 'uuid'));
+    const originalIds = footprintIds(imported);
+    assert.equal(originalIds.length, 2);
+    assert.equal(new Set(originalIds).size, 2);
+    assert.ok(originalIds.every(Boolean));
+    assert.deepEqual(footprintIds(await readFile(pcb, 'utf8')), originalIds, 'reimport must preserve footprint identities');
     const sizes = call('get_pcb_component_sizes', { path: pcb, include_all: true });
     assert.match(sizes, /selected: 2/);
     let result = call('make_pcb_layout', { path: pcb, file: dsl, wait_ms: 1000 });
