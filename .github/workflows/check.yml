@@ -34,7 +34,7 @@ jobs:
           npm ci --ignore-scripts
           npm run build
           npm pack eda-copilot-backend@0.5.0 --ignore-scripts --pack-destination "$RUNNER_TEMP" --silent
-          tar -xzf "$RUNNER_TEMP/eda-copilot-backend-0.5.0.tgz" -C native/node-addon --strip-components=3 +            package/native/node-addon/eda-copilot-node.linux-x64-gnu.node
+          tar -xzf "$RUNNER_TEMP/eda-copilot-backend-0.5.0.tgz" -C native/node-addon --strip-components=3 package/native/node-addon/eda-copilot-node.linux-x64-gnu.node
       - run: npm ci --install-links
       - run: npm run check
       - run: npm run test:pcb-analysis
